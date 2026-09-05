@@ -8,6 +8,8 @@
  *   php plugin/crud/install.php --business-sql=plugin/crud/install-business.sql
  *   php plugin/crud/install.php --business-sql=path/a.sql --business-sql=path/b.sql
  *   php plugin/crud/install.php --business-connection=mysql_business
+ *   php plugin/crud/install.php --admin-user=admin --admin-pass=secret   # 自定义初始管理员
+ *   php plugin/crud/install.php --progress-file=runtime/crud-installer.log  # 进度 JSONL 输出（Web 向导用）
  *
  * 等价于调用 \plugin\crud\api\Install::install()，但先完成 webman 配置加载：
  *  - require 宿主 vendor/autoload.php
@@ -25,7 +27,7 @@
 $hostRoot = dirname(__DIR__, 2); // plugin/crud/install.php -> 宿主根
 require_once $hostRoot . '/vendor/autoload.php';
 
-// 加载 .env（存在才加载；缺库会由安装器输出明确错误）
+// 加载 .env（存在才加载；缺库会由安装器自动建库或输出明确错误）
 if (class_exists('Dotenv\Dotenv') && is_file($hostRoot . '/.env')) {
     \Dotenv\Dotenv::createUnsafeMutable($hostRoot)->load();
 }
@@ -37,6 +39,8 @@ if (class_exists('Dotenv\Dotenv') && is_file($hostRoot . '/.env')) {
 // 解析 CLI 参数
 $extraSqls = [];
 $businessConn = null;
+$adminCreds = [];
+$progressFile = null;
 foreach (array_slice($argv, 1) as $arg) {
     if (preg_match('/^--business-sql=(.+)$/', $arg, $m)) {
         $items = preg_split('/,/', $m[1]);
@@ -53,11 +57,31 @@ foreach (array_slice($argv, 1) as $arg) {
         }
     } elseif (preg_match('/^--business-connection=(.+)$/', $arg, $m)) {
         $businessConn = trim($m[1]);
+    } elseif (preg_match('/^--admin-user=(.+)$/', $arg, $m)) {
+        $adminCreds['username'] = trim($m[1]);
+    } elseif (preg_match('/^--admin-pass=(.+)$/', $arg, $m)) {
+        $adminCreds['password'] = $m[1];
+    } elseif (preg_match('/^--progress-file=(.+)$/', $arg, $m)) {
+        $progressFile = trim($m[1]);
     }
+}
+
+// 进度回调：写入 JSONL 进度文件（Web 安装向导前端轮询读取）
+$onProgress = null;
+if ($progressFile !== null) {
+    $absProgress = ($progressFile[0] === '/' || preg_match('#^[A-Za-z]:[\\\\/]#', $progressFile))
+        ? $progressFile
+        : $hostRoot . '/' . ltrim($progressFile, '/');
+    if (!is_dir(dirname($absProgress))) {
+        @mkdir(dirname($absProgress), 0755, true);
+    }
+    $onProgress = static function (array $line) use ($absProgress): void {
+        file_put_contents($absProgress, json_encode($line, JSON_UNESCAPED_UNICODE) . PHP_EOL, FILE_APPEND | LOCK_EX);
+    };
 }
 
 // api/Install.php 位于 api/ 目录，不在宿主 composer psr-4（plugin\crud\app\）映射内，显式加载
 require_once __DIR__ . '/api/Install.php';
 
 // 返回码：0=成功（可重复执行），1=有步骤失败
-exit(\plugin\crud\api\Install::install(false, $extraSqls, $businessConn) ? 0 : 1);
+exit(\plugin\crud\api\Install::install(false, $extraSqls, $businessConn, $adminCreds, $onProgress) ? 0 : 1);

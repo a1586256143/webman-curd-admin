@@ -35,6 +35,27 @@ class Install
     const WEBMAN_PLUGIN = true;
 
     /**
+     * 初始管理员凭据（install() 的 $adminCreds 覆盖；admin_users 空表时创建）
+     */
+    protected static array $adminCreds = ['username' => 'admin', 'password' => 'admin123'];
+
+    /**
+     * 进度回调（Web 安装向导 / CLI --progress-file 使用）
+     * @var callable|null 签名：function(array $line): void
+     *                    $line = ['t'=>int,'type'=>'step|error|info','msg'=>string,'error'=>string]
+     */
+    protected static $onProgress = null;
+
+    /**
+     * 安装完成标记文件（宿主根 config/crud-installed.lock）：
+     * Web 安装向导以此判定「已安装」并拒绝重复安装；删除该文件可重新进入向导。
+     */
+    protected static function lockFile(): string
+    {
+        return dirname(__DIR__, 3) . '/config/crud-installed.lock';
+    }
+
+    /**
      * 安装入口（官方 zip 安装器约定签名：install($isFirstInstall)）
      *
      * @param bool        $isFirstInstall  是否首次安装（保留参数兼容官方调用）
@@ -43,16 +64,24 @@ class Install
      *                                     - path: 相对插件目录（plugin/crud/）或绝对路径
      *                                     - connection: 业务库连接名（默认 business_connection）
      * @param string|null $businessConn    覆盖业务库连接名（影响全部 extraSqls 默认值）
+     * @param array       $adminCreds      初始管理员凭据 ['username'=>, 'password'=>]，
+     *                                     留空用默认 admin/admin123（仅在 admin_users 空表时生效）
+     * @param callable|null $onProgress    进度回调 function(array $line): void；
+     *                                     $line=['t'=>int,'type'=>'step|error|info','msg'=>string,'error'=>string]
      */
-    public static function install($isFirstInstall = false, array $extraSqls = [], ?string $businessConn = null)
+    public static function install($isFirstInstall = false, array $extraSqls = [], ?string $businessConn = null, array $adminCreds = [], ?callable $onProgress = null)
     {
-        static::banner('CRUD 插件安装开始' . ($isFirstInstall ? '（首次安装）' : ''));
+        if ($adminCreds !== []) {
+            static::$adminCreds = array_merge(static::$adminCreds, $adminCreds);
+        }
+        static::$onProgress = $onProgress;
+        static::emit('info', 'CRUD 插件安装开始' . ($isFirstInstall ? '（首次安装）' : ''));
         $ok = true;
 
         // A0. 自动建库：库不存在时（1049 Unknown database 是首跑最常见错误）
         //     连接 MySQL server 执行 CREATE DATABASE IF NOT EXISTS（幂等）
         if (!static::ensureDatabases()) {
-            static::banner('数据库连接/自动建库失败，请根据上方 [ERROR] 排查后重试（可重复执行）');
+            static::emit('error', '数据库连接/自动建库失败，请根据上方 [ERROR] 排查后重试（可重复执行）');
             return false;
         }
 
@@ -97,10 +126,20 @@ class Install
         // D. 密钥
         $ok = static::ensureKeys() && $ok;
 
-        static::banner($ok
-            ? '安装完成 ✅ 默认账号 admin / admin123（请登录后立即修改）'
-            : '安装过程有步骤失败，请根据上方 [ERROR] 信息排查后重试（可重复执行）');
+        if ($ok) {
+            $account = static::$adminCreds['username'] ?? 'admin';
+            static::report(true, "安装完成 ✅ 初始账号 {$account}（请登录后立即修改密码）");
+            // 写「已安装」锁：Web 安装向导据此拒绝重复安装；删除锁文件可重新进入向导
+            $lock = static::lockFile();
+            if (!is_dir(dirname($lock))) {
+                @mkdir(dirname($lock), 0755, true);
+            }
+            @file_put_contents($lock, date('Y-m-d H:i:s') . ' by ' . static::class . PHP_EOL, LOCK_EX);
+        } else {
+            static::report(false, '安装过程有步骤失败，请根据上方 [ERROR] 信息排查后重试（可重复执行）');
+        }
 
+        static::$onProgress = null;
         return $ok;
     }
 
@@ -109,7 +148,8 @@ class Install
      */
     public static function update()
     {
-        static::banner('CRUD 插件升级：补种子与密钥');
+        static::$onProgress = null;
+        static::emit('info', 'CRUD 插件升级：补种子与密钥');
         $ok = static::seedAll();
         $ok = static::ensureKeys() && $ok;
         return $ok;
@@ -128,7 +168,11 @@ class Install
      */
     public static function uninstall()
     {
-        static::banner('CRUD 插件卸载：仅移除内置前端 public/ 与密钥（表与数据保留，如需删除请手动 DROP）');
+        static::emit('info', 'CRUD 插件卸载：仅移除内置前端 public/ 与密钥（表与数据保留，如需删除请手动 DROP）');
+        $lock = static::lockFile();
+        if (is_file($lock) && @unlink($lock)) {
+            static::report(true, '已移除已安装标记（可重新进入 Web 安装向导）');
+        }
         $publicDir = (string)config('plugin.crud.crud.public_dir', dirname(__DIR__) . '/public');
         foreach (['api_rsa_private.pem', 'api_rsa_public.pem'] as $file) {
             $path = dirname(__DIR__) . '/config/keys/' . $file;
@@ -340,15 +384,17 @@ class Install
         try {
             if ($db->table('admin_users')->count() === 0) {
                 $now = date('Y-m-d H:i:s');
+                $userName = (string)(static::$adminCreds['username'] ?? 'admin');
+                $userPass = (string)(static::$adminCreds['password'] ?? 'admin123');
                 $userId = $db->table('admin_users')->insertGetId([
-                    'username' => 'admin',
-                    'password' => password_hash('admin123', PASSWORD_BCRYPT),
+                    'username' => $userName,
+                    'password' => password_hash($userPass, PASSWORD_BCRYPT),
                     'name'     => 'Administrator',
                     'status'   => 1,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
-                static::report(true, "admin 初始账号已创建（id={$userId}，密码 admin123）");
+                static::report(true, "初始管理员已创建（{$userName}，id={$userId}）");
 
                 // 关联超级管理员角色
                 $role = $db->table('roles')->where('slug', 'admin')->first();
@@ -444,9 +490,27 @@ class Install
     {
         if ($ok) {
             echo '[OK]    ' . $message . PHP_EOL;
+            static::emit('step', $message);
             return;
         }
         echo '[ERROR] ' . $message . ($error !== '' ? ($message !== '' ? ' — ' : '') . $error : '') . PHP_EOL;
+        static::emit('error', $message, $error);
+    }
+
+    /**
+     * 进度事件（设置过 onProgress 时投递；type: step=单步成功 / error=失败 / info=阶段信息）
+     */
+    protected static function emit(string $type, string $message, string $error = ''): void
+    {
+        if (!static::$onProgress) {
+            return;
+        }
+        call_user_func(static::$onProgress, [
+            't'     => time(),
+            'type'  => $type,
+            'msg'   => $message,
+            'error' => $error,
+        ]);
     }
 
     protected static function banner(string $text): void

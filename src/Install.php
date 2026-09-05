@@ -117,6 +117,8 @@ class Install
  */
 return [
     // ---- 数据库（安装/建表/模型库使用）----
+    // 默认【单库模式】：认证库与业务库放同一个库（business_db 留空即同 admin_db）。
+    // 如需分库：填独立的 business_db，并确保数据库账号有权限建库/读写。
     'database' => [
         'host'        => '127.0.0.1',
         'port'        => '3306',
@@ -124,8 +126,8 @@ return [
         'password'    => '',
         // 认证/管理面库：admin_users/roles/menus/casbin_rule/crud_configs 等核心表
         'admin_db'    => 'webman_crud',
-        // 业务库：业务模型 CRUD 默认库；与认证同库可填相同库名
-        'business_db' => 'webman_crud_business',
+        // 业务库：业务模型 CRUD 默认库；留空 = 与 admin_db 同库（单库模式，推荐）
+        'business_db' => '',
     ],
 
     // ---- 以下为插件调参（键与 plugin/crud/config/crud.php 同名才生效；不写用内置默认）----
@@ -191,8 +193,11 @@ PHP;
  *   1. 宿主 config/crud.php 的 database 段（新项目推荐入口，无需 .env）
  *   2. .env 的 DB_* 键（兼容老宿主/传统用法）
  *
+ * 默认【单库模式】：mysql_business 未单独指定库名时，与 mysql 指向同一库
+ * （业务库名取值链：config/crud.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
+ *
  * - mysql          ：认证/管理面库（admin_users / roles / menus / casbin_rule ...）
- * - mysql_business ：业务库（CRUD_BUSINESS_CONNECTION 默认连接名）
+ * - mysql_business ：业务库（CRUD_BUSINESS_CONNECTION 默认连接名；单库模式=同 mysql 库）
  */
 $__crudDb = [];
 $__crudFile = __DIR__ . '/crud.php';
@@ -207,6 +212,8 @@ $__pick = static function (string $key, string $envKey, string $default) use ($_
         ? (string)$__crudDb[$key]
         : (string)env($envKey, $default);
 };
+$__adminDb = $__pick('admin_db', 'DB_NAME', 'webman_crud');
+$__businessDb = $__pick('business_db', 'DB_BUSINESS_NAME', $__adminDb);
 
 return [
     'default' => 'mysql',
@@ -215,7 +222,7 @@ return [
             'driver'    => 'mysql',
             'host'      => $__pick('host', 'DB_HOST', '127.0.0.1'),
             'port'      => $__pick('port', 'DB_PORT', '3306'),
-            'database'  => $__pick('admin_db', 'DB_NAME', 'webman_crud'),
+            'database'  => $__adminDb,
             'username'  => $__pick('username', 'DB_USER', 'root'),
             'password'  => $__pick('password', 'DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',
@@ -228,7 +235,7 @@ return [
             'driver'    => 'mysql',
             'host'      => $__pick('host', 'DB_HOST', '127.0.0.1'),
             'port'      => $__pick('port', 'DB_PORT', '3306'),
-            'database'  => $__pick('business_db', 'DB_BUSINESS_NAME', 'webman_crud_business'),
+            'database'  => $__businessDb,
             'username'  => $__pick('username', 'DB_USER', 'root'),
             'password'  => $__pick('password', 'DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',

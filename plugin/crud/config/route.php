@@ -92,6 +92,27 @@ crud_route('POST', '/api/auth/login', [
     'login',
 ], $crudCorsOnly);
 
+// ============================================================
+// Web 安装向导（新项目首次安装用；安装完成生成 config/crud-installed.lock
+// 后，setup 拒绝重复执行——页面也会引导直接进后台登录）
+// ============================================================
+crud_route('GET', '/app/crud-installer', [
+    \plugin\crud\app\controller\InstallerController::class,
+    'page',
+]);
+crud_route('GET', '/api/crud-installer/status', [
+    \plugin\crud\app\controller\InstallerController::class,
+    'status',
+], $crudCorsOnly);
+crud_route('POST', '/api/crud-installer/setup', [
+    \plugin\crud\app\controller\InstallerController::class,
+    'setup',
+], $crudCorsOnly);
+crud_route('GET', '/api/crud-installer/progress', [
+    \plugin\crud\app\controller\InstallerController::class,
+    'progress',
+], $crudCorsOnly);
+
 // 站点信息（免鉴权：登录页未登录时也要显示站点标题/logo）
 crud_route('GET', '/api/config/site', [
     \plugin\crud\app\controller\AdminController::class,

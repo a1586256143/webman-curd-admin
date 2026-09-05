@@ -86,48 +86,44 @@ composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 
 
 ## 新项目开箱跑通（完整步骤）
 
-> 前置：webman 骨架 + PHP ≥8.1 + MySQL。全部为幂等命令，可重复执行。
+> 前置：webman 骨架 + PHP ≥8.1 + MySQL。默认**单库模式**：认证库与业务库放同一数据库。
+> 安装后 config/database.php 提供 mysql（认证）与 mysql_business（业务）两个连接名，
+> 单库模式下二者指向同一库（业务库名取值链：config/crud.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
 
 ```bash
-# 1) 装插件（composer require 自动完成四件事：
-#    ① 拉齐运行时依赖：webman/database(支持 support\Db) + casbin/casbin(RBAC)
-#       + vlucas/phpdotenv(.env 加载)；
-#    ② webman 官方插件机制（framework 的 support\Plugin）调用本包 src/Install.php，
-#       把 plugin/crud 拷贝到宿主 plugin/crud；
-#    ③ 宿主缺 config/database.php 时自动生成（mysql + mysql_business）；
-#    ④ 宿主缺 config/crud.php 时自动生成【集中配置入口】——见第 2 步。
-#    --no-audit：composer audit 需访问 packagist.org 安全公告源，国内网络/内网
-#    不可达时会报 Failed to audit installed packages（仅提示，不影响安装）；
-#    介意可加 --no-audit 跳过，或后续随时 composer audit 单独审计）：
-composer require huafei/webman-crud:^1.0 --no-audit
+# 1) 装插件（composer require 自动完成：① 拉齐依赖 webman/database+casbin+casbin+phpdotenv；
+#    ② webman 官方插件机制自动拷贝 plugin/crud 到宿主；③ 宿主缺 config/database.php 自动生成；
+#    ④ 宿主缺 config/crud.php 自动生成集中配置入口）
+composer require huafei/webman-crud:^1.0
+#   ⚠️ composer audit 说明：audit 会访问 packagist.org 安全公告源（不走镜像、国内常不可达），
+#   报 "Failed to audit installed packages." 仅是一条尾部告警——命令本身成功（exit 0，不影响
+#   后续 && 链）。介意红字可加 --no-audit；根治需代理让 packagist.org 可达（本包无法干预）。
 # 验证：ls plugin/crud config/database.php config/crud.php
-#   极少数情况下 composer 自动加载时序可能导致本次未触发拷贝，兜底二选一：
-#     composer dump-autoload && composer update huafei/webman-crud
-#     或等价手动：cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
+#   兜底（极少见自动拷贝未触发）：composer dump-autoload && composer update huafei/webman-crud
+#   或 cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 
-# 2) 配置数据库（⚠️ 不再 cp plugin/crud/env.example .env —— 那样会覆盖宿主 .env！
-#    新项目配置统一写在 config/crud.php，首次 require 时已自动生成）：
-#    vim config/crud.php
-#      database.admin_db    = 认证/管理面库名（默认 webman_crud）
-#      database.business_db = 业务库名（默认 webman_crud_business；与认证同库填同名）
-#      database.username/password/host/port 按实际改
-#    （老宿主仍可用 .env 的 DB_* / CRUD_* 键，config/database.php 与插件配置
-#      都优先读 config/crud.php、其次 .env——两种方式二选一即可）
-
-# 3) 一键建表 + 种子 + 生成 RSA 密钥（幂等，可重复执行）
-php plugin/crud/install.php
-#    ✓ 数据库不存在会自动 CREATE DATABASE（无需手动建库）
-#    建 8 张核心表（admin_users/admin_tokens/roles/admin_role_user/role_permission/
-#                   casbin_rule/crud_configs/menus）
-#    空表自动插入：roles（admin/yunying/caiwu）、menus（6 条基础菜单）、
-#                 admin 初始账号（admin / admin123，密码运行时 hash）
-#    config/keys/ 生成 RSA-2048 密钥对（API_ENCRYPT=true 时使用）
-
-# 4) 启动
+# 2) 启动服务（先启动，再装库 —— Web 向导模式需要服务在线）
 php start.php start
 
-# 5) 打开后台（插件自带前端，无需再部署任何静态资源）
-#    http://host:port/app/crud/        → 登录页（admin / admin123）
+# 3) 方式一【推荐】Web 安装向导：浏览器打开
+#    http://host:port/app/crud-installer
+#    填：数据库连接（主机/端口/库名/账号/密码；库不存在自动建）
+#        管理员账号密码（初始管理员，非固定 admin/admin123）
+#    自动完成：DB 信息写入 .env（按键合并，绝不覆盖 .env 其它内容）→
+#             调优写入 config/crud.php → 子进程执行 install.php（建库建表种子密钥）→
+#             页面实时显示执行进度 → 完成跳后台
+#    安装成功生成 config/crud-installed.lock，向导自动失效（重复访问提示已安装）；
+#    如需重装：删锁 + 清库后刷新页面。
+#
+#    方式二【命令行】（Web 向导的等价手动流程）：
+#    # 2a) 配置数据库（DB 写 .env 或 config/crud.php database 段，二选一）
+#    #     单库模式只需一个库名；分库再填 business_db / DB_BUSINESS_NAME
+#    # 2b) 一键安装（幂等；自动建库；自定义管理员；进度可落文件）
+#    php plugin/crud/install.php --admin-user=admin --admin-pass=你的密码
+#    #    可选：--progress-file=runtime/i.log（JSONL 进度）、--business-sql=xxx
+
+# 4) 打开后台（插件自带前端，无需再部署任何静态资源）
+#    http://host:port/app/crud/        → 登录页（用第 3 步填的管理员账号）
 #    登录后：用户/角色/菜单管理、配置生成器（DSL 拖表单生成 CRUD）、
 #            自定义页面引擎全部可用
 ```
