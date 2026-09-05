@@ -84,12 +84,14 @@ composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
 ## 新项目开箱跑通（完整步骤）
 
 ```bash
-# 1) 装插件（⚠️ webman 2.x 新鲜骨架默认不含 support/Plugin.php，其 composer.json
-#    却依赖它；首次需先把本包自带的那份放到宿主 support/，否则插件不会被拷贝）：
+# 1) 装插件（webman 2.x 官方插件机制：composer require 后，workerman/webman-framework
+#    的 support\Plugin 会自动调用本包 src/Install.php，把 plugin/crud 拷贝到宿主，
+#    无需任何手动操作）：
 composer require huafei/webman-crud:^1.0
-cp vendor/huafei/webman-crud/support/Plugin.php support/Plugin.php
-composer update huafei/webman-crud     # 触发拷贝；兜底：cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 # 验证：ls plugin/crud   # 应见 app/ config/ public/ 等
+#   极少数情况下 composer 自动加载时序可能导致本次未触发拷贝，兜底二选一：
+#     composer dump-autoload && composer update huafei/webman-crud
+#     或等价手动：cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 
 # 2) 配置 .env 数据库连接（认证库；业务库 CRUD_BUSINESS_CONNECTION 按需）
 #    DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD ...
