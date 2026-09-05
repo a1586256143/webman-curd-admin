@@ -147,8 +147,11 @@ class InstallerController
             // 0) 写 .env（数据库信息；按键替换/追加，不删其它内容）
             static::writeEnv($root, $db, $businessDb);
 
-            // 1) 写 config/crud.php（其它配置；移除 database 段避免抢占 .env）
-            static::writeCrudConfig($root, $pageBase);
+            // 1) 写 config/crud.php：同时写入 database 段（核心：worker 启动后 config 已加载，
+            //    仅靠 .env 无法让运行时 env() 返回新密码——写 config/crud.php 后，生成的
+            //    config/database.php 模板 $__pick() 会优先取这里的 database 段，避免 1045）。
+            //    原文件先备份 config/crud.php.wizard.bak。
+            static::writeCrudConfig($root, $pageBase, $db, $businessDb);
 
             // 2) 清空进度文件 → 子进程执行安装（独立进程重新加载 .env，规避运行期配置缓存）
             @unlink($progressFile);
