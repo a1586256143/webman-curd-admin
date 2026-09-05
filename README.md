@@ -84,22 +84,25 @@ composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
 ## 新项目开箱跑通（完整步骤）
 
 ```bash
-# 1) 装插件（webman 2.x 官方插件机制：composer require 后，workerman/webman-framework
-#    的 support\Plugin 会自动调用本包 src/Install.php，把 plugin/crud 拷贝到宿主，
-#    无需任何手动操作）：
+# 1) 装插件（composer require 自动完成三件事：
+#    ① 拉齐运行时依赖：webman/database(支持 support\Db) + casbin/casbin(RBAC)
+#       + vlucas/phpdotenv(.env 加载)；
+#    ② webman 官方插件机制（framework 的 support\Plugin）调用本包 src/Install.php，
+#       把 plugin/crud 拷贝到宿主 plugin/crud；
+#    ③ 宿主缺 config/database.php 时自动生成模板（mysql + mysql_business 读 DB_* 键））：
 composer require huafei/webman-crud:^1.0
-# 验证：ls plugin/crud   # 应见 app/ config/ public/ 等
+# 验证：ls plugin/crud config/database.php
 #   极少数情况下 composer 自动加载时序可能导致本次未触发拷贝，兜底二选一：
 #     composer dump-autoload && composer update huafei/webman-crud
 #     或等价手动：cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 
 # 2) 配置 .env 数据库连接（认证库；业务库 CRUD_BUSINESS_CONNECTION 按需）
-#    DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD ...
+#    cp plugin/crud/env.example .env 后填真实值：
+#    DB_HOST / DB_PORT / DB_NAME(认证库名) / DB_USER / DB_PASSWORD
 #    如认证与业务同库，加一行 DB_BUSINESS_NAME=同库名
-#    ⚠️ 本包 env.example 用 DB_NAME/DB_USER，而 webman 新鲜骨架 config/database.php
-#       默认读 DB_DATABASE/DB_USERNAME——请把它改成读 env('DB_NAME')/env('DB_USER')/
-#       env('DB_PASSWORD')，并追加 mysql_business 连接（模板见
-#       plugin/crud/config/database.business.example.php），否则 install.php 会连错库。
+#    ⚠️ 若宿主已自带 config/database.php：请确保其 mysql 连接读 DB_NAME/DB_USER
+#       （对齐本包 env.example 键名），并追加 mysql_business 连接（模板见
+#       plugin/crud/config/database.business.example.php）；未带则安装器已自动生成。
 
 # 3) 一键建表 + 种子 + 生成 RSA 密钥（幂等，可重复执行）
 php plugin/crud/install.php

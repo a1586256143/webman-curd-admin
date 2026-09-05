@@ -38,19 +38,22 @@ class Install
     public static function install($isFirst = true): void
     {
         $src = __DIR__ . '/../plugin/crud';
-        $dst = self::projectRoot() . '/plugin/crud';
+        $root = self::projectRoot();
+        $dst = $root . '/plugin/crud';
         if (!is_dir($src)) {
+            self::ensureDatabaseConfig($root);
             return;
         }
         if (is_dir($dst)) {
             echo "  [webman-crud] plugin/crud 已存在，跳过拷贝（保留本地版本）\n";
-            return;
+        } else {
+            if (!is_dir(dirname($dst))) {
+                mkdir(dirname($dst), 0755, true);
+            }
+            self::copyDir($src, $dst);
+            echo "  [webman-crud] 已安装应用插件: plugin/crud\n";
         }
-        if (!is_dir(dirname($dst))) {
-            mkdir(dirname($dst), 0755, true);
-        }
-        self::copyDir($src, $dst);
-        echo "  [webman-crud] 已安装应用插件: plugin/crud\n";
+        self::ensureDatabaseConfig($root);
     }
 
     /**
@@ -69,6 +72,63 @@ class Install
     public static function uninstall(): void
     {
         // no-op（见方法注释）
+    }
+
+    /**
+     * 宿主缺 config/database.php 时自动生成模板（不覆盖已有配置）。
+     * 生成的 mysql / mysql_business 连接读 DB_* 环境键，业务库名用 DB_BUSINESS_NAME。
+     */
+    protected static function ensureDatabaseConfig(string $root): void
+    {
+        $configDir = $root . '/config';
+        $file = $configDir . '/database.php';
+        if (is_file($file) || !is_dir($configDir)) {
+            return;
+        }
+        $tpl = <<<'PHP'
+<?php
+/**
+ * webman-crud 自动生成的数据库配置模板（宿主缺失 config/database.php 时由
+ * huafei/webman-crud 的 src/Install.php 生成，可自由修改）。
+ *
+ * - mysql          ：认证/管理面库（admin_users / roles / menus / casbin_rule ...）
+ * - mysql_business ：业务库（CRUD_BUSINESS_CONNECTION 默认连接名）
+ * 对应 .env 键：DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / DB_BUSINESS_NAME
+ */
+return [
+    'default' => 'mysql',
+    'connections' => [
+        'mysql' => [
+            'driver'    => 'mysql',
+            'host'      => env('DB_HOST', '127.0.0.1'),
+            'port'      => env('DB_PORT', '3306'),
+            'database'  => env('DB_NAME', 'webman_crud'),
+            'username'  => env('DB_USER', 'root'),
+            'password'  => env('DB_PASSWORD', ''),
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_general_ci',
+            'prefix'    => '',
+            'strict'    => true,
+            'engine'    => null,
+        ],
+        'mysql_business' => [
+            'driver'    => 'mysql',
+            'host'      => env('DB_HOST', '127.0.0.1'),
+            'port'      => env('DB_PORT', '3306'),
+            'database'  => env('DB_BUSINESS_NAME', 'webman_crud_business'),
+            'username'  => env('DB_USER', 'root'),
+            'password'  => env('DB_PASSWORD', ''),
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_general_ci',
+            'prefix'    => '',
+            'strict'    => true,
+            'engine'    => null,
+        ],
+    ],
+];
+PHP;
+        file_put_contents($file, $tpl);
+        echo "  [webman-crud] 宿主缺 config/database.php，已生成模板（请确认 .env 的 DB_* 键与库名）\n";
     }
 
     /**
