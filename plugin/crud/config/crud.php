@@ -1,17 +1,20 @@
 <?php
 /**
- * CRUD 插件宿主接入配置
+ * CRUD 插件宿主接入配置（插件内置默认，随 composer require 拷贝到宿主）
  *
- * 插件发布为自包含应用插件后，通过本文件声明「与宿主约定」的可调点：
+ * 配置读取优先级（高 → 低）：
+ *   1. 宿主 config/crud.php（推荐入口，顶层同名键覆盖本文件默认值；
+ *      首次 composer require 时由 src/Install.php 自动生成，不会覆盖宿主 .env）
+ *   2. .env 的 CRUD_* 键（兼容旧用法：CRUD_ADMIN_CONNECTION 等）
+ *   3. 本文件默认值（对齐「嵌入宿主开发」时的取值）
+ *
+ * 本文件声明「与宿主约定」的可调点：
  *  - 库连接名：认证/菜单/RBAC 策略库（admin_connection）与业务模型库（business_connection）
  *  - 宿主业务资产的扫描/读取目录约定（模型、CRUD 控制器、.vue 页面）
  *  - casbin 模型文件位置
- *
- * 全部带默认值，默认值对齐「嵌入宿主开发」时的取值，宿主零改动即可沿用；
- * 新项目按需在 .env 中覆盖 CRUD_ADMIN_CONNECTION / CRUD_BUSINESS_CONNECTION。
  */
 
-return [
+$defaults = [
     // 认证/菜单/RBAC 库连接名（admin_users / admin_tokens / roles / menus /
     // role_permission / crud_configs / casbin_rule 所在库）
     'admin_connection' => env('CRUD_ADMIN_CONNECTION', 'mysql'),
@@ -54,3 +57,18 @@ return [
     'page_base'  => rtrim(env('CRUD_PAGE_BASE', '/app/crud'), '/'),
     'public_dir' => dirname(__DIR__) . '/public',
 ];
+
+// 宿主 config/crud.php 顶层同名键覆盖默认值（无同名键的项保持默认；database 组等
+// 额外键一并并入，仅作为集中配置载体，不参与插件运行逻辑）。
+// 新项目推荐全部插件配置写在此文件，无需在宿主 .env 配 DB_* / CRUD_*。
+if (function_exists('base_path')) {
+    $hostCrudFile = base_path() . '/config/crud.php';
+    if (is_file($hostCrudFile)) {
+        $hostCrud = require $hostCrudFile;
+        if (is_array($hostCrud)) {
+            $defaults = array_merge($defaults, $hostCrud);
+        }
+    }
+}
+
+return $defaults;

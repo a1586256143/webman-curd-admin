@@ -53,6 +53,7 @@ class Install
             self::copyDir($src, $dst);
             echo "  [webman-crud] 已安装应用插件: plugin/crud\n";
         }
+        self::ensureCrudConfig($root);
         self::ensureDatabaseConfig($root);
     }
 
@@ -75,7 +76,69 @@ class Install
     }
 
     /**
-     * 确保宿主 config/database.php 为 env 驱动的可用配置：
+     * 确保宿主存在 config/crud.php（本插件的集中配置入口）：
+     *   - 缺失 → 生成默认模板（database 段 + 插件调参说明）；
+     *   - 已存在 → 绝不覆盖（可能已被用户/其他工具写入）。
+     *
+     * 该文件是「新项目无需配 .env」的关键：config/database.php 与插件配置
+     * （plugin/crud/config/crud.php）都会优先读它。
+     */
+    protected static function ensureCrudConfig(string $root): void
+    {
+        $configDir = $root . '/config';
+        $file = $configDir . '/crud.php';
+        if (!is_dir($configDir)) {
+            return;
+        }
+        if (is_file($file)) {
+            return; // 已有配置，不覆盖
+        }
+        file_put_contents($file, self::crudConfigTemplate());
+        echo "  [webman-crud] 已生成集中配置 config/crud.php（数据库与插件调参入口，不再依赖 .env）\n";
+    }
+
+    /**
+     * 宿主 config/crud.php 默认模板
+     */
+    protected static function crudConfigTemplate(): string
+    {
+        return <<<'PHP'
+<?php
+/**
+ * webman-crud 插件集中配置（首次 composer require 时由 huafei/webman-crud 自动生成；
+ * 已存在则不会覆盖，可自由修改）。新项目**无需在 .env 配 DB_* / CRUD_***——
+ * 数据库与插件调参全部集中在本文件，避免覆盖宿主已有 .env。
+ *
+ * 取值关系：
+ *   - database 段 → 自动生成的 config/database.php 的 mysql / mysql_business 连接
+ *     （config/database.php 优先读本段，本段留空的键回退 .env 的 DB_*）
+ *   - 下方注释的插件调参键 → 覆盖 plugin/crud/config/crud.php 的同名默认值
+ *   - plugin/crud/install.php 会自动 CREATE DATABASE（库不存在时）
+ */
+return [
+    // ---- 数据库（安装/建表/模型库使用）----
+    'database' => [
+        'host'        => '127.0.0.1',
+        'port'        => '3306',
+        'username'    => 'root',
+        'password'    => '',
+        // 认证/管理面库：admin_users/roles/menus/casbin_rule/crud_configs 等核心表
+        'admin_db'    => 'webman_crud',
+        // 业务库：业务模型 CRUD 默认库；与认证同库可填相同库名
+        'business_db' => 'webman_crud_business',
+    ],
+
+    // ---- 以下为插件调参（键与 plugin/crud/config/crud.php 同名才生效；不写用内置默认）----
+    // 'admin_connection'         => 'mysql',          // 认证库连接名（config/database.php connections 键）
+    // 'business_connection'      => 'mysql_business', // 业务库连接名
+    // 'admin_require_permission' => false,            // /api/admin/* 是否强制 RBAC
+    // 'page_base'                => '/app/crud',      // 前端挂载前缀（改需同步重建前端）
+];
+PHP;
+    }
+
+    /**
+     * 确保宿主 config/database.php 为可用配置：
      *   - 缺失 → 生成模板（mysql + mysql_business，读 DB_* 键）；
      *   - 是 webman/database 生成的占位模板（含 your_database/your_username）→ 备份后替换；
      *   - 已是自定义配置 → 不动（仅当缺 mysql_business 时提示按模板补）。
@@ -93,7 +156,7 @@ class Install
             if (!str_contains($content, 'your_database') && !str_contains($content, 'your_username')) {
                 if (!str_contains($content, 'mysql_business')) {
                     echo "  [webman-crud] 提示：宿主 config/database.php 未含 mysql_business 连接，业务表建表/迁移会失败；\n";
-                    echo "      请参考 plugin/crud/database.business.example.php 手动补上。\n";
+                    echo "      请在 config/crud.php 的 database 段配置 business_db 后重跑安装器，或参考 plugin/crud/database.business.example.php 手动补上。\n";
                 }
                 return; // 已有自定义配置，跳过
             }
@@ -111,7 +174,9 @@ class Install
     }
 
     /**
-     * env 驱动的数据库配置模板
+     * env / config/crud.php 驱动的数据库配置模板
+     *
+     * 取值优先级：宿主 config/crud.php 的 database 段（推荐）> .env 的 DB_* 键 > 内置默认。
      */
     protected static function databaseConfigTemplate(): string
     {
@@ -122,20 +187,37 @@ class Install
  * webman/database 占位模板时，由 huafei/webman-crud 的 src/Install.php 生成，
  * 可自由修改）。
  *
+ * 取值优先级：
+ *   1. 宿主 config/crud.php 的 database 段（新项目推荐入口，无需 .env）
+ *   2. .env 的 DB_* 键（兼容老宿主/传统用法）
+ *
  * - mysql          ：认证/管理面库（admin_users / roles / menus / casbin_rule ...）
  * - mysql_business ：业务库（CRUD_BUSINESS_CONNECTION 默认连接名）
- * 对应 .env 键：DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / DB_BUSINESS_NAME
  */
+$__crudDb = [];
+$__crudFile = __DIR__ . '/crud.php';
+if (is_file($__crudFile)) {
+    $__cfg = require $__crudFile;
+    if (is_array($__cfg) && isset($__cfg['database']) && is_array($__cfg['database'])) {
+        $__crudDb = $__cfg['database'];
+    }
+}
+$__pick = static function (string $key, string $envKey, string $default) use ($__crudDb): string {
+    return (isset($__crudDb[$key]) && $__crudDb[$key] !== '')
+        ? (string)$__crudDb[$key]
+        : (string)env($envKey, $default);
+};
+
 return [
     'default' => 'mysql',
     'connections' => [
         'mysql' => [
             'driver'    => 'mysql',
-            'host'      => env('DB_HOST', '127.0.0.1'),
-            'port'      => env('DB_PORT', '3306'),
-            'database'  => env('DB_NAME', 'webman_crud'),
-            'username'  => env('DB_USER', 'root'),
-            'password'  => env('DB_PASSWORD', ''),
+            'host'      => $__pick('host', 'DB_HOST', '127.0.0.1'),
+            'port'      => $__pick('port', 'DB_PORT', '3306'),
+            'database'  => $__pick('admin_db', 'DB_NAME', 'webman_crud'),
+            'username'  => $__pick('username', 'DB_USER', 'root'),
+            'password'  => $__pick('password', 'DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',
             'collation' => 'utf8mb4_general_ci',
             'prefix'    => '',
@@ -144,11 +226,11 @@ return [
         ],
         'mysql_business' => [
             'driver'    => 'mysql',
-            'host'      => env('DB_HOST', '127.0.0.1'),
-            'port'      => env('DB_PORT', '3306'),
-            'database'  => env('DB_BUSINESS_NAME', 'webman_crud_business'),
-            'username'  => env('DB_USER', 'root'),
-            'password'  => env('DB_PASSWORD', ''),
+            'host'      => $__pick('host', 'DB_HOST', '127.0.0.1'),
+            'port'      => $__pick('port', 'DB_PORT', '3306'),
+            'database'  => $__pick('business_db', 'DB_BUSINESS_NAME', 'webman_crud_business'),
+            'username'  => $__pick('username', 'DB_USER', 'root'),
+            'password'  => $__pick('password', 'DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',
             'collation' => 'utf8mb4_general_ci',
             'prefix'    => '',

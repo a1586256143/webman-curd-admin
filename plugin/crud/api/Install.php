@@ -49,6 +49,13 @@ class Install
         static::banner('CRUD 插件安装开始' . ($isFirstInstall ? '（首次安装）' : ''));
         $ok = true;
 
+        // A0. 自动建库：库不存在时（1049 Unknown database 是首跑最常见错误）
+        //     连接 MySQL server 执行 CREATE DATABASE IF NOT EXISTS（幂等）
+        if (!static::ensureDatabases()) {
+            static::banner('数据库连接/自动建库失败，请根据上方 [ERROR] 排查后重试（可重复执行）');
+            return false;
+        }
+
         // A. 建表（认证/管理面）
         try {
             $created = static::runSqlFile('install.sql', static::adminDb());
@@ -139,6 +146,64 @@ class Install
     // ============================================================
     // 内部实现
     // ============================================================
+
+    /**
+     * 确保 admin / business 连接指向的数据库已存在：
+     * 连接 MySQL server（不指定库名）执行 CREATE DATABASE IF NOT EXISTS（幂等）。
+     *
+     * 解决首跑最常见的 1049 Unknown database：新项目尚未建库时 install.php
+     * 直接建表必然失败。配置来源 config('database.connections.*')（自动生成的
+     * config/database.php 优先读宿主 config/crud.php 的 database 段，其次 .env）。
+     *
+     * @return bool 全部就绪/建好返回 true
+     */
+    protected static function ensureDatabases(): bool
+    {
+        $ok = true;
+        $seen = [];
+        $connNames = array_values(array_unique(array_filter([
+            (string)config('plugin.crud.crud.admin_connection', 'mysql'),
+            (string)config('plugin.crud.crud.business_connection', 'mysql_business'),
+        ])));
+
+        foreach ($connNames as $conn) {
+            $cfg = (array)config("database.connections.{$conn}", []);
+            $host = (string)($cfg['host'] ?? '');
+            $port = (string)($cfg['port'] ?? '3306');
+            $user = (string)($cfg['username'] ?? '');
+            $pass = (string)($cfg['password'] ?? '');
+            $db   = (string)($cfg['database'] ?? '');
+            if ($host === '' || $db === '') {
+                static::report(false, '', "连接 {$conn} 配置不完整（缺 host/database），请检查 config/crud.php 的 database 段");
+                $ok = false;
+                continue;
+            }
+            if (!preg_match('/^[A-Za-z0-9_\-]+$/', $db)) {
+                static::report(false, '', "库名含非法字符（仅允许字母数字下划线连字符）: {$db}，请检查 config/crud.php");
+                $ok = false;
+                continue;
+            }
+            $key = "{$host}:{$port}|{$user}|{$db}";
+            if (isset($seen[$key])) {
+                continue; // 与已处理连接指向同一库（认证=业务同库场景）
+            }
+            $seen[$key] = true;
+            try {
+                $pdo = new \PDO(
+                    "mysql:host={$host};port={$port};charset=utf8mb4",
+                    $user,
+                    $pass,
+                    [\PDO::ATTR_TIMEOUT => 5, \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]
+                );
+                $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$db}` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
+                static::report(true, "数据库已就绪: {$db}（不存在则已自动创建，连接 {$conn}）");
+            } catch (\Throwable $e) {
+                $ok = false;
+                static::report(false, '', "自动建库失败 ({$conn}/{$db}): " . $e->getMessage() . '（请先手动 CREATE DATABASE，或核对 config/crud.php 的连接配置）');
+            }
+        }
+        return $ok;
+    }
 
     /**
      * 执行 SQL 文件（按 --SPLIT-- 切分逐条执行）

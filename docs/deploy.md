@@ -58,11 +58,14 @@ server {
 
 > 真实 IP：webman 通过 `connection->getRemoteIp()` 取客户端 IP（反代场景依赖 Nginx 透传，必要时在 worker 启动前解析 `X-Forwarded-For`）。
 
-## 3. .env 隔离（环境分级）
+## 3. 环境配置隔离（config/crud.php + .env 分级）
 
-- 开发 / 测试 / 生产各用**独立** `.env`，绝不共用库
-- 生产 `.env` 至少：
-  - `CRUD_ADMIN_REQUIRE_PERMISSION=true`（开启 /api/admin/* 的 casbin 鉴权）
+- 开发 / 测试 / 生产各用**独立**数据库，绝不共用库。配置写宿主 `config/crud.php`
+  （`database` 段按环境改库名/凭据），生产建议 `config/crud.php` 不入 git、由部署流水线生成
+  （`src/Install.php` 已保证宿主缺失时自动生成默认模板）。
+- 传统 .env 方式同样支持（`DB_*` / `CRUD_*`，优先级低于 `config/crud.php`）。生产至少：
+  - `admin_require_permission=true`（或 .env `CRUD_ADMIN_REQUIRE_PERMISSION=true`），
+    开启 /api/admin/* 的 casbin 鉴权
   - 登录后**立即修改** admin 默认密码（种子账号 admin/admin123 仅初始）
   - 不在 `.env` 写密钥：`config/keys/` 由 install.php 生成，独立挂载，不进 git / 不进发布 zip
 

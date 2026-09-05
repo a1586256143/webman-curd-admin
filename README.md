@@ -61,10 +61,11 @@ webman-crud/
 composer config repositories.crud path "../webman-crud"
 composer require huafei/webman-crud:@dev
 
-# 方式 B：私有 Git（推荐上线使用，本包已 git init + tag v0.1.0）
+# 方式 B：私有 Git（推荐上线使用，已 git init + tag v1.0.x）
 #   仓库托管于 Gitee：https://gitee.com/colingit/webman-curd-admin.git
 composer config repositories.crud vcs "https://gitee.com/colingit/webman-curd-admin.git"
-composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
+composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 @dev 漂移
+#   --no-audit：audit 需访问 packagist.org 安全源，国内网络常失败；仅跳过审计提示，不影响安装
 
 # 方式 C：私有 Satis / Packagist（团队统一，无需每个项目配 repositories）
 #   本仓库已附 satis.json 模板（指向本 Gitee 仓库），放到 Satis 服务器执行
@@ -74,38 +75,48 @@ composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
 #   记得把 satis.json 里的 homepage / Gitee URL 改成你的真实地址。
 ```
 
-> 本包已初始化 git 仓库并打 `v0.1.0` 标签；上线建议走 **方式 B**（VCS + 版本约束），
-> 升级时用 `composer update huafei/webman-crud` 拉新 tag。注意：项目内 `{项目}/plugin/crud`
-> 是拷贝件，升级会被覆盖 —— 见下方「升级安全」。
+> 本包已初始化 git 仓库并打 `v1.0.0+` 标签；上线建议走 **方式 B**（VCS + 版本约束），
+> 升级时用 `composer update huafei/webman-crud` 拉新 tag。
+> ⚠️ 升级后 `plugin/crud` 文件本体不会自动更新（src/Install.php 仅在目录不存在时拷贝，
+> 以保护本地改动）——需要同步最新插件文件时执行 `bash scripts/sync-plugin.sh`
+> （先备份旧 plugin/crud 再整体重拷），详见下方「升级安全」。
 
 > 若 `{项目}/plugin/crud` 已存在（本地开发版），安装器会跳过拷贝、保留本地版本，
 > 由 `scripts/release.sh` 负责把本地改动回灌到本包。
 
 ## 新项目开箱跑通（完整步骤）
 
+> 前置：webman 骨架 + PHP ≥8.1 + MySQL。全部为幂等命令，可重复执行。
+
 ```bash
-# 1) 装插件（composer require 自动完成三件事：
+# 1) 装插件（composer require 自动完成四件事：
 #    ① 拉齐运行时依赖：webman/database(支持 support\Db) + casbin/casbin(RBAC)
 #       + vlucas/phpdotenv(.env 加载)；
 #    ② webman 官方插件机制（framework 的 support\Plugin）调用本包 src/Install.php，
 #       把 plugin/crud 拷贝到宿主 plugin/crud；
-#    ③ 宿主缺 config/database.php 时自动生成模板（mysql + mysql_business 读 DB_* 键））：
-composer require huafei/webman-crud:^1.0
-# 验证：ls plugin/crud config/database.php
+#    ③ 宿主缺 config/database.php 时自动生成（mysql + mysql_business）；
+#    ④ 宿主缺 config/crud.php 时自动生成【集中配置入口】——见第 2 步。
+#    --no-audit：composer audit 需访问 packagist.org 安全公告源，国内网络/内网
+#    不可达时会报 Failed to audit installed packages（仅提示，不影响安装）；
+#    介意可加 --no-audit 跳过，或后续随时 composer audit 单独审计）：
+composer require huafei/webman-crud:^1.0 --no-audit
+# 验证：ls plugin/crud config/database.php config/crud.php
 #   极少数情况下 composer 自动加载时序可能导致本次未触发拷贝，兜底二选一：
 #     composer dump-autoload && composer update huafei/webman-crud
 #     或等价手动：cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 
-# 2) 配置 .env 数据库连接（认证库；业务库 CRUD_BUSINESS_CONNECTION 按需）
-#    cp plugin/crud/env.example .env 后填真实值：
-#    DB_HOST / DB_PORT / DB_NAME(认证库名) / DB_USER / DB_PASSWORD
-#    如认证与业务同库，加一行 DB_BUSINESS_NAME=同库名
-#    ⚠️ 若宿主已自带 config/database.php：请确保其 mysql 连接读 DB_NAME/DB_USER
-#       （对齐本包 env.example 键名），并追加 mysql_business 连接（模板见
-#       plugin/crud/database.business.example.php）；未带则安装器已自动生成。
+# 2) 配置数据库（⚠️ 不再 cp plugin/crud/env.example .env —— 那样会覆盖宿主 .env！
+#    新项目配置统一写在 config/crud.php，首次 require 时已自动生成）：
+#    vim config/crud.php
+#      database.admin_db    = 认证/管理面库名（默认 webman_crud）
+#      database.business_db = 业务库名（默认 webman_crud_business；与认证同库填同名）
+#      database.username/password/host/port 按实际改
+#    （老宿主仍可用 .env 的 DB_* / CRUD_* 键，config/database.php 与插件配置
+#      都优先读 config/crud.php、其次 .env——两种方式二选一即可）
 
 # 3) 一键建表 + 种子 + 生成 RSA 密钥（幂等，可重复执行）
 php plugin/crud/install.php
+#    ✓ 数据库不存在会自动 CREATE DATABASE（无需手动建库）
 #    建 8 张核心表（admin_users/admin_tokens/roles/admin_role_user/role_permission/
 #                   casbin_rule/crud_configs/menus）
 #    空表自动插入：roles（admin/yunying/caiwu）、menus（6 条基础菜单）、
@@ -190,8 +201,10 @@ php plugin/crud/migrate.php --dry-run            # 预检
 
 ### 配置模板
 
-拷贝 `plugin/crud/env.example` 为项目根 `.env` 即得全部键名与示例值
-（`DB_*` / `CRUD_*` / 前端构建期变量），无需回查本文档。
+- **新项目（推荐）**：首次 `composer require` 自动生成宿主 `config/crud.php`
+  （`database` 段 + 插件调参），所有配置写在此文件即可，**不动宿主 `.env`**。
+- **传统 .env 方式**：`plugin/crud/env.example` 列有全部键名与示例值（`DB_*` /
+  `CRUD_*` / 前端构建期变量），可整段拷进宿主 `.env`（勿整文件覆盖）。
 
 ## 内置前端说明
 
@@ -284,10 +297,18 @@ git tag v1.0.0 && git push origin v1.0.0
 
 ### 升级安全（避免本地改动被静默覆盖）
 
-`composer update` 会覆盖式拷贝插件包内的 `plugin/crud` 到项目。升级前先跑：
+安装器策略：`plugin/crud` 已存在 → **跳过拷贝**（保护本地改动），因此
+`composer update huafei/webman-crud` 只会更新 `vendor/` 里的包，不会动宿主
+`plugin/crud` 与 `config/` 下的文件。需要把新版插件文件同步到宿主时：
 
 ```bash
+# 1) 升级前先检查宿主 plugin/crud 是否有本地改动
 ./scripts/check-plugin-overrides.sh <项目根>   # 0=无本地改动 1=发现改动
+
+# 2) 确认无本地改动（或已备份）后，同步最新插件文件：
+bash <项目根>/scripts/sync-plugin.sh
+#    = 备份 plugin/crud → plugin/crud.bak-<时间戳>，再从 vendor 整体重拷
+#    宿主 config/crud.php 与 config/database.php 已存在则不会被覆盖（安装器跳过已有文件）
 ```
 
 发现改动时，先 `git stash` / 提交 / 把改动迁回插件配置化，再升级。
@@ -333,11 +354,13 @@ git tag v1.0.0 && git push origin v1.0.0
 - [x] **M5 宿主旧副本下线** → `app/middleware/*`、`app/rbac/*`、`app/functions.php` 已切到
       插件内置版并删除（`StaticFile.php` 宿主自有保留）；行为等价验证通过（见 M5 验证记录）
 - [x] **发布渠道** → 包已 `git init` + `tag v0.1.0`，支持私有 Git(VCS) / Satis / 本地 path 三种引入方式
-- [x] **升级覆盖防护** → `scripts/check-plugin-overrides.sh` 升级前检测项目内本地改动
+- [x] **升级覆盖防护** → `scripts/check-plugin-overrides.sh` 升级前检测项目内本地改动；
+      `scripts/sync-plugin.sh` 备份后从 vendor 重拷最新插件文件（composer update 不再覆盖 plugin/crud）
 - [x] **前端构建发布一体化** → `scripts/build-and-release.sh`（build-frontend + release-zip）
 - [x] **业务种子模板** → `plugin/crud/install-business.example.sql`（菜单/权限自动登记示例）
 - [x] **增量 migration** → `plugin/crud/migrate.php` + `migrations/`（`_crud_migrations` 跟踪，幂等）
-- [x] **配置模板** → `plugin/crud/env.example`（拷贝即得全部键名）
+- [x] **配置模板** → 宿主 `config/crud.php`（composer require 自动生成，数据库与插件调参集中入口，不覆盖 .env）；
+      传统 .env 键名见 `plugin/crud/env.example`
 - [x] **部署与备份** → `docs/deploy.md`（supervisor + Nginx + 备份策略 + 回滚预案）
 - [x] **update 钩子演练** → `Install::update()` 全链路 + 幂等复跑已验证（8 表 + 种子 + 密钥，重跑全 SKIP）
 
