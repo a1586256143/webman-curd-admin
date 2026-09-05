@@ -1,0 +1,1 @@
+import{aD as r,aE as s,f as n,M as u,O as c}from"./vue-vendor-3c5d4443.js";const l={__name:"index",setup(p){const o=r(),a=s();return n(()=>{const{path:e,query:t}=o;a.replace({path:e,query:t})}),(e,t)=>(u(),c("div"))}};export{l as default};

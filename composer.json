@@ -1,0 +1,29 @@
+{
+  "name": "huafei/webman-crud",
+  "type": "library",
+  "description": "webman 应用插件（composer 分发版）：自包含的 CRUD/DSL/Schema 页面引擎 + 登录/RBAC 中后台底座。内含 plugin/crud，宿主 composer require 后由 support\\Plugin::install 自动拷贝到 {项目}/plugin/crud 开箱即用。",
+  "keywords": [
+    "webman",
+    "plugin",
+    "crud",
+    "lowcode",
+    "dsl",
+    "admin",
+    "rbac"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "colin"
+    }
+  ],
+  "require": {
+    "php": ">=8.1",
+    "workerman/webman-framework": "^2.1"
+  },
+  "extra": {
+    "webman-app-plugin": "crud"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

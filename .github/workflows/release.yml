@@ -1,0 +1,72 @@
+name: release
+
+# 触发：推送 v* tag（如 v1.0.0）
+# 前置：内置前端 dist 已由开发者本地 ./scripts/build-frontend.sh 构建并提交
+#       （CI 不跑 npm —— 本包不含前端源码，只含产物）
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # 创建 Release 需要写权限
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      # 1. composer.json 校验
+      - name: Composer validate
+        run: composer validate --strict --no-check-publish
+
+      # 2. 全量 PHP 语法检查
+      - name: PHP lint
+        run: |
+          ERR=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" >/dev/null || { echo "FAIL: $f"; ERR=1; }
+          done < <(find plugin -name '*.php' -print0)
+          exit $ERR
+
+      # 3. 内置前端产物完整性（index.html + assets/ 必须存在）
+      - name: Verify frontend dist
+        run: |
+          test -f plugin/crud/public/index.html
+          test -d plugin/crud/public/assets
+          N=$(find plugin/crud/public -type f | wc -l)
+          echo "dist files: $N"
+          test "$N" -gt 10
+
+      # 4. 关键文件存在性（安装器 + DDL + 路由 + 前端控制器）
+      - name: Verify key files
+        run: |
+          test -f plugin/crud/install.sql
+          test -f plugin/crud/install.php
+          test -f plugin/crud/api/Install.php
+          test -f plugin/crud/config/route.php
+          test -f plugin/crud/app/controller/PageController.php
+
+      # 5. 打 zip（排除 keys / install-business.sql / release-zip.sh）
+      - name: Build zip
+        run: ./scripts/release-zip.sh "${GITHUB_REF_NAME#v}"
+
+      # 6. 上传 artifact（无论是否创建 Release 都可下载）
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webman-crud-${{ github.ref_name }}
+          path: dist/*.zip
+
+      # 7. 创建 GitHub Release 并附 zip
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true

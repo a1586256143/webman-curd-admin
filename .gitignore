@@ -1,0 +1,14 @@
+# 依赖与临时产物
+/vendor
+node_modules
+*.log
+.DS_Store
+
+# 安装时生成（勿入包）
+plugin/crud/config/keys/
+plugin/crud/install.lock
+
+# 本地发布脚本输出
+/dist/
+/dist-pkg/
+*.zip
