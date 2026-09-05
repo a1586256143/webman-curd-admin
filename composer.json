@@ -12,11 +12,16 @@
     "rbac"
   ],
   "license": "MIT",
+  "homepage": "https://gitee.com/colingit/webman-curd-admin",
   "authors": [
     {
       "name": "colin"
     }
   ],
+  "support": {
+    "source": "https://gitee.com/colingit/webman-curd-admin",
+    "issues": "https://gitee.com/colingit/webman-curd-admin/issues"
+  },
   "require": {
     "php": ">=8.1",
     "workerman/webman-framework": "^2.1"

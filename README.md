@@ -62,7 +62,8 @@ composer config repositories.crud path "../webman-crud"
 composer require huafei/webman-crud:@dev
 
 # 方式 B：私有 Git（推荐上线使用，本包已 git init + tag v0.1.0）
-composer config repositories.crud vcs "git@your-git-server:huafei/webman-crud.git"
+#   仓库托管于 Gitee：https://gitee.com/colingit/webman-curd-admin.git
+composer config repositories.crud vcs "https://gitee.com/colingit/webman-curd-admin.git"
 composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
 
 # 方式 C：私有 Satis / Packagist（团队统一，无需每个项目配 repositories）
