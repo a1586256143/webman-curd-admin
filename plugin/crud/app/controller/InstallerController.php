@@ -52,7 +52,7 @@ class InstallerController
 
     protected static function json(array $data, int $status = 200): Response
     {
-        return json($data, $status, ['Content-Type' => 'application/json; charset=utf-8']);
+        return response(json_encode($data, JSON_UNESCAPED_UNICODE), $status, ['Content-Type' => 'application/json; charset=utf-8']);
     }
 
     /**
