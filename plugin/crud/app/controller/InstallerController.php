@@ -186,6 +186,10 @@ class InstallerController
                 'stderr'   => trim((string)$err) !== '' ? mb_substr($err, 0, 2000) : '',
                 'admin'    => $adminUser,
                 'page_base' => $pageBase,
+                // 安装成功时附带重启命令（webman worker 配置在启动时固化，wizard 写完
+                // config/crud.php 后需 restart 才生效；避免 1045 Access denied 等
+                // 「config 已更新但 worker 还用旧配置」类问题）
+                'restart_cmd' => $ok ? 'php start.php restart' : '',
             ]);
         } catch (\Throwable $e) {
             return static::json(['ok' => false, 'message' => '安装过程异常: ' . $e->getMessage()], 500);
@@ -278,28 +282,45 @@ class InstallerController
     }
 
     /**
-     * 写 config/crud.php（插件调参入口）：
-     *  - 移除 database 段（DB 已写入 .env；config/database.php 对 config/crud.php
-     *    缺失/空 database 键会自动回退 .env）
+     * 写 config/crud.php（插件调参 + 数据库连接入口）：
+     *  - 包含 database 段（DB 信息同时写在这里；config/database.php 模板 $__pick()
+     *    优先取本文件的 database 段，绕开 .env 的 putenv 缓存问题）。
      *  - 原文件先备份 config/crud.php.wizard.bak
      */
-    protected static function writeCrudConfig(string $root, string $pageBase): void
+    protected static function writeCrudConfig(string $root, string $pageBase, array $db, string $businessDb): void
     {
         $file = $root . '/config/crud.php';
         if (is_file($file)) {
             @copy($file, $file . '.wizard.bak');
         }
+        // 单库模式：business_db 空则填回 admin_db，保证 mysql_business 也有明确库名
+        $businessDbOut = $businessDb !== '' ? $businessDb : $db['name'];
+        $pageBaseOut = addslashes($pageBase); // 仅防 PHP 字符串解析异常
+        $dbHostOut = addslashes($db['host']);
+        $dbNameOut = addslashes($db['name']);
+        $dbUserOut = addslashes($db['user']);
+        $dbPassOut = addslashes($db['password']);
+        $businessDbEsc = addslashes($businessDbOut);
         $php = <<<PHP
 <?php
 /**
  * webman-crud 插件集中配置（Web 安装向导生成）
- * 数据库信息在 .env（DB_*），本文件仅放插件调参；本文件不含 database 段，
- * 因此 config/database.php 会全部读取 .env 的 DB_* 键。
- * 如需业务库与认证库分库：在 .env 配置 DB_BUSINESS_NAME 即可（当前单库模式）。
+ * - database 段：DB 连接。config/database.php 模板 \$__pick() 优先读这里（避免
+ *   .env 的 putenv 在 worker 启动后无法刷新导致的 1045 Access denied）。
+ * - 其它段：插件调参
  */
 return [
+    // ---- 数据库（认证/管理面 + 业务库；单库模式下两连接指向同库）----
+    'database' => [
+        'host'        => '{$dbHostOut}',
+        'port'        => '{$db['port']}',
+        'username'    => '{$dbUserOut}',
+        'password'    => '{$dbPassOut}',
+        'admin_db'    => '{$dbNameOut}',
+        'business_db' => '{$businessDbEsc}',
+    ],
     // 前端挂载前缀（改了需同步重建前端：VITE_BASE_PATH）
-    'page_base' => rtrim(env('CRUD_PAGE_BASE', '{$pageBase}'), '/'),
+    'page_base' => rtrim(env('CRUD_PAGE_BASE', '{$pageBaseOut}'), '/'),
     // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
     'admin_require_permission' => env('CRUD_ADMIN_REQUIRE_PERMISSION', false),
 ];

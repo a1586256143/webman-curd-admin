@@ -193,7 +193,10 @@ function submit(){
       var base = (j.page_base || '/app/crud').replace(/\/+$/,'');
       stepsUI(j.steps || []);
       document.getElementById('pbarFill').style.width = '100%';
-      showResult(true, '<b>🎉 安装完成！</b>管理员 <b>' + esc(j.admin) + '</b> 已创建。<br>访问后台：<a href="' + base + '/">' + base + '/</a>（登录后请立即修改密码）');
+      var restartHint = j.restart_cmd
+        ? '<br><br><b style="color:#d97706">⚠ 请执行：</b><code style="background:#1f2937;color:#fbbf24;padding:4px 8px;border-radius:4px;user-select:all">' + esc(j.restart_cmd) + '</code><br><small>worker 配置在启动时固化，写入新 DB 信息后必须重启进程（避免 1045 Access denied）</small>'
+        : '';
+      showResult(true, '<b>🎉 安装完成！</b>管理员 <b>' + esc(j.admin) + '</b> 已创建。<br>访问后台：<a href="' + base + '/">' + base + '/</a>（登录后请立即修改密码）' + restartHint);
       document.getElementById('submitBtn').style.display = 'none';
     } else {
       stepsUI(j.steps || []);

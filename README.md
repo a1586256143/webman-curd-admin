@@ -94,12 +94,15 @@ composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 
 # 1) 装插件（composer require 自动完成：① 拉齐依赖 webman/database+casbin+casbin+phpdotenv；
 #    ② webman 官方插件机制自动拷贝 plugin/crud 到宿主；③ 宿主缺 config/database.php 自动生成；
 #    ④ 宿主缺 config/crud.php 自动生成集中配置入口）
+#
+#    ⚠️ composer audit 报红是已知问题：audit 硬编码访问 packagist.org（不走镜像、国内常不可达），
+#    报 "Failed to audit installed packages." 仅是尾部告警——命令本身成功（exit 0）。
+#    消除红字：用本包提供的 wrapper `scripts/composer.sh`（自动 --no-audit），或在你的 shell
+#    加 `alias composer='/绝对路径/scripts/composer.sh'`。详见底部「audit 红字彻底消除」一节。
 composer require huafei/webman-crud:^1.0
-#   ⚠️ composer audit 说明：audit 会访问 packagist.org 安全公告源（不走镜像、国内常不可达），
-#   报 "Failed to audit installed packages." 仅是一条尾部告警——命令本身成功（exit 0，不影响
-#   后续 && 链）。介意红字可加 --no-audit；根治需代理让 packagist.org 可达（本包无法干预）。
 # 验证：ls plugin/crud config/database.php config/crud.php
 #   兜底（极少见自动拷贝未触发）：composer dump-autoload && composer update huafei/webman-crud
+#   或用本包 wrapper：./scripts/composer.sh update huafei/webman-crud --no-audit
 #   或 cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 
 # 2) 启动服务（先启动，再装库 —— Web 向导模式需要服务在线）
@@ -363,3 +366,63 @@ bash <项目根>/scripts/sync-plugin.sh
 > 历史坑沉淀：① webman `app/functions.php` 是框架约定加载点，删除须同步改 `config/autoload.php`
 > ② 测试脚本**绝不可写宿主 `.env`**（曾误删真实 .env 导致 PDO 空连接）；③ `php start.php restart`
 > 杀会话进程组须用 `start`；④ cwd 在脚本间不持久，凡涉及路径操作一律显式 `cd` 绝对路径。
+
+---
+
+## 常见问题（FAQ）
+
+### `composer audit` 红字（Failed to audit installed packages）能否彻底消除？
+
+**结论**：包内无法彻底消除（composer 没有全局 config 关闭 audit），但提供**零侵入的 wrapper**。
+
+- **原理**：`composer require/update` 末尾会跑 `composer audit`，硬编码访问 `packagist.org` 的
+  `security-advisories` 端点（不走国内镜像）。国内/内网 packagist.org 不可达时就会报这条红字；
+  命令本身 **exit code = 0**，不影响安装。
+- **根治**：让 `packagist.org` 可达（配置全局代理或 hosts）。
+- **包内方案**（推荐）：使用本包 `scripts/composer.sh` 替代系统 `composer`：
+
+```bash
+# 一次性：临时用一次
+./scripts/composer.sh require huafei/webman-crud:^1.0
+./scripts/composer.sh update
+
+# 永久：把系统的 composer alias 成 wrapper（推荐）
+echo "alias composer='$(pwd)/scripts/composer.sh'" >> ~/.zshrc
+source ~/.zshrc
+# 之后所有 composer 命令自动追加 --no-audit，红字消失
+```
+
+### 为什么还保留 `mysql_business` 连接（默认指向同一个库）？
+
+- **历史原因**：插件代码按「认证库 / 业务库」分离设计，`CRUD_BUSINESS_CONNECTION=mysql_business` 是默认
+  业务模型 CRUD 用的连接名。改这一处会动大量业务代码、破坏向后兼容。
+- **单库模式**（默认）：`mysql_business.database` 回退到认证库名 → 两个连接**指向同一库**，零开销。
+- **想分库**：在 `config/crud.php` 的 `database.business_db` 填不同库名，向导重装或手动改即可生效。
+- **不要它**：在 `config/database.php` 里删掉 `'mysql_business' => [...]` 整块代码即可（业务代码里
+  出现 `Db::connection('mysql_business')->...` 时改成 `mysql`，或在每个模型里 `protected $connection = 'mysql';`）。
+
+### 登录后台报 `Class "support\Redis" not found`
+
+本包已 require `webman/redis`（v1.0.8+），`composer require huafei/webman-crud:^1.0` 会自动拉齐。
+若你用的是旧版（v1.0.7 及以前），手动补一行：
+
+```bash
+composer require webman/redis
+```
+
+Redis 不可用时 `AuthController / Rbac / AuthCheck / AdminController` 已全部 `try/catch` 降级（直查 DB），
+不影响登录鉴权。
+
+### 向导完成后后台报 `SQLSTATE[HY000] [1045] Access denied for user '...' (using password: NO)`
+
+**根因**：webman worker 启动时 `config/database.php` 已 `require` 加载（`.env` 同时 `putenv` 固化）。
+**wizard 写文件后，运行期内存里的 `env('DB_PASSWORD')` 仍是旧值**（通常空），导致心跳 `select 1` 用空密码重连失败。
+
+**修法**（v1.0.8+）：向导已把 DB 信息**同时写入 `config/crud.php` 的 `database` 段**（不走 .env），
+但**仍需重启 worker** 让配置生效。向导完成后会提示执行：
+
+```bash
+php start.php restart
+```
+
+之后心跳连接用 `config/crud.php` 里的真密码，`1045` 消失。

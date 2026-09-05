@@ -339,10 +339,8 @@ class Install
                 $now = date('Y-m-d H:i:s');
                 $db->table('roles')->insert([
                     ['name' => '超级管理员', 'slug' => 'admin', 'description' => '拥有全部权限（casbin p,admin,*,*）', 'created_at' => $now, 'updated_at' => $now],
-                    ['name' => '运营', 'slug' => 'yunying', 'description' => '运营角色（按需授予 crud.* 权限）', 'created_at' => $now, 'updated_at' => $now],
-                    ['name' => '财务', 'slug' => 'caiwu', 'description' => '财务角色（按需授予 crud.* 权限）', 'created_at' => $now, 'updated_at' => $now],
                 ]);
-                static::report(true, 'roles 种子已插入（admin/yunying/caiwu）');
+                static::report(true, 'roles 种子已插入（仅超级管理员 admin；其它角色请在后台按需新增）');
             } else {
                 static::report(true, 'roles 已有数据，跳过种子');
             }
