@@ -102,7 +102,7 @@ composer require huafei/webman-crud:^1.0
 #    如认证与业务同库，加一行 DB_BUSINESS_NAME=同库名
 #    ⚠️ 若宿主已自带 config/database.php：请确保其 mysql 连接读 DB_NAME/DB_USER
 #       （对齐本包 env.example 键名），并追加 mysql_business 连接（模板见
-#       plugin/crud/config/database.business.example.php）；未带则安装器已自动生成。
+#       plugin/crud/database.business.example.php）；未带则安装器已自动生成。
 
 # 3) 一键建表 + 种子 + 生成 RSA 密钥（幂等，可重复执行）
 php plugin/crud/install.php

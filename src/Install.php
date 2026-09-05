@@ -75,21 +75,52 @@ class Install
     }
 
     /**
-     * 宿主缺 config/database.php 时自动生成模板（不覆盖已有配置）。
-     * 生成的 mysql / mysql_business 连接读 DB_* 环境键，业务库名用 DB_BUSINESS_NAME。
+     * 确保宿主 config/database.php 为 env 驱动的可用配置：
+     *   - 缺失 → 生成模板（mysql + mysql_business，读 DB_* 键）；
+     *   - 是 webman/database 生成的占位模板（含 your_database/your_username）→ 备份后替换；
+     *   - 已是自定义配置 → 不动（仅当缺 mysql_business 时提示按模板补）。
      */
     protected static function ensureDatabaseConfig(string $root): void
     {
         $configDir = $root . '/config';
         $file = $configDir . '/database.php';
-        if (is_file($file) || !is_dir($configDir)) {
+        if (!is_dir($configDir)) {
             return;
         }
-        $tpl = <<<'PHP'
+        $needWrite = !is_file($file);
+        if (!$needWrite) {
+            $content = (string)file_get_contents($file);
+            if (!str_contains($content, 'your_database') && !str_contains($content, 'your_username')) {
+                if (!str_contains($content, 'mysql_business')) {
+                    echo "  [webman-crud] 提示：宿主 config/database.php 未含 mysql_business 连接，业务表建表/迁移会失败；\n";
+                    echo "      请参考 plugin/crud/database.business.example.php 手动补上。\n";
+                }
+                return; // 已有自定义配置，跳过
+            }
+            if (@rename($file, $file . '.webman-db.bak') === false) {
+                echo "  [webman-crud] 警告：config/database.php 为占位模板但备份失败，跳过替换（请手动配置）\n";
+                return;
+            }
+            echo "  [webman-crud] 检测到 webman/database 占位 config/database.php，已备份为 database.php.webman-db.bak\n";
+            $needWrite = true;
+        }
+        if ($needWrite) {
+            file_put_contents($file, self::databaseConfigTemplate());
+            echo "  [webman-crud] 已生成 env 驱动的 config/database.php（mysql + mysql_business 读 DB_* 键）\n";
+        }
+    }
+
+    /**
+     * env 驱动的数据库配置模板
+     */
+    protected static function databaseConfigTemplate(): string
+    {
+        return <<<'PHP'
 <?php
 /**
- * webman-crud 自动生成的数据库配置模板（宿主缺失 config/database.php 时由
- * huafei/webman-crud 的 src/Install.php 生成，可自由修改）。
+ * webman-crud 自动生成的数据库配置模板（宿主 config/database.php 缺失或为
+ * webman/database 占位模板时，由 huafei/webman-crud 的 src/Install.php 生成，
+ * 可自由修改）。
  *
  * - mysql          ：认证/管理面库（admin_users / roles / menus / casbin_rule ...）
  * - mysql_business ：业务库（CRUD_BUSINESS_CONNECTION 默认连接名）
@@ -127,8 +158,6 @@ return [
     ],
 ];
 PHP;
-        file_put_contents($file, $tpl);
-        echo "  [webman-crud] 宿主缺 config/database.php，已生成模板（请确认 .env 的 DB_* 键与库名）\n";
     }
 
     /**
