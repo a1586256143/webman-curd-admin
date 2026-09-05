@@ -67,7 +67,11 @@ composer config repositories.crud vcs "https://gitee.com/colingit/webman-curd-ad
 composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
 
 # 方式 C：私有 Satis / Packagist（团队统一，无需每个项目配 repositories）
-#   在 satis 配置中加入本仓库，composer 全局配 satis 源即可直接 require
+#   本仓库已附 satis.json 模板（指向本 Gitee 仓库），放到 Satis 服务器执行
+#   `satis build satis.json web/` 后部署；团队统一配一次源即可直接 require：
+#     composer config repositories.crud-satis composer "https://satis.your-company.com"
+#     composer require huafei/webman-crud
+#   记得把 satis.json 里的 homepage / Gitee URL 改成你的真实地址。
 ```
 
 > 本包已初始化 git 仓库并打 `v0.1.0` 标签；上线建议走 **方式 B**（VCS + 版本约束），

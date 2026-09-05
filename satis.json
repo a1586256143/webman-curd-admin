@@ -1,0 +1,20 @@
+{
+    "name": "colin/webman-crud-satis",
+    "homepage": "https://satis.your-company.com",
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://gitee.com/colingit/webman-curd-admin.git"
+        }
+    ],
+    "require": {
+        "huafei/webman-crud": "*"
+    },
+    "require-all": false,
+    "archive": {
+        "directory": "dist",
+        "format": "zip"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
