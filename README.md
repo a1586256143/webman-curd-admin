@@ -37,9 +37,16 @@ webman-crud/
 │   │                       # 支持 --business-sql=<path> --business-connection=<name>
 │   └── public/            # 内置前端构建产物（vite base=/app/crud/），由 PageController 承载
 ├── scripts/
+│   ├── composer.sh          # composer wrapper：仅对 require/update/install 等触发 audit 的子命令自动 --no-audit
 │   ├── release.sh         # 发布脚本：宿主 plugin/crud → 本包 plugin/crud（排除 keys/business sql）
 │   ├── build-frontend.sh  # 构建内置前端并回灌 plugin/crud/public/
-│   └── release-zip.sh     # 打 zip 发布包（dist/webman-crud-vX.Y.Z.zip）
+│   ├── release-zip.sh     # 打 zip 发布包（dist/webman-crud-vX.Y.Z.zip）
+│   ├── sync-plugin.sh     # 升级同步：备份宿主 plugin/crud 后从 vendor 重拷最新插件文件
+│   └── check-plugin-overrides.sh  # 升级前 diff：检测宿主 plugin/crud 本地改动
+├── src/Install.php        # composer 安装器（webman 2.x 官方机制：拷贝 plugin/crud + 生成 config）
+├── docs/
+│   ├── new-project-checklist.html  # 新项目接入流程表（P0–P8 + 高频坑位速查，当前为 v1.0.8）
+│   └── deploy.md          # 生产部署指南（首次安装 / supervisor / Nginx / 备份 / 回滚）
 ```
 
 ## 在宿主 webman 项目中安装
@@ -65,7 +72,8 @@ composer require huafei/webman-crud:@dev
 #   仓库托管于 Gitee：https://gitee.com/colingit/webman-curd-admin.git
 composer config repositories.crud vcs "https://gitee.com/colingit/webman-curd-admin.git"
 composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 @dev 漂移
-#   --no-audit：audit 需访问 packagist.org 安全源，国内网络常失败；仅跳过审计提示，不影响安装
+#   ⚠️ audit 红字（国内访问 packagist.org 失败）只是尾部告警、exit 0 不影响安装；
+#   不想每次手打 --no-audit：alias composer='<webman-crud>/scripts/composer.sh'（见底部 FAQ）
 
 # 方式 C：私有 Satis / Packagist（团队统一，无需每个项目配 repositories）
 #   本仓库已附 satis.json 模板（指向本 Gitee 仓库），放到 Satis 服务器执行
@@ -91,30 +99,35 @@ composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 
 > 单库模式下二者指向同一库（业务库名取值链：config/crud.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
 
 ```bash
-# 1) 装插件（composer require 自动完成：① 拉齐依赖 webman/database+casbin+casbin+phpdotenv；
-#    ② webman 官方插件机制自动拷贝 plugin/crud 到宿主；③ 宿主缺 config/database.php 自动生成；
-#    ④ 宿主缺 config/crud.php 自动生成集中配置入口）
+# 1) 装插件（composer require 自动完成：① 拉齐依赖 webman/database + webman/redis + casbin/casbin
+#    + vlucas/phpdotenv；② webman 官方插件机制自动拷贝 plugin/crud 到宿主；
+#    ③ 宿主缺 config/database.php 自动生成；④ 宿主缺 config/crud.php 自动生成集中配置入口）
 #
 #    ⚠️ composer audit 报红是已知问题：audit 硬编码访问 packagist.org（不走镜像、国内常不可达），
 #    报 "Failed to audit installed packages." 仅是尾部告警——命令本身成功（exit 0）。
-#    消除红字：用本包提供的 wrapper `scripts/composer.sh`（自动 --no-audit），或在你的 shell
-#    加 `alias composer='/绝对路径/scripts/composer.sh'`。详见底部「audit 红字彻底消除」一节。
+#    消除红字：用本包提供的 wrapper `scripts/composer.sh`（仅对会触发 audit 的
+#    require/update/install 等子命令自动追加 --no-audit），或在本包目录执行后在你的 shell 加
+#    `alias composer='<webman-crud>/scripts/composer.sh'`。详见底部「audit 红字彻底消除」一节。
 composer require huafei/webman-crud:^1.0
 # 验证：ls plugin/crud config/database.php config/crud.php
 #   兜底（极少见自动拷贝未触发）：composer dump-autoload && composer update huafei/webman-crud
-#   或用本包 wrapper：./scripts/composer.sh update huafei/webman-crud --no-audit
+#   或用本包 wrapper：./scripts/composer.sh update huafei/webman-crud
 #   或 cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
 
 # 2) 启动服务（先启动，再装库 —— Web 向导模式需要服务在线）
+#    端口默认 8787，位置 config/process.php 的 'listen' 行
 php start.php start
 
 # 3) 方式一【推荐】Web 安装向导：浏览器打开
 #    http://host:port/app/crud-installer
 #    填：数据库连接（主机/端口/库名/账号/密码；库不存在自动建）
 #        管理员账号密码（初始管理员，非固定 admin/admin123）
-#    自动完成：DB 信息写入 .env（按键合并，绝不覆盖 .env 其它内容）→
-#             调优写入 config/crud.php → 子进程执行 install.php（建库建表种子密钥）→
-#             页面实时显示执行进度 → 完成跳后台
+#    自动完成：DB 信息写入 .env（按键合并，绝不覆盖 .env 其它内容）+
+#             同步写入 config/crud.php 的 database 段（修复 worker 启动后 .env 无法刷新
+#             导致的 1045 Access denied）→ 子进程执行 install.php（自动建库/建表/种子/密钥）
+#             → 页面实时显示执行进度
+#    ⚠️ 完成后会提示执行：php start.php restart
+#       —— worker 配置在启动时固化，必须重启才加载新 DB 配置（不重启会报 1045）
 #    安装成功生成 config/crud-installed.lock，向导自动失效（重复访问提示已安装）；
 #    如需重装：删锁 + 清库后刷新页面。
 #
@@ -122,6 +135,7 @@ php start.php start
 #    # 2a) 配置数据库（DB 写 .env 或 config/crud.php database 段，二选一）
 #    #     单库模式只需一个库名；分库再填 business_db / DB_BUSINESS_NAME
 #    # 2b) 一键安装（幂等；自动建库；自定义管理员；进度可落文件）
+#    #     默认只种【超级管理员】角色，其它角色登录后台按需新增
 #    php plugin/crud/install.php --admin-user=admin --admin-pass=你的密码
 #    #    可选：--progress-file=runtime/i.log（JSONL 进度）、--business-sql=xxx
 
@@ -352,7 +366,7 @@ bash <项目根>/scripts/sync-plugin.sh
 
 - [x] **M5 宿主旧副本下线** → `app/middleware/*`、`app/rbac/*`、`app/functions.php` 已切到
       插件内置版并删除（`StaticFile.php` 宿主自有保留）；行为等价验证通过（见 M5 验证记录）
-- [x] **发布渠道** → 包已 `git init` + `tag v0.1.0`，支持私有 Git(VCS) / Satis / 本地 path 三种引入方式
+- [x] **发布渠道** → 包已 `git init` + tag（v1.0.8），支持私有 Git(VCS) / Satis / 本地 path 三种引入方式
 - [x] **升级覆盖防护** → `scripts/check-plugin-overrides.sh` 升级前检测项目内本地改动；
       `scripts/sync-plugin.sh` 备份后从 vendor 重拷最新插件文件（composer update 不再覆盖 plugin/crud）
 - [x] **前端构建发布一体化** → `scripts/build-and-release.sh`（build-frontend + release-zip）
@@ -389,7 +403,7 @@ bash <项目根>/scripts/sync-plugin.sh
 # 永久：把系统的 composer alias 成 wrapper（推荐）
 echo "alias composer='$(pwd)/scripts/composer.sh'" >> ~/.zshrc
 source ~/.zshrc
-# 之后所有 composer 命令自动追加 --no-audit，红字消失
+# 之后 require/update/install 等会自动追加 --no-audit（show/info 等不受影响），红字消失
 ```
 
 ### 为什么还保留 `mysql_business` 连接（默认指向同一个库）？
