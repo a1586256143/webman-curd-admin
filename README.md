@@ -57,11 +57,21 @@ webman-crud/
 以及 `support/Plugin.php`（官方骨架文件；本项目 webman-huafei-platform 已补齐）。
 
 ```bash
-# 本地 path 方式（发布到 packagist 后去掉 repositories 配置）
+# 方式 A：本地 path（开发期，发布后去掉 repositories 配置）
 composer config repositories.crud path "../webman-crud"
 composer require huafei/webman-crud:@dev
-# → composer 钩子自动把 plugin/crud 拷到 {项目}/plugin/crud
+
+# 方式 B：私有 Git（推荐上线使用，本包已 git init + tag v0.1.0）
+composer config repositories.crud vcs "git@your-git-server:huafei/webman-crud.git"
+composer require huafei/webman-crud:^0.1   # 走 tag 版本，避免 @dev 漂移
+
+# 方式 C：私有 Satis / Packagist（团队统一，无需每个项目配 repositories）
+#   在 satis 配置中加入本仓库，composer 全局配 satis 源即可直接 require
 ```
+
+> 本包已初始化 git 仓库并打 `v0.1.0` 标签；上线建议走 **方式 B**（VCS + 版本约束），
+> 升级时用 `composer update huafei/webman-crud` 拉新 tag。注意：项目内 `{项目}/plugin/crud`
+> 是拷贝件，升级会被覆盖 —— 见下方「升级安全」。
 
 > 若 `{项目}/plugin/crud` 已存在（本地开发版），安装器会跳过拷贝、保留本地版本，
 > 由 `scripts/release.sh` 负责把本地改动回灌到本包。
@@ -138,6 +148,32 @@ php plugin/crud/install.php \
 
 幂等：所有表用 `IF NOT EXISTS`，重复执行全部 SKIP；种子按表空判定，重复执行全部 SKIP；
 RSA 密钥已存在跳过生成。
+
+### 业务种子模板（菜单 / 权限自动登记）
+
+新环境「装完即带业务菜单」可把菜单/权限 INSERT 直接追加进业务 SQL。本包提供
+`plugin/crud/install-business.example.sql` 作模板（建表 + `menus` / `casbin_rule`
+种子示例，全 `INSERT IGNORE`），复制为项目自有 `install-business.sql` 后改表名/菜单即可。
+
+### 增量 migration（表结构演进）
+
+业务表结构变更用**只追加**的迁移文件，由 `plugin/crud/migrate.php` 驱动：
+
+```bash
+# 文件命名：plugin/crud/migrations/V{版本}__{描述}.sql，版本号升序，--SPLIT-- 分隔多语句
+php plugin/crud/migrate.php                       # 跑全部未执行迁移
+php plugin/crud/migrate.php --connection=mysql   # 指定连接
+php plugin/crud/migrate.php --dry-run            # 预检
+```
+
+- 已执行版本记录进 `{连接库}._crud_migrations`（唯一约束，幂等）
+- 已发布版本**只追加不修改**；改结构请新建更高版本号文件
+- 详见 `plugin/crud/migrations/README.md`
+
+### 配置模板
+
+拷贝 `plugin/crud/env.example` 为项目根 `.env` 即得全部键名与示例值
+（`DB_*` / `CRUD_*` / 前端构建期变量），无需回查本文档。
 
 ## 内置前端说明
 
@@ -228,6 +264,22 @@ git tag v1.0.0 && git push origin v1.0.0
 > CI 不跑 npm：内置前端由开发者本地 `./scripts/build-frontend.sh` 构建后提交 dist，
 > CI 只校验产物完整性（`index.html` + `assets/` + 文件数 > 10）。
 
+### 升级安全（避免本地改动被静默覆盖）
+
+`composer update` 会覆盖式拷贝插件包内的 `plugin/crud` 到项目。升级前先跑：
+
+```bash
+./scripts/check-plugin-overrides.sh <项目根>   # 0=无本地改动 1=发现改动
+```
+
+发现改动时，先 `git stash` / 提交 / 把改动迁回插件配置化，再升级。
+若你只改前端，用 `./scripts/build-frontend.sh` 重建内置 dist，不必改 `plugin/crud` 源码。
+
+### 生产部署
+
+见 `docs/deploy.md`：supervisor / systemd 守护、Nginx 反代（`/app/crud/` 同域免 CORS）、
+`.env` 环境隔离、`config/keys/` 备份策略、升级回滚预案。
+
 ## 与本项目 webman-huafei-platform 的关系
 
 本包由 `webman-huafei-platform/plugin/crud` 发布而来：
@@ -258,10 +310,19 @@ git tag v1.0.0 && git push origin v1.0.0
 | 宿主项目（webman-huafei-platform）回归 | `/api/admin/*`、`/api/config/site` 仍指向宿主控制器，无冲突异常 |
 | M4 业务库建表（`--business-sql=plugin/crud/install-business.sql`） | 13 张表（8 认证 + 5 业务 hf_goods / mobile_recharge_orders / hf_order_notifies / hf_platform_accounts / hf_accoount_waters），3 次重跑全 OK + SKIP；`--business-connection=mysql` 覆盖生效；不带 `--business-sql` 时默认只装 8 张认证表（行为不变） |
 
-### 待办（M4+）
-- [ ] 宿主侧旧副本（middleware/rbac/functions.php）逐步切到插件内置版后删除
-- [x] `install.sql` 覆盖宿主业务库建模 → 已交付：`Install::install($extraSqls)` +
-      `--business-sql` / `--business-connection` CLI 参数，项目自带 `install-business.sql`
-      即可一键建业务表（不进通用包，5 张 hf_* / mobile_* 已通过端到端验证）
-- [x] CI + zip 发布 → 已交付：`scripts/release-zip.sh`（本地打 zip）+
-      `.github/workflows/release.yml`（tag 触发：validate → lint → dist 校验 → zip → GitHub Release）
+### 待办（M4+）— 已全部闭合
+
+- [x] **M5 宿主旧副本下线** → `app/middleware/*`、`app/rbac/*`、`app/functions.php` 已切到
+      插件内置版并删除（`StaticFile.php` 宿主自有保留）；行为等价验证通过（见 M5 验证记录）
+- [x] **发布渠道** → 包已 `git init` + `tag v0.1.0`，支持私有 Git(VCS) / Satis / 本地 path 三种引入方式
+- [x] **升级覆盖防护** → `scripts/check-plugin-overrides.sh` 升级前检测项目内本地改动
+- [x] **前端构建发布一体化** → `scripts/build-and-release.sh`（build-frontend + release-zip）
+- [x] **业务种子模板** → `plugin/crud/install-business.example.sql`（菜单/权限自动登记示例）
+- [x] **增量 migration** → `plugin/crud/migrate.php` + `migrations/`（`_crud_migrations` 跟踪，幂等）
+- [x] **配置模板** → `plugin/crud/env.example`（拷贝即得全部键名）
+- [x] **部署与备份** → `docs/deploy.md`（supervisor + Nginx + 备份策略 + 回滚预案）
+- [x] **update 钩子演练** → `Install::update()` 全链路 + 幂等复跑已验证（8 表 + 种子 + 密钥，重跑全 SKIP）
+
+> 历史坑沉淀：① webman `app/functions.php` 是框架约定加载点，删除须同步改 `config/autoload.php`
+> ② 测试脚本**绝不可写宿主 `.env`**（曾误删真实 .env 导致 PDO 空连接）；③ `php start.php restart`
+> 杀会话进程组须用 `start`；④ cwd 在脚本间不持久，凡涉及路径操作一律显式 `cd` 绝对路径。
