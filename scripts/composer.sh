@@ -33,19 +33,43 @@ if ! command -v composer >/dev/null 2>&1; then
     exit 127
 fi
 
-# 透传全部参数并强制追加 --no-audit
+# 透传全部参数并对会触发 audit 的子命令自动追加 --no-audit
+# composer audit 是这几个子命令的尾部内置动作（require/update/install/remove），
+# 其它子命令（如 show/info/search）根本不会跑 audit，加 --no-audit 反而会报
+# "option does not exist"。通过检查第一个非选项参数判定是否需要追加。
+audit_subcommands="require update install remove add create-project"
+
 # 若用户已显式传入 --no-audit / --audit，则尊重用户选择
-has_audit_flag=0
 for arg in "$@"; do
     case "$arg" in
         --no-audit|--audit)
-            has_audit_flag=1
+            exec composer "$@"
+            ;;
+    esac
+done
+
+first=""
+for arg in "$@"; do
+    case "$arg" in
+        --*)
+            continue
+            ;;
+        *)
+            first="$arg"
             break
             ;;
     esac
 done
 
-if [ "$has_audit_flag" -eq 0 ]; then
+need_audit_skip=0
+for sub in $audit_subcommands; do
+    if [ "$first" = "$sub" ]; then
+        need_audit_skip=1
+        break
+    fi
+done
+
+if [ "$need_audit_skip" -eq 1 ]; then
     exec composer "$@" --no-audit
 else
     exec composer "$@"
