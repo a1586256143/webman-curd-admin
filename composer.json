@@ -35,7 +35,7 @@
   },
   "autoload": {
     "psr-4": {
-      "Huafei\\WebmanCrud\\": "src/"
+      "Amcolin\\WebmanCrudAdmin\\": "src/"
     }
   },
   "minimum-stability": "dev",

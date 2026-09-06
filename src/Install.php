@@ -1,5 +1,5 @@
 <?php
-namespace Huafei\WebmanCrud;
+namespace Amcolin\WebmanCrudAdmin;
 
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
