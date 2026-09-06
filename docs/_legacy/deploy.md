@@ -1,5 +1,10 @@
 # 生产部署指南（nginx + supervisor + 备份）
 
+> ⚠️ **归档文档（v1.0.8 时代）**：文中路径/表名仍为旧 crud 品牌（`plugin/crud`、`/app/crud`、
+> `config/crud.php`、`crud-installed.lock` 等），已被 v1.1.0 全量改名（`plugin/curd`、`/app/curd`、
+> `config/curd.php`、`runtime/curd-installed.lock`）取代，**仅作历史参考，请勿照抄命令**。
+> 现行版见 `docs/插件安装升级与生产部署.md`（第 6 节 生产部署），README 与 INSTALL.md 亦为最新口径。
+
 适用于 `amcolin/webman-curd-admin` 接入后的新项目上线。
 
 ## 0. 首次安装（新项目，部署前完成一次）

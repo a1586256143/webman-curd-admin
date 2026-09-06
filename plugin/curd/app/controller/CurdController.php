@@ -7,6 +7,7 @@ use plugin\curd\app\CurdConfigRegistry;
 use plugin\curd\app\CurdDb;
 use plugin\curd\app\ModelRegistry;
 use plugin\curd\app\model\CurdConfigs;
+use support\Db;
 use support\Request;
 
 /**

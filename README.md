@@ -85,8 +85,9 @@ webman-curd-admin/
 composer config repositories.curd path "../webman-curd-admin"
 composer require amcolin/webman-curd-admin:@dev
 
-# 方式 B：私有 Git（推荐上线使用，已 git init + tag v1.0.x）
-#   仓库托管于 Gitee：https://gitee.com/colingit/webman-curd-admin.git
+# 方式 B：私有 Git（推荐上线使用，已 git init + tag，最新 v1.1.0）
+#   仓库托管于 GitHub(git@github.com:a1586256143/webman-curd-admin.git)，
+#   国内拉取更快可用 Gitee 镜像：https://gitee.com/colingit/webman-curd-admin.git
 composer config repositories.curd vcs "https://gitee.com/colingit/webman-curd-admin.git"
 composer require amcolin/webman-curd-admin:^1.0 --no-audit   # 走 tag 版本，避免 @dev 漂移
 #   ⚠️ audit 红字（国内访问 packagist.org 失败）只是尾部告警、exit 0 不影响安装；
@@ -100,8 +101,8 @@ composer require amcolin/webman-curd-admin:^1.0 --no-audit   # 走 tag 版本，
 #   记得把 satis.json 里的 homepage / Gitee URL 改成你的真实地址。
 ```
 
-> 本包已初始化 git 仓库并打 `v1.0.0+` 标签；上线建议走 **方式 B**（VCS + 版本约束），
-> 升级时用 `composer update amcolin/webman-curd-admin` 拉新 tag。
+> 本包已初始化 git 仓库并打 tag（v1.0.0 起，最新 `v1.1.0` = 全量 crud→curd 品牌化）；上线建议
+> 走 **方式 B**（VCS + 版本约束），升级时用 `composer update amcolin/webman-curd-admin` 拉新 tag。
 > ⚠️ 升级后 `plugin/curd` 文件本体不会自动更新（src/Install.php 仅在目录不存在时拷贝，
 > 以保护本地改动）——需要同步最新插件文件时执行 `bash scripts/sync-plugin.sh`
 > （先备份旧 plugin/curd 再整体重拷），详见下方「升级安全」。
@@ -143,9 +144,11 @@ php start.php start
 #             同步写入 config/curd.php 的 database 段（修复 worker 启动后 .env 无法刷新
 #             导致的 1045 Access denied）→ 子进程执行 install.php（自动建库/建表/种子/密钥）
 #             → 页面实时显示执行进度
-#    ⚠️ 完成后会提示执行：php start.php restart
-#       —— worker 配置在启动时固化，必须重启才加载新 DB 配置（不重启会报 1045）
-#    安装成功生成 config/curd-installed.lock，向导自动失效（重复访问提示已安装）；
+#    ✅ 安装成功自动向 master 发 SIGUSR1 平滑 reload（webman-admin 同款）：worker
+#       处理完当前请求后重启并重读 .env/config，新 DB_* 即刻生效，无需手动 restart
+#       （Windows / supervisor 等信号不可用场景，页面回退提示手动 php start.php restart；
+#        worker 配置在启动时固化，不重启会报 1045）。
+#    安装成功生成 runtime/curd-installed.lock，向导自动失效（重复访问提示已安装）；
 #    如需重装：删锁 + 清库后刷新页面。
 #
 #    方式二【命令行】（Web 向导的等价手动流程）：
@@ -312,11 +315,11 @@ webman 的 `Route` 对「同 method + 同 path」重复注册会**直接抛异�
 
 ```bash
 # 本地打 zip（排除 keys / install-business.sql / release-zip.sh 自身）
-./scripts/release-zip.sh 1.0.0
-# → dist/webman-curd-admin-v1.0.0.zip（约 1.1M，130 文件，解压即用）
+./scripts/release-zip.sh 1.1.0
+# → dist/webman-curd-admin-v1.1.0.zip（约 1.1M，解压即用）
 
 # 发布到 GitHub：
-git tag v1.0.0 && git push origin v1.0.0
+git tag v1.1.0 && git push origin v1.1.0
 # → .github/workflows/release.yml 自动跑：
 #   composer validate --strict → 全量 php -l → 前端 dist 完整性校验
 #   → 关键文件存在性校验 → release-zip.sh → GitHub Release 附 zip
@@ -346,8 +349,10 @@ bash <项目根>/scripts/sync-plugin.sh
 
 ### 生产部署
 
-见 `docs/deploy.md`：supervisor / systemd 守护、Nginx 反代（`/app/curd/` 同域免 CORS）、
-`.env` 环境隔离、`config/keys/` 备份策略、升级回滚预案。
+见文档站「插件安装升级与生产部署」第 6 节（`docs/插件安装升级与生产部署.md`，浏览器打开
+`docs/index.html` 亦可）：supervisor / systemd 守护、Nginx 反代（`/app/curd/` 同域免 CORS）、
+环境隔离、`config/keys/` 备份策略、升级回滚预案。
+（v1.0.8 时代的 `docs/deploy.md` 已归档至 `docs/_legacy/`，仅作历史参考。）
 
 ## 与本项目 webman-huafei-platform 的关系
 
@@ -383,7 +388,7 @@ bash <项目根>/scripts/sync-plugin.sh
 
 - [x] **M5 宿主旧副本下线** → `app/middleware/*`、`app/rbac/*`、`app/functions.php` 已切到
       插件内置版并删除（`StaticFile.php` 宿主自有保留）；行为等价验证通过（见 M5 验证记录）
-- [x] **发布渠道** → 包已 `git init` + tag（v1.0.8），支持私有 Git(VCS) / Satis / 本地 path 三种引入方式
+- [x] **发布渠道** → 包已 `git init` + tag（最新 v1.1.0），支持私有 Git(VCS) / Satis / 本地 path 三种引入方式
 - [x] **升级覆盖防护** → `scripts/check-plugin-overrides.sh` 升级前检测项目内本地改动；
       `scripts/sync-plugin.sh` 备份后从 vendor 重拷最新插件文件（composer update 不再覆盖 plugin/curd）
 - [x] **前端构建发布一体化** → `scripts/build-and-release.sh`（build-frontend + release-zip）
@@ -391,7 +396,7 @@ bash <项目根>/scripts/sync-plugin.sh
 - [x] **增量 migration** → `plugin/curd/migrate.php` + `migrations/`（`_curd_migrations` 跟踪，幂等）
 - [x] **配置模板** → 宿主 `config/curd.php`（composer require 自动生成，数据库与插件调参集中入口，不覆盖 .env）；
       传统 .env 键名见 `plugin/curd/env.example`
-- [x] **部署与备份** → `docs/deploy.md`（supervisor + Nginx + 备份策略 + 回滚预案）
+- [x] **部署与备份** → `docs/插件安装升级与生产部署.md` 第 6 节（supervisor + Nginx + 备份策略 + 回滚预案）
 - [x] **update 钩子演练** → `Install::update()` 全链路 + 幂等复跑已验证（8 表 + 种子 + 密钥，重跑全 SKIP）
 
 > 历史坑沉淀：① webman `app/functions.php` 是框架约定加载点，删除须同步改 `config/autoload.php`
@@ -434,8 +439,8 @@ source ~/.zshrc
 
 ### 登录后台报 `Class "support\Redis" not found`
 
-本包已 require `webman/redis`（v1.0.8+），`composer require amcolin/webman-curd-admin:^1.0` 会自动拉齐。
-若你用的是旧版（v1.0.7 及以前），手动补一行：
+本包已在 composer.json 内置 require `webman/redis`（^2.1），
+`composer require amcolin/webman-curd-admin:^1.0` 会自动拉齐。极端情况 vendor 缺失时手动补一行：
 
 ```bash
 composer require webman/redis
@@ -449,8 +454,9 @@ Redis 不可用时 `AuthController / Rbac / AuthCheck / AdminController` 已全�
 **根因**：webman worker 启动时 `config/database.php` 已 `require` 加载（`.env` 同时 `putenv` 固化）。
 **wizard 写文件后，运行期内存里的 `env('DB_PASSWORD')` 仍是旧值**（通常空），导致心跳 `select 1` 用空密码重连失败。
 
-**修法**（v1.0.8+）：向导已把 DB 信息**同时写入 `config/curd.php` 的 `database` 段**（不走 .env），
-但**仍需重启 worker** 让配置生效。向导完成后会提示执行：
+**修法**（v1.1 起）：向导会把 DB 信息写入 `config/curd.php` 的 `database` 段 + 宿主 `.env`，
+安装成功后**自动向 master 发 SIGUSR1 平滑 reload**（新 DB_* 即刻生效），无需手动 restart；
+仅当运行在 Windows / supervisor 等**信号不可用**场景时，向导页面会回退提示手动执行：
 
 ```bash
 php start.php restart
