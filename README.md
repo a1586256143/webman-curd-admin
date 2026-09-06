@@ -110,58 +110,79 @@ composer require amcolin/webman-curd-admin:^1.0 --no-audit   # 走 tag 版本，
 > 若 `{项目}/plugin/curd` 已存在（本地开发版），安装器会跳过拷贝、保留本地版本，
 > 由 `scripts/release.sh` 负责把本地改动回灌到本包。
 
-## 新项目开箱跑通（完整步骤）
+## 新项目从零开箱跑通（完整步骤）
 
-> 前置：webman 骨架 + PHP ≥8.1 + MySQL。默认**单库模式**：认证库与业务库放同一数据库。
-> 安装后 config/database.php 提供 mysql（认证）与 mysql_business（业务）两个连接名，
-> 单库模式下二者指向同一库（业务库名取值链：config/curd.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
+> 适用：**从空骨架开始的全新项目**。前置：PHP ≥8.1 + Composer + MySQL
+> （本地开发用 ServBay / phpStudy 等一键环境即可）。已有 webman 项目的
+> 直接看上一节「在宿主 webman 项目中安装」的方式 A/B/C 引包，再从 Step 3 继续。
+>
+> 默认**单库模式**：认证库与业务库放同一数据库。安装后 config/database.php 提供
+> mysql（认证）与 mysql_business（业务）两个连接名，单库模式下二者指向同一库
+> （业务库名取值链：config/curd.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
 
 ```bash
-# 1) 装插件（composer require 自动完成：① 拉齐依赖 webman/database + webman/redis + casbin/casbin
-#    + vlucas/phpdotenv；② webman 官方插件机制自动拷贝 plugin/curd 到宿主；
-#    ③ 宿主缺 config/database.php 自动生成；④ 宿主缺 config/curd.php 自动生成集中配置入口）
-#
-#    ⚠️ composer audit 报红是已知问题：audit 硬编码访问 packagist.org（不走镜像、国内常不可达），
-#    报 "Failed to audit installed packages." 仅是尾部告警——命令本身成功（exit 0）。
-#    消除红字：用本包提供的 wrapper `scripts/composer.sh`（仅对会触发 audit 的
-#    require/update/install 等子命令自动追加 --no-audit），或在本包目录执行后在你的 shell 加
-#    `alias composer='<webman-curd-admin>/scripts/composer.sh'`。详见底部「audit 红字彻底消除」一节。
-composer require amcolin/webman-curd-admin:^1.0
-# 验证：ls plugin/curd config/database.php config/curd.php
-#   兜底（极少见自动拷贝未触发）：composer dump-autoload && composer update amcolin/webman-curd-admin
-#   或用本包 wrapper：./scripts/composer.sh update amcolin/webman-curd-admin
-#   或 cp -r vendor/amcolin/webman-curd-admin/plugin/curd plugin/curd
+# ───────── Step 1：创建全新 webman 骨架（已有项目跳过） ─────────
+composer create-project workerman/webman webman-clean-demo
+cd webman-clean-demo
 
-# 2) 启动服务（先启动，再装库 —— Web 向导模式需要服务在线）
-#    端口默认 8787，位置 config/process.php 的 'listen' 行
+# ───────── Step 2：接入本包源 + 引包 ─────────
+# composer require 自动完成：① 拉齐依赖 webman/database + webman/redis + casbin/casbin
+#   + vlucas/phpdotenv；② webman 官方插件机制自动拷贝 plugin/curd 到宿主；
+#   ③ 宿主缺 config/database.php 自动生成；④ 宿主缺 config/curd.php 自动生成集中配置入口。
+#
+# 【开发期 · 推荐】本地 path 源：改包源码即时生效，配合包内 scripts/release.sh 回灌改动
+composer config repositories.curd path "~/Public/www/company/webman-curd-admin"   # ← 换成你本包的真实路径
+composer require amcolin/webman-curd-admin:dev-main
+#
+# 【上线期】替代上面两条走 tag 版本（仓库二选一，见上一节方式 B/C）：
+#   composer config repositories.curd vcs "git@github.com:a1586256143/webman-curd-admin.git"
+#   composer require amcolin/webman-curd-admin:^1.0 --no-audit
+#
+# 验证装好：ls plugin/curd config/database.php config/curd.php
+# 兜底（极少见自动拷贝未触发）：
+#   composer dump-autoload && composer update amcolin/webman-curd-admin
+#   # 或用包内 wrapper：./scripts/composer.sh update amcolin/webman-curd-admin（自动 --no-audit）
+#   # 或 cp -r vendor/amcolin/webman-curd-admin/plugin/curd plugin/curd
+#
+# ⚠️ composer audit 红字（"Failed to audit installed packages."）是已知噪音：
+#   audit 硬编码访问 packagist.org、国内常不可达，命令本身 exit 0 成功、不影响安装；
+#   彻底消除见 FAQ「audit 红字」一节（scripts/composer.sh wrapper）。
+
+# ───────── Step 3：启动服务（先启动、再装库 —— Web 向导需要服务在线） ─────────
+#    端口默认 8787（位置 config/process.php 的 'listen' 行）
 php start.php start
 
-# 3) 方式一【推荐】Web 安装向导：浏览器打开
-#    http://host:port/app/curd-installer
+# ───────── Step 4：Web 安装向导完成初始化（推荐；CLI 等价见注释末尾） ─────────
+#    浏览器打开：
+#    http://127.0.0.1:8787/app/curd-installer
 #    填：数据库连接（主机/端口/库名/账号/密码；库不存在自动建）
 #        管理员账号密码（初始管理员，非固定 admin/admin123）
 #    自动完成：DB 信息写入 .env（按键合并，绝不覆盖 .env 其它内容）+
-#             同步写入 config/curd.php 的 database 段（修复 worker 启动后 .env 无法刷新
-#             导致的 1045 Access denied）→ 子进程执行 install.php（自动建库/建表/种子/密钥）
-#             → 页面实时显示执行进度
+#             同步写入 config/curd.php 的 database 段（修复 worker 启动后 .env
+#             无法刷新导致的 1045 Access denied）→ 子进程执行 install.php
+#             （自动建库/建表/种子/密钥）→ 页面实时显示执行进度
 #    ✅ 安装成功自动向 master 发 SIGUSR1 平滑 reload（webman-admin 同款）：worker
 #       处理完当前请求后重启并重读 .env/config，新 DB_* 即刻生效，无需手动 restart
 #       （Windows / supervisor 等信号不可用场景，页面回退提示手动 php start.php restart；
 #        worker 配置在启动时固化，不重启会报 1045）。
 #    安装成功生成 runtime/curd-installed.lock，向导自动失效（重复访问提示已安装）；
-#    如需重装：删锁 + 清库后刷新页面。
+#    重装 = 删锁 + 清库后刷新页面。
 #
-#    方式二【命令行】（Web 向导的等价手动流程）：
-#    # 2a) 配置数据库（DB 写 .env 或 config/curd.php database 段，二选一）
-#    #     单库模式只需一个库名；分库再填 business_db / DB_BUSINESS_NAME
-#    # 2b) 一键安装（幂等；自动建库；自定义管理员；进度可落文件）
-#    #     默认只种【超级管理员】角色，其它角色登录后台按需新增
+#    【命令行等价】（不便开浏览器时的可选手动流程）：
 #    php plugin/curd/install.php --admin-user=admin --admin-pass=你的密码
-#    #    可选：--progress-file=runtime/i.log（JSONL 进度）、--business-sql=xxx
+#    #   幂等；自动建库；默认只种【超级管理员】角色，其它角色登录后台按需新增
+#    #   可选：--progress-file=runtime/i.log（JSONL 进度）、--business-sql=xxx
 
-# 4) 打开后台（插件自带前端，无需再部署任何静态资源）
-#    http://host:port/app/curd/        → 登录页（用第 3 步填的管理员账号）
-#    登录后：用户/角色/菜单管理、配置生成器（DSL 拖表单生成 CURD）、
+# ───────── Step 5：打开后台 & 配置生成器（内置前端，无需再部署静态资源） ─────────
+#    http://127.0.0.1:8787/app/curd/                → 登录页（用 Step 4 填的管理员账号）
+#    http://127.0.0.1:8787/app/curd/curd-generator  → 「配置生成器」工具页
+#      （工具页本身不需要 DSL 配置；选表→配字段→填页面路径→保存后，该 route_path
+#        才会被 /api/curd/config 查到，对应动态页即可在菜单中打开）
+#    登录后可顺手验证的接口：
+#    http://127.0.0.1:8787/api/curd/models            → 模型清单
+#    http://127.0.0.1:8787/api/curd/tables            → 表清单
+#    http://127.0.0.1:8787/api/curd/config?route_path=/my-test  → 内置示例页面配置
+#    登录后：用户/角色/菜单管理、配置生成器（DSL 造 CURD/Schema 页面）、
 #            自定义页面引擎全部可用
 ```
 
