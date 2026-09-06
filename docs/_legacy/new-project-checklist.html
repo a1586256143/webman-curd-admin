@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="UE3IvH7q4kZ0JvmIfY9dSB">
+<head data-page-node-id="PODE4qmggXdInt2xVD7NFg">
+<meta charset="UTF-8" data-page-node-id="3yBAGFnJwOvth6FaeODPhX">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="FLdGr3HANHfqJWe5rMolVj">
+<title>webman-curd-admin 新项目接入流程表（v1.0.8）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f6f8; color: #24292f; line-height: 1.65; padding: 32px 16px; }
+  .page { max-width: 1080px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 40px 48px; }
+  h1 { font-size: 26px; border-bottom: 3px solid #2563eb; padding-bottom: 12px; margin-bottom: 6px; }
+  .meta { color: #6b7280; font-size: 13px; margin-bottom: 28px; }
+  h2 { font-size: 19px; margin: 36px 0 14px; padding: 8px 14px; background: #eef2ff; border-left: 4px solid #2563eb; border-radius: 4px; }
+  h2 .phase { color: #2563eb; margin-right: 8px; font-family: Menlo, monospace; }
+  h3 { font-size: 15px; margin: 18px 0 8px; color: #1e3a8a; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; font-size: 13.5px; }
+  th { background: #f3f4f6; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; white-space: nowrap; }
+  td { padding: 8px 10px; border: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+  code { font-family: Menlo, Consolas, monospace; font-size: 12.5px; background: #f0f1f3; padding: 1.5px 5px; border-radius: 3px; color: #b91c1c; }
+  pre { background: #1e293b; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.7; margin: 8px 0 16px; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+  .t-must { background: #fee2e2; color: #b91c1c; }
+  .t-opt  { background: #dcfce7; color: #15803d; }
+  .t-warn { background: #fef3c7; color: #b45309; }
+  .ck { width: 28px; text-align: center; }
+  .note { font-size: 12.5px; color: #6b7280; margin-top: -8px; margin-bottom: 14px; }
+  .note b { color: #b45309; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 6px; font-size: 13px; }
+  .flow span { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 4px 10px; }
+  .flow b { color: #2563eb; }
+  @media print { body { background:#fff; padding:0; } .page { box-shadow:none; padding: 20px; } }
+</style>
+</head>
+<body data-page-node-id="4TZnPG4jvdJ2NielzVfSc2">
+<div class="page" data-page-node-id="86gGVYP3qPlUxoys0o8LXp">
+
+<h1 data-page-node-id="q9jWyBml1tXG7WB8seQvZV">webman-curd-admin 新项目接入流程表</h1>
+<div class="meta" data-page-node-id="aL4skFbS8ImbGhinYjcKlR">插件：<code data-page-node-id="g9x3xiWMa6uLpxWLtjNE8c">amcolin/webman-curd-admin</code>（Gitee：<code data-page-node-id="V2CovA59H37g1F5N4Ac07B">colingit/webman-curd-admin</code>）· 版本：<b data-page-node-id="dQIgFxTdQRUXAomAgq8D0k">v1.0.8</b> · 适用：webman-framework ^2.1 / PHP ≥8.1 / MySQL 5.7+ · 更新于 2026-09-05<br data-page-node-id="zDxYDOuI8ATBCeKpErDAIA">默认<b data-page-node-id="KdjvxUa5WilWZTF9zqJ7tf">单库模式</b>：认证表与业务表放同一库；Web 安装向导 <code data-page-node-id="l9Da2BhjrzKHKVC7Dk0uUw">/app/crud-installer</code> 为推荐安装方式</div>
+
+<h2 data-page-node-id="AqMchB5i1jgCGZCTGu0QTM"><span class="phase" data-page-node-id="ZtsfNUbNRNjjtK28eY3non">P0</span>前置环境检查</h2>
+<table data-page-node-id="zH8OquET4WMB3AUtccYNGR">
+<tr data-page-node-id="yoIThyGpt269YEgcV9n5Lw"><th class="ck" data-page-node-id="ENB7T0KB7Y4x31HMKI1lhA">✓</th><th data-page-node-id="BrKjY8B9pElkq0w9Uxtkd8">检查项</th><th data-page-node-id="a8ZXC7mHBZRrGVTmuUpCpZ">要求 / 命令</th><th data-page-node-id="95VvgQ1TJPQioIWVe2JKa5">说明</th></tr>
+<tr data-page-node-id="Ppqh57qZTyFRh1wsNarfay"><td class="ck" data-page-node-id="Z7ba1xMpOFyWwJxcs0j0st">☐</td><td data-page-node-id="JjrOROMro8ZOrXre9XFWzC">PHP</td><td data-page-node-id="m80UqiT8hTKD7zqGgruX88"><code data-page-node-id="C9bGF0jKk4dH06Pta2apEx">php -v</code> ≥ 8.1，含 pdo_mysql / mbstring / openssl</td><td data-page-node-id="2jtwDAM9GjBY68TKUHEZtO">宿主框架硬性要求</td></tr>
+<tr data-page-node-id="1nIRg84cBZFvqUfBQcRcCE"><td class="ck" data-page-node-id="IweTS9nwLSr66gN5MhWX3O">☐</td><td data-page-node-id="XgihrFcg8yNCaX8VZ2AWx0">Composer</td><td data-page-node-id="i9HBjpYXoELkifPiv3tEWD"><code data-page-node-id="sxOPOwUGBkJGSS4E2C3L03">composer -V</code></td><td data-page-node-id="CdjFYkEcGKNAdM22T6eH15">装插件与依赖</td></tr>
+<tr data-page-node-id="DlsdjWHb35YCMgl6hrO9Nj"><td class="ck" data-page-node-id="a12EtDDtD6avE8XYVINUHe">☐</td><td data-page-node-id="2Ee50mednQe9MFiBD03PCb">MySQL</td><td data-page-node-id="CsnOlGPFJyqNdTjcpyKdQD">≥5.7 utf8mb4；账号具备 CREATE / ALTER 权限</td><td data-page-node-id="74Nn6fGxRv7FGHk7wypf6p">v1.0.5+ <b data-page-node-id="pvzJ4cklLx8QiqCaXUexP9">自动建库</b>，无需预建</td></tr>
+<tr data-page-node-id="5xpKvxGnqeG2DHh4XTceME"><td class="ck" data-page-node-id="Gzq2CGQQsfVgBNBi2IRDZ3">☐</td><td data-page-node-id="8vdIIZrmFSYZWyhhW4A1MJ">插件源可达</td><td data-page-node-id="ifFWveJ6kNXdRYRnF8338a">私有 Git（Gitee）/ Satis / 本地 path 三选一</td><td data-page-node-id="pmmbACyCJMzZPd1AvtCobB">README「在宿主 webman 项目中安装」</td></tr>
+</table>
+
+<h2 data-page-node-id="fNpl8JWVpSGstGn1EdXFlG"><span class="phase" data-page-node-id="03UfNzUmM93ZN33Lei8Rnp">P1</span>创建项目骨架</h2>
+<table data-page-node-id="7NENkevw1i0t5WaUTmX4hn">
+<tr data-page-node-id="O9kD5BlnGDHB3qodmujFHN"><th class="ck" data-page-node-id="U4VkczEpmWUMsgbwqyqZMM">✓</th><th data-page-node-id="5g9GBQYq82UXB7AWBygzlF">步骤</th><th data-page-node-id="WWKoV7l5DcTQuc2veWoX8n">命令 / 操作</th><th data-page-node-id="q7aYjmXn1sp5Ytr0XLP3R4">产物 / 验收点</th></tr>
+<tr data-page-node-id="GpoNMDKFWy0dSqGfenaUrZ"><td class="ck" data-page-node-id="DLQEF313eqw5CREFdfVm8O">☐</td><td data-page-node-id="UIC75hylmJYaAD2rv6OGLb">1.1 初始化 webman</td><td data-page-node-id="jMjDjroo6YGocTIWVI6CVX"><pre data-page-node-id="oZUEdnjvmA0Wx0cRZuwy2Q">composer create-project workerman/webman my-app
+cd my-app</pre></td><td data-page-node-id="AimC3o44JKBfrccKtVcu6E">标准骨架（config/ app/ runtime/ 自带 support\Plugin 钩子）</td></tr>
+<tr data-page-node-id="puYqjveUGncr8xvRrgyzyZ"><td class="ck" data-page-node-id="2Ru8tiRKQOrV4bianoaBJr">☐</td><td data-page-node-id="ZFb5xztr2ablRhFzGotiMj">1.2 确认端口</td><td data-page-node-id="D35YZRyttN8gKWIiDyDV7P">改 <code data-page-node-id="yaMRrrt6RcZJZ7OhpA0sv3">config/process.php</code> 的 <code data-page-node-id="cTuRoWz0jITXaEyr5wcfrO">'listen' =&gt; 'http://0.0.0.0:8787'</code> 行</td><td data-page-node-id="spu5W62F4qvM8teZXAVVuE">⚠️ webman 2.x 端口在此文件，<b data-page-node-id="KrC9mAu8ZRViPRlFoUhPaz">不在</b> config/server.php</td></tr>
+</table>
+
+<h2 data-page-node-id="lkUKPmdgRygmfGeeY12ua0"><span class="phase" data-page-node-id="r7ClOGoUeYGBlKYs279Vp2">P2</span>引入插件（composer）</h2>
+<table data-page-node-id="2zyuea6HjI9sLNw3TI5V2Y">
+<tr data-page-node-id="Ee4CEx1rdjWzpFPsbVs83y"><th class="ck" data-page-node-id="cJOO7vBnHIQxPNDzjoF7BB">✓</th><th data-page-node-id="mUnAPqTaZoPKCfgFawAGaJ">步骤</th><th data-page-node-id="WuMZ8McPyjHbRGckYkzNf4">命令 / 操作</th><th data-page-node-id="kMJpFcNGq57urpBgMYGctt">产物 / 验收点</th></tr>
+<tr data-page-node-id="8ZeX8OQ4gRZ2LTTDC9VqgL"><td class="ck" data-page-node-id="kZ4fIRRIXvLIdZSyxaGCRZ">☐</td><td data-page-node-id="k7xTOkr6NupGzYKP8Ea4KA">2.1 配置源 + 安装</td><td data-page-node-id="p9BXz4ZzUFB08QBe0x6YFI"><pre data-page-node-id="N12vpQLz9SMjvRMR0ymucx">composer config repositories.crud vcs "https://gitee.com/colingit/webman-curd-admin.git"
+composer require amcolin/webman-curd-admin:^1.0</pre></td><td data-page-node-id="pz1qBhNPa4iEgAvsKMMk02">自动完成四件事：① 拉齐依赖 <code data-page-node-id="fjoDobDZ50HOQDtzMMYAxT">webman/database + webman/redis + casbin/casbin + vlucas/phpdotenv</code>；② 官方插件机制自动拷贝 <code data-page-node-id="Hi3P9iPvC3F1QcaC8vZ6np">plugin/crud</code>；③ 生成 <code data-page-node-id="Jsrk39TY2AI2U5r8fv4Ejc">config/database.php</code>（env 驱动，含 mysql + mysql_business）；④ 生成 <code data-page-node-id="hmFCzzJT8X28WTVaGhlLr2">config/crud.php</code>（集中配置入口）</td></tr>
+<tr data-page-node-id="DzE1YXlTL48AKa16L3ghQ4"><td class="ck" data-page-node-id="HXPMpA4jfNJ4SjJmK9OnOr">☐</td><td data-page-node-id="hKqiwEHEi7yur0cy7OpqBN">2.2 audit 红字处理</td><td data-page-node-id="5JaFY9fEfkfubdClpuLEY0"><pre data-page-node-id="XIVmPFhEqiRCHdhn8oautS"># 不想看到 "Failed to audit installed packages."：
+# 用包内 wrapper（仅对 require/update/install 等子命令自动 --no-audit）
+alias composer='/path/to/webman-curd-admin/scripts/composer.sh'
+composer require amcolin/webman-curd-admin:^1.0</pre></td><td data-page-node-id="rN7vKxgzMvdWRZGvXeUrQ5">红字是 packagist.org 不可达的尾部告警（exit 0 不影响安装）；wrapper 或 alias 一劳永逸</td></tr>
+<tr data-page-node-id="trc0igKg1ej13DsIWxpxia"><td class="ck" data-page-node-id="IR3DvnCu6hgWniquHB9ZMO">☐</td><td data-page-node-id="DiCeFGxrM2MYvyW7M7C0zF">2.3 校验</td><td data-page-node-id="nZyvXExsH4S9NRQvlfCxWI"><code data-page-node-id="gdFeDP9CAP6WXNujonzCXe">ls plugin/crud config/database.php config/crud.php</code></td><td data-page-node-id="HFSYfk2nsn8ueeVsUYZ0a5">plugin/crud 含 app/ config/ public/ api/ install.php；config 两文件已生成</td></tr>
+</table>
+<div class="note" data-page-node-id="sE7OH5IQK2QvNfq0l5kVVF">兜底（极少见自动拷贝未触发）：<code data-page-node-id="7Mg05nnEICSEH7M76A7ZgC">composer dump-autoload &amp;&amp; composer update amcolin/webman-curd-admin</code>，或 <code data-page-node-id="KwmDq52LhIW04Soj87BGyL">cp -r vendor/amcolin/webman-curd-admin/plugin/crud plugin/crud</code>。</div>
+
+<h2 data-page-node-id="BRAM7AIAzXQ1rhHj90Tdxa"><span class="phase" data-page-node-id="acZ6zAI4PC5fAJn03nnD3X">P3</span>配置数据库（config/crud.php 优先）</h2>
+<table data-page-node-id="kiHdxubzSVDCiU1Hkw47Es">
+<tr data-page-node-id="FXcyhRyUtQAIPg4Q6i3Qsf"><th class="ck" data-page-node-id="HsRVDpC0gLlLNfBFkmlIVV">✓</th><th data-page-node-id="nkMDeifEJtiDpwktIQzEWt">方式</th><th data-page-node-id="lhUo4fqUM6VrfxNcGuq11I">操作</th><th data-page-node-id="3UO5b0Iplq49pC6PeDI4cx">说明</th></tr>
+<tr data-page-node-id="jcTBtvGrEKbmWriX4B7abF"><td class="ck" data-page-node-id="TblJfYyX0Cug6oZHIGGjhk">☐</td><td data-page-node-id="TWxxtiI8L4CNNHEvR0brG6">方式一【推荐】交给向导</td><td data-page-node-id="rt6YzGFxQgW2cHkwrGQJQV">启动后访问 <code data-page-node-id="FusBbhWe7CrS0nPau4wWch">/app/crud-installer</code> 填表，DB 信息<b data-page-node-id="VOXMQhCl5pukYQMRS08U4L">自动写入</b> <code data-page-node-id="J1DZQmho7AzOTyRsdhYKb1">.env</code>（按键合并，绝不覆盖原内容）<b data-page-node-id="YH0v0luBTFQXKPWFYuIwRz">+ config/crud.php 的 database 段</b></td><td data-page-node-id="izztcaH83KANxQIJQpBat7">无需手改任何配置文件；库不存在自动创建</td></tr>
+<tr data-page-node-id="OxYxHbv2etzbelbZL2noXK"><td class="ck" data-page-node-id="ljLEE6s8QIyVCcubsLwqsW">☐</td><td data-page-node-id="BCaz8h4BwD7LOmmFJRXrVQ">方式二 手动编辑</td><td data-page-node-id="mgahe9epi367byv8vR35dm">编辑自动生成的 <code data-page-node-id="ixA2l3Fbroc2fu0VkwcvOM">config/crud.php</code>：<pre data-page-node-id="7YPcYL89J17Bpfh25afQIB">'database' =&gt; [
+    'host'     =&gt; '127.0.0.1',
+    'port'     =&gt; '3306',
+    'username' =&gt; 'root',
+    'password' =&gt; '你的密码',
+    'admin_db'    =&gt; 'my_admin',   // 认证/管理面库
+    'business_db' =&gt; 'my_admin',   // 单库=同名；分库填其它库名
+],</pre></td><td data-page-node-id="TEQhWaKaKfA0HoAyjrBVEU">优先级：<code data-page-node-id="ego3c73QWBSqKIlqQzgLlD">config/crud.php database</code> &gt; <code data-page-node-id="mdPFxZJ2fOUafLkqASVcya">.env DB_*</code> &gt; 默认值。老宿主仍可用 .env</td></tr>
+</table>
+<div class="note" data-page-node-id="vITPh61lkkBWITVQAVchRc">⚠️ 单库模式：业务库连接 <code data-page-node-id="VvGyWYhThWHXlgcYpzb3wr">mysql_business</code> 与 <code data-page-node-id="uUKC0t2vJ2QOeEHCezlAVD">mysql</code> 指向同一库（<code data-page-node-id="mKbaVdiJYN9ZlGMfIlAnxD">business_db</code> 留空自动回退认证库名）；想分库改 <code data-page-node-id="UovjTLGuIvHjOhkrMiGObo">business_db</code> 即可。不要 <code data-page-node-id="zVfJzYGcYSteN9NuvKlIIe">cp env.example .env</code> 整体覆盖宿主 .env（v1.0.5 起已不需要）。</div>
+
+<h2 data-page-node-id="GoSTVrY8PhEf3CLKbEdbyz"><span class="phase" data-page-node-id="nBIlgHV4LAU0PfOughC5G4">P4</span>安装（Web 向导推荐 / CLI 备选）</h2>
+<table data-page-node-id="i3gAIjBmWYVS2DFm70bEBZ">
+<tr data-page-node-id="vi2voooxNXxljKzi3M6423"><th class="ck" data-page-node-id="fN2zlZvi18pHZNLPbb9Ks2">✓</th><th data-page-node-id="Ehe4v5ahMuGkzi4Bjc25kz">模式</th><th data-page-node-id="B4AhttBhbDrb5s4AkqAUHk">命令 / 操作</th><th data-page-node-id="vd6xDqDZIzVddqqcrEF8iP">说明</th></tr>
+<tr data-page-node-id="js9M6ud4tuAYtKsfmj1TEs"><td class="ck" data-page-node-id="jgOMKswK9pvv7K0Udl4gUB">☐</td><td data-page-node-id="5flVezbP0aWYxkAobl5vO9">先启动服务</td><td data-page-node-id="TKedv0vrceV5ZBCruNY4nC"><pre data-page-node-id="gCNQbWHZF14IEDHkoDtsra">php start.php start</pre></td><td data-page-node-id="IQ8pEYzRTzout0H7hdYonn">Web 向导需要服务在线</td></tr>
+<tr data-page-node-id="ylNbBDLaT6zLtel2nlmghB"><td class="ck" data-page-node-id="pvnVNKDIzAvDFD9Y8namXS">☐</td><td data-page-node-id="7V9LGf7UDBeQ3Xm8ZhGqjc">4A【推荐】Web 向导</td><td data-page-node-id="bBEgcfNhgIo8WKPgexWnzp">浏览器打开 <code data-page-node-id="8VMg4hArH5YfJZlhrlMdqI">http://host:port/app/crud-installer</code>，填：<br data-page-node-id="UJJvxIcvA2MO69NEmdWj71">· 数据库（主机/端口/库名/账号/密码，库不存在自动建）<br data-page-node-id="WYx2lmqKMC5DBPxG9mwoTX">· 管理员账号密码（自定义初始管理员，非固定 admin/admin123）</td><td data-page-node-id="QdmJRFgqVKQJ6wjCZocLaH">自动：DB 写 .env + config/crud.php → 子进程执行 install.php → 页面实时进度（建库/建表/种子/密钥逐条 ✓）。只预置【超级管理员】角色，其它角色登录后台按需新增。安装成功写 <code data-page-node-id="p5nOip1SfB7FKEnddrebTo">config/crud-installed.lock</code>，向导自动失效；重装=删锁+清库</td></tr>
+<tr data-page-node-id="sHWjY7ZRMOzAJUszNnF0Ux"><td class="ck" data-page-node-id="kRhB5KQPQDu2MtwCshu2MY">☐</td><td data-page-node-id="wZw1Ei4p1pA2RRRamqB5c7">4A ⚠️ 完成后重启</td><td data-page-node-id="2EIZzhUl7TGYCGFlgDAPFT"><pre data-page-node-id="LWqqJeoeMDzLxhKZ2deaOS">php start.php restart</pre></td><td data-page-node-id="rACdzsMKQdKKWtu7oFaPkh"><b data-page-node-id="G4JulOQiaPiaKQxams6STw">必须执行</b>：worker 配置在启动时固化，不重启会用旧（空）密码连库 → 心跳报 1045 Access denied</td></tr>
+<tr data-page-node-id="rHBmqZXYVwlhDigu9eYG5N"><td class="ck" data-page-node-id="2t3MA1Kig7bucCbE7x0U2i">☐</td><td data-page-node-id="ajfMAa43Ej5staZY6sLAYA">4B【命令行】等价流程</td><td data-page-node-id="BYEmirlB5hrQ8JFI5vUV8S"><pre data-page-node-id="sJYxCerkNMx5P837I5p2tV"># 2a) 配置 DB（config/crud.php 或 .env）
+# 2b) 一键安装（幂等、自动建库、自定义管理员）
+php plugin/crud/install.php --admin-user=admin --admin-pass=你的密码
+# 可选：--progress-file=runtime/i.log  --business-sql=xxx</pre></td><td data-page-node-id="wkJjDKV2VQ9vmEBDoudR3T">与向导等价；8 表 + 种子（仅 admin 角色 + 6 菜单）+ RSA 密钥；重复执行全 SKIP</td></tr>
+</table>
+
+<h2 data-page-node-id="CBShjyjMnyUDrsDKlYd0Op"><span class="phase" data-page-node-id="FrzebscdxFwIBvOanI9mEQ">P5</span>登录与验收清单</h2>
+<table data-page-node-id="CGAcxCm0R2dqX3YzWL0Hcq">
+<tr data-page-node-id="F7YHLGGsDc4o05gKg6dNqj"><th class="ck" data-page-node-id="MldQxMiUoZ2UeQCdPacFA9">✓</th><th data-page-node-id="ZYlx0ExXiB03nje2cTBBB1">#</th><th data-page-node-id="Q764YEkq0NSFZa8KBCFwBs">验收项</th><th data-page-node-id="zCqrx1GphewTjF1YJuwCKt">预期</th></tr>
+<tr data-page-node-id="yAYwGvFRRNEkEnltyNIvpF"><td class="ck" data-page-node-id="XGWBVOFkH4Locl047aBnTg">☐</td><td data-page-node-id="Qn6211uhaFskaQTurn5hEE">1</td><td data-page-node-id="IMs3hUDOCtqJGW9WFH6nDh"><code data-page-node-id="7VoGqzt1DzRdWv5ppDdv6m">GET /app/crud/</code></td><td data-page-node-id="RKBM77DBF4y2Em1tVTRoeK">200（登录页）</td></tr>
+<tr data-page-node-id="WUPqsQZFOJB6di5oHAywJQ"><td class="ck" data-page-node-id="i33HKTsxgEhV191miMMPPa">☐</td><td data-page-node-id="6HVf9lTEeN75kSk8VbzSeY">2</td><td data-page-node-id="lrtbtVEzczU4xAXH5nAEcB"><code data-page-node-id="MlEEG11FIKGLATP12Ghbxq">GET /app/crud/dashboard</code></td><td data-page-node-id="laBDxf4kiqTzAbT1Jx6fW8">200（SPA history fallback）</td></tr>
+<tr data-page-node-id="s8vjkoIpqFSpGJZdISOMJR"><td class="ck" data-page-node-id="DlyWTyVKc98jwnCN3odWtG">☐</td><td data-page-node-id="C98It4IYF3fWL4Vx4OU3GY">3</td><td data-page-node-id="I19Z3sjh0uEWNIV0EB6giH"><code data-page-node-id="qx5wyb9k75KUUi8Q1Yy6bU">POST /api/auth/login</code>（向导填的管理员）</td><td data-page-node-id="ESzSsA16qNUQo3DK7egINZ">返回 token + <code data-page-node-id="bMGx6Z8USaDQeuwnJ5tl3a">roles:["admin"]</code> + 全权限</td></tr>
+<tr data-page-node-id="x1yN6ch5nLZoyIOMXNlAEq"><td class="ck" data-page-node-id="5qOz4SkYl6uPH7VtU1ks94">☐</td><td data-page-node-id="PAf2c8pzhiTCMRvbrn6TMQ">4</td><td data-page-node-id="8cG4jL6guysHySzsIDoM6G">带 token：<code data-page-node-id="n7TDedOL0wBZoiOgl3s4H6">/api/auth/me</code> <code data-page-node-id="gowWiiAsogaA6CvYuyepHO">/api/admin/profile</code> <code data-page-node-id="HdFK2yo63bIKkU3fk1BwP6">/api/admin/users</code></td><td data-page-node-id="IyWTVpjtCIQo8w6nnJRuyj">全 200（走 Redis 缓存，类已由依赖拉齐）</td></tr>
+<tr data-page-node-id="qKC7LQ9R8ubzgzDOThAYa7"><td class="ck" data-page-node-id="0FOY3rFUpVrkwKcGJprmB8">☐</td><td data-page-node-id="9UIz8Q8eolQ6XHF4NHDjvu">5</td><td data-page-node-id="MGBR0BMmnVdbAUt5q5Be8k">DB 落库</td><td data-page-node-id="5XosDpsgerZqqlPBltR8ug"><code data-page-node-id="QLzU7st913PcEmprsq5uiZ">SHOW TABLES FROM my_admin;</code> 见 8 张核心表（admin_users/roles/menus/casbin_rule/crud_configs…），roles 表仅 1 行 admin</td></tr>
+</table>
+
+<h2 data-page-node-id="lGNH4udeI7ySYJHrwG8uTe"><span class="phase" data-page-node-id="WivWCyGiro7F1ZOPxaaOrV">P6</span>业务开发（写控制器即跑）</h2>
+<table data-page-node-id="tb13wr31955mCCFOQjI6ER">
+<tr data-page-node-id="lxndGZeX2TZsu3xgfGGFwa"><th class="ck" data-page-node-id="be67HAFMzQpeOjfq1tyP2Y">✓</th><th data-page-node-id="vhJpJmY3iCMhTV4wuH1vv7">步骤</th><th data-page-node-id="m8N9eDwDXg0AEh1cNGERoy">操作</th><th data-page-node-id="zAA6PAhnA0vxmGxI84VOwo">说明</th></tr>
+<tr data-page-node-id="Tsx1MIKQhIomXyKUIc6jCG"><td class="ck" data-page-node-id="e9MEkCkmZs4DouJWRoOsCF">☐</td><td data-page-node-id="fbWjMvNprue8MA6AxBEUoe">6.1 建业务表</td><td data-page-node-id="3i0CoaW2qwBZIZAAyeHcU0">写 <code data-page-node-id="iHm2zXpeiNDZSLPmScHMZm">install-business.sql</code>（<code data-page-node-id="NYv3r9KXwVtqz2XdFHtl94">--SPLIT--</code> 分隔、全 <code data-page-node-id="CXJIV5BFTKvPl8crS4C2lA">IF NOT EXISTS</code>），重跑 P4B 命令</td><td data-page-node-id="clYl2sJ6f7bzMAkhlTm7K7">结构变更走增量 SQL 或 <code data-page-node-id="IKrpn9m5BHN6VFrB1WH5PU">migrate.php</code>（migrations/ 目录）</td></tr>
+<tr data-page-node-id="Jo19JeoGXwmDrG60rN5OXq"><td class="ck" data-page-node-id="2Pe52dAF2J8btPnqpIEFML">☐</td><td data-page-node-id="J7ue9xF7qvFNyFb446IBC8">6.2 建模型</td><td data-page-node-id="nFY2mQRMDjLXIWU28RIKXI"><code data-page-node-id="z9Puof1CEnCUOpDlzLrFCr">app/model/Xxx.php extends plugin\crud\app\model\BaseModel</code></td><td data-page-node-id="NPTNkQrYOCytNgE8jZSDK8">ModelRegistry 自动扫描 app/model/</td></tr>
+<tr data-page-node-id="8DYYZj4Uv2QAEzrXDzjDer"><td class="ck" data-page-node-id="nyagALw2jdJSJpum8mSESD">☐</td><td data-page-node-id="STk9ZHwuMcgXBAyOKUwRdw">6.3 写控制器</td><td data-page-node-id="UuJFzY6ecblix4z73XUA65"><pre data-page-node-id="feI1bKiSzpEAhDs0CN48Ec">namespace app\controller\api;
+use plugin\crud\app\controller\base\BaseCrudController;
+class GoodsController extends BaseCrudController {
+    protected string $modelClass = \app\model\Goods::class;
+    protected string $title = '商品管理';
+}</pre></td><td data-page-node-id="XRnJbUSEvt2BeF7zRBxK09">一行继承即得整套 CRUD + 查询 + 权限</td></tr>
+<tr data-page-node-id="loaCD2adu7X2gDMq0Yrs2G"><td class="ck" data-page-node-id="lpNE0Ah0SiLF2tuZ81Ov2r">☐</td><td data-page-node-id="UzOUpDE1897q1poL5PwwZZ">6.4 登记菜单/权限</td><td data-page-node-id="YJzx6jgNGlAenMtE2Cpgtc">后台「菜单管理」加节点 + casbin 规则（或追加进 install-business.sql 种子）</td><td data-page-node-id="eEsJy6Szgv1ptFSbrIuXrV">前端即见即用（内置 dist 已含前端）</td></tr>
+</table>
+
+<h2 data-page-node-id="0sahqd7inibqlIMlK1WDHI"><span class="phase" data-page-node-id="qDXXayR5tU6htZy1GlKLbW">P7</span>生产部署（简要）</h2>
+<table data-page-node-id="nlASpQEqbkh3Q7Pf6jQppF">
+<tr data-page-node-id="rvcUpvzZNYfcLlSi4NIGQE"><th class="ck" data-page-node-id="zDzXuhJYhiNUrsXAWA2QiZ">✓</th><th data-page-node-id="0UPk4V9gDhHnA0TP3S2dEJ">项</th><th data-page-node-id="82cQoc9dh6CEVMBvoAp1Lm">操作</th><th data-page-node-id="CmTZ3MIYLF3vEs3Rh07pCr">说明</th></tr>
+<tr data-page-node-id="1dqHKS2HiCZj39UYmnJ0vP"><td class="ck" data-page-node-id="xmnEQ4RLiWLYDGdayNBKD7">☐</td><td data-page-node-id="6PwfVIwnDM5YFByOaudEDf">守护进程</td><td data-page-node-id="x1cgeXR7CFnxHntiNFqq2a">supervisor / systemd 托管 <code data-page-node-id="FHExaj9pLwmJ1poMVjjPmN">php start.php start</code></td><td data-page-node-id="jGpT0Za9FjeZdn9U0iDxjx">禁用 <code data-page-node-id="OKjDm9R0VVKVSFsyQFIIIq">-d</code> 裸跑；完整配置见 docs/deploy.md</td></tr>
+<tr data-page-node-id="NZfYMKyejXxl0aX7yv1V1o"><td class="ck" data-page-node-id="WwOAQMgptVsORcsaHv5chh">☐</td><td data-page-node-id="vfZYxxgIcGjHXtGb5sWCNI">Nginx 反代</td><td data-page-node-id="0rweR9YxhypVBm10AyCrx6"><code data-page-node-id="MrbF8HsQDH7FLQzkw8OWSL">/</code> → webman；<code data-page-node-id="e0SK25BC03wNOwXRwGZj2b">/app/crud/</code> 同域透传</td><td data-page-node-id="J5xpKG5n89fQbGBk6lf3bO">SPA 与 API 同域免 CORS；反代端口与 <code data-page-node-id="J1azNXpDggrbZUpZofDLzs">config/process.php</code> 一致</td></tr>
+<tr data-page-node-id="XghBZAS4AbrJ3y5ahFhz01"><td class="ck" data-page-node-id="CcKbu2iSs5QWJ4feFaJ5zw">☐</td><td data-page-node-id="10fIpOR13cX2rOkntIwljW">安全收紧</td><td data-page-node-id="0GXKkJZyYu8B6GuGSAf8HJ"><code data-page-node-id="80O6t903OHBI95GazY6Gj4">admin_require_permission=true</code>（config/crud.php）；登录后立即改管理员密码</td><td data-page-node-id="zZh5rkwCHrt9rLJrvDHRzi">初始管理员由安装向导自定义，无固定 admin123</td></tr>
+<tr data-page-node-id="SnAPBRCcNAHH3B0QiASiOa"><td class="ck" data-page-node-id="QLjAgDgvWDrxyUrRalCUDt">☐</td><td data-page-node-id="oE2VLW6IsMeKCVR1YziuaP">密钥管理</td><td data-page-node-id="8ye9AuMB7It7WWez52Ax86"><code data-page-node-id="EBIFKCmzMpEz0HUS80XGC4">config/keys/</code> 不入 git、不进发布 zip；独立挂载并备份</td><td data-page-node-id="ttmkIB9aI6CSlO2lOSNeTA">仅 API_ENCRYPT=true 时使用</td></tr>
+</table>
+
+<h2 data-page-node-id="pq2nQtLWnbYLurwHJt7u5g"><span class="phase" data-page-node-id="BMlsKLimkJGiYiZGgPjd98">P8</span>升级与维护</h2>
+<table data-page-node-id="9iPgpxep9GeYnHflqGDdei">
+<tr data-page-node-id="7padpeTxFa29rI4pWJA2xv"><th class="ck" data-page-node-id="RzGFLS2LeO3HV2NbBE7xxJ">✓</th><th data-page-node-id="8t13dtqZRFcwBbnw4Fq0Ee">场景</th><th data-page-node-id="a4W5WXiyNLDt2Ykc0FAw4f">操作</th><th data-page-node-id="Yh6jpKzgmzltFIenmzVZeT">风险 / 注意</th></tr>
+<tr data-page-node-id="wHEhvLEVDw3QAciQHY0K1z"><td class="ck" data-page-node-id="VyJlUMAwF06MVNmfWczFa6">☐</td><td data-page-node-id="eVGHONL28dH96ZpYoFS10e">插件升级</td><td data-page-node-id="tRdarnNxAddyQF7ZsQCQcp"><code data-page-node-id="Qbfquc4zqN0beSeXDBWQH1">./scripts/composer.sh update amcolin/webman-curd-admin</code> 或 <code data-page-node-id="ok4onlORBgRJk4hn4LVr3E">composer update amcolin/webman-curd-admin</code></td><td data-page-node-id="4xdraWRUJzIYpI7FPOohI0">⚠️ 项目内 <code data-page-node-id="loDChqjBTIzY69Jav2kMar">plugin/crud</code> 是拷贝件且<b data-page-node-id="T81Tu8lXKQMpGtxaI4RSGb">升级不会自动更新</b>（保护本地改动）——需要同步新插件文件时执行 <code data-page-node-id="aJDcmOWDT3wye7oHru3mgO">bash scripts/sync-plugin.sh</code>（先备份再整体重拷）</td></tr>
+<tr data-page-node-id="vU12a7zrReO2pSmfvfWIND"><td class="ck" data-page-node-id="bO5plYtonRg7SBorKiFKSm">☐</td><td data-page-node-id="hgMbU5hFLlKhmXJBcJsShy">升级前检查</td><td data-page-node-id="ReKDuVB9jFs3DZC0qqap4k"><code data-page-node-id="Kz8jIt987SU6d6yiJ5OCPg">bash scripts/check-plugin-overrides.sh &lt;项目根&gt;</code></td><td data-page-node-id="ITZyKKPiQcpeu7zbCQqE0H">0=无本地改动；1=有改动需先处理再升级</td></tr>
+<tr data-page-node-id="zPbGevmEf3uqSNQvHHajN2"><td class="ck" data-page-node-id="iMuCQgcialCRHmYIzvdRpf">☐</td><td data-page-node-id="8zc5MT6MFLgiS1waa0PyXY">发版</td><td data-page-node-id="EWOKzB6RQQx0BIQBOqnjef">包仓库 <code data-page-node-id="Xibq4lDbXLuiwzxnTMbz4A">git tag vX.Y.Z</code> → push</td><td data-page-node-id="DQoQ68rGz1tKlruCObQ34p">当前 tags：v1.0.x（用 ^1.0 约束直接拉最新）</td></tr>
+</table>
+
+<h2 data-page-node-id="eqlWsPBOBgdmfdG5MPLuGX">⚠️ 高频坑位速查（v1.0.8 已全部修复/有解）</h2>
+<table data-page-node-id="A3eKE1vTK9EJPtRyzkdEVH">
+<tr data-page-node-id="kKCHBB2vCN4OoYuWT5tYuK"><th data-page-node-id="WlgQwY8T7Zwgvrip3aOYDQ">现象</th><th data-page-node-id="mxxsYE4AIEBB3duIfmkHju">原因</th><th data-page-node-id="NLeHr3BAgQXsBPrYwNQH3S">解法</th></tr>
+<tr data-page-node-id="hOVgFeBXFhLlLJKomqOk1E"><td data-page-node-id="iCT34e3VZrQscFgDa3wx5C">登录后 <code data-page-node-id="Lup4mcA9kG8gkeJF5yMDam">Class "support\Redis" not found</code></td><td data-page-node-id="dhUZuRRR6VAVHOILSmoMq3">旧版（≤v1.0.7）未拉 webman/redis</td><td data-page-node-id="jmowPuvcKGiABSNZWEAeU8">升级到 ^1.0（v1.0.8 自动 require webman/redis）；Redis 不可用时已 try/catch 降级直查 DB</td></tr>
+<tr data-page-node-id="dCS2BOlvXkSTEG8V8uhC9A"><td data-page-node-id="gxXscw2HRq4YBi1KsBN0OG">运行期 <code data-page-node-id="jz4gVDMniDyoIMuxPIdWVY">SQLSTATE[HY000] [1045] Access denied ... using password: NO</code></td><td data-page-node-id="BFAFehFRw6cZ0aJEl4zkfT">worker 启动时 .env 已 putenv 固化，向导写文件后运行时 env() 仍是空</td><td data-page-node-id="hMLqNbQlGGuYnN24n1KHam">向导已同时写 config/crud.php database 段；装完执行 <code data-page-node-id="Bi1Me9NGSnb5kInQGZVgMg">php start.php restart</code></td></tr>
+<tr data-page-node-id="MxljRUALd5VlbiEJnDAsX2"><td data-page-node-id="GeOQ4pvbBN67EDFuYpVhzj"><code data-page-node-id="uZuGQU0BXwHacZ8PBIerEa">Failed to audit installed packages.</code></td><td data-page-node-id="uB1KOlx86lb6Nh9ZryKwFh">composer audit 硬编码访问 packagist.org，国内不可达</td><td data-page-node-id="H3JYWwf4jN0fCHzfpSs01I">exit 0 无影响；alias 到 scripts/composer.sh 后不再出现</td></tr>
+<tr data-page-node-id="G0xUJ6xnjJRPFPdsuulfOA"><td data-page-node-id="8l2WsZdpNSLZ0eEPgrh8ZF">「roles 种子里怎么没有运营/财务？」</td><td data-page-node-id="mGvSFbIjEPGNhs13Rcymjk">v1.0.8 起默认只种超级管理员</td><td data-page-node-id="QzQk8ZoMLfFBe7UOi4Dvkc">后台「角色管理」按需新增，再授 casbin 权限</td></tr>
+</table>
+
+<h2 data-page-node-id="s0QaGfjMBrWfRo3ggHkb5E">流程全景</h2>
+<div class="flow" data-page-node-id="Txt6HRCzHDH3jcdzswZhd7">
+<span data-page-node-id="7ARiMzCDUPDEdks722U93c">P0 环境检查</span><b data-page-node-id="deEQp9Z73Y2lLpFC6ZAQxd">→</b>
+<span data-page-node-id="xTqLMJnZvDh0LKYiWMgSMz">P1 骨架</span><b data-page-node-id="dFZrz0HmHBj6uFrDDziz9R">→</b>
+<span data-page-node-id="gDazwQLV9EzEkLJ9TXW5De">P2 composer 引入</span><b data-page-node-id="F1bgIoRnpRnSJqUKpQNyc9">→</b>
+<span data-page-node-id="9cqzF2FlFC7zfb7simOFOX">P3 配置 DB</span><b data-page-node-id="TwHBVaUfgF0HjPXnUCChB1">→</b>
+<span data-page-node-id="M4exbREbgttMsdjfhRp5Ps">P4 向导安装 + restart</span><b data-page-node-id="clUW8QvTyXl1LQBhIUaZhN">→</b>
+<span data-page-node-id="vQmNqYhAlpTI0iHiSIYzjT">P5 登录验收</span><b data-page-node-id="Fuyk0KetXIslSMUNAhtJyL">→</b>
+<span data-page-node-id="DTraDpCQk3UTcyWUqUnBEI">P6 业务开发</span><b data-page-node-id="rFbzKpl8so4HA7ANMClVeA">→</b>
+<span data-page-node-id="QiPGfSdJMHVLMewPu15vkX">P7 生产部署</span><b data-page-node-id="bzqI91EMfZFZ8IB8drQHBm">→</b>
+<span data-page-node-id="rq38NzESKMXFUChsNC8OBg">P8 升级维护</span>
+</div>
+<div class="note" data-page-node-id="Xmzr4uDkbrncG0gNS9mLU5">标注 ☐ 处可逐项勾选；P0–P5 为必经主链路（约 10 分钟跑通到登录页），P6–P8 按需。完整细节见包内 README.md 与 docs/deploy.md。</div>
+
+</div>
+</body>
+</html>

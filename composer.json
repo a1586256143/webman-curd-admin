@@ -1,5 +1,5 @@
 {
-  "name": "huafei/webman-crud",
+  "name": "amcolin/webman-curd-admin",
   "type": "library",
   "description": "webman 应用插件（composer 分发版）：自包含的 CRUD/DSL/Schema 页面引擎 + 登录/RBAC 中后台底座。内含 plugin/crud，宿主 composer require 后由 webman 官方插件安装器（workerman/webman-framework 的 support\\Plugin）自动调用本包 src/Install.php 拷贝到 {项目}/plugin/crud 开箱即用。",
   "keywords": [

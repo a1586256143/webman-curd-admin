@@ -14,6 +14,7 @@
  */
 
 use plugin\crud\app\ModelRegistry;
+use plugin\crud\app\RouteControllerRegistry;
 
 // ============================================================
 // 模型/控制器扫描路径约定（随 config/plugin/crud/crud.php 可调）
@@ -24,6 +25,22 @@ ModelRegistry::setModelPath(
     (string)config('plugin.crud.crud.model_dir', base_path() . '/app/model'),
     (string)config('plugin.crud.crud.model_namespace', 'app\model')
 );
+
+// ============================================================
+// 内置示例（MyTest 后台控制器 + my_test 表，开箱演示）
+//  - ModelRegistry：模型 MyTest ↔ 控制器 MyTestController，
+//    使 /api/crud/model/MyTest 走专属控制器（grid 配置 + 业务钩子生效）
+//  - RouteControllerRegistry：/my-test → 控制器，
+//    前端后台菜单点「测试管理」→ 动态 CRUD 页按 /my-test 拉取配置渲染
+//  - menus「测试管理」菜单由 api/Install::seedAll() 写入（安装/升级幂等补齐）
+//  - 注册放在宿主目录扫描之前：宿主若自行定义同名模型/控制器则覆盖本示例
+//  - 不需要时整组删除（控制器/模型/注册段/菜单/my_test 表）
+// ============================================================
+ModelRegistry::registerModel(
+    \plugin\crud\app\model\MyTest::class,
+    \plugin\crud\app\controller\MyTestController::class
+);
+RouteControllerRegistry::register('/my-test', \plugin\crud\app\controller\MyTestController::class);
 
 // 注册路由 → 控制器（继承 BaseCrudController 的控制器，前端 /xxx 动态拿配置）
 

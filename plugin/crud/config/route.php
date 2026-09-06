@@ -93,7 +93,7 @@ crud_route('POST', '/api/auth/login', [
 ], $crudCorsOnly);
 
 // ============================================================
-// Web 安装向导（新项目首次安装用；安装完成生成 config/crud-installed.lock
+// Web 安装向导（新项目首次安装用；安装完成生成 runtime/crud-installed.lock
 // 后，setup 拒绝重复执行——页面也会引导直接进后台登录）
 // ============================================================
 crud_route('GET', '/app/crud-installer', [

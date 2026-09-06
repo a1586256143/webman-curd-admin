@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# webman-crud · composer 包装脚本（自动追加 --no-audit）
+# webman-curd-admin · composer 包装脚本（自动追加 --no-audit）
 # ============================================================
 #
 # 为什么需要这个？
@@ -15,7 +15,7 @@
 # --no-audit。这个脚本就是「每次都加 --no-audit」的包装。
 #
 # 用法：
-#   ./scripts/composer.sh require huafei/webman-crud:^1.0
+#   ./scripts/composer.sh require amcolin/webman-curd-admin:^1.0
 #   ./scripts/composer.sh update
 #   ./scripts/composer.sh install
 #

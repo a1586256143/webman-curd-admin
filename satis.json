@@ -1,5 +1,5 @@
 {
-    "name": "colin/webman-crud-satis",
+    "name": "colin/webman-curd-admin-satis",
     "homepage": "https://satis.your-company.com",
     "repositories": [
         {
@@ -8,7 +8,7 @@
         }
     ],
     "require": {
-        "huafei/webman-crud": "*"
+        "amcolin/webman-curd-admin": "*"
     },
     "require-all": false,
     "archive": {

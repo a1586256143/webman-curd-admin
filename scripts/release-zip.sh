@@ -5,7 +5,7 @@
 # 用法：
 #   ./scripts/release-zip.sh [version]    # 默认取当前 git tag 或 git describe
 #
-# 产物：dist/webman-crud-vX.Y.Z.zip
+# 产物：dist/webman-curd-admin-vX.Y.Z.zip
 # 内容结构（zip 解压后）：
 #   composer.json
 #   README.md
@@ -35,7 +35,7 @@ fi
 
 DIST="$PKG/dist"
 mkdir -p "$DIST"
-ZIP="$DIST/webman-crud-v${VERSION}.zip"
+ZIP="$DIST/webman-curd-admin-v${VERSION}.zip"
 rm -f "$ZIP"
 
 # 打包（基于 git ls-files，无 git 时回退 find 排除）
@@ -43,7 +43,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     echo "==> 打包 git tracked files"
     git archive --format=zip \
         --output "$ZIP" \
-        --prefix=webman-crud/ \
+        --prefix=webman-curd-admin/ \
         HEAD \
         $(git ls-files | grep -E '^(composer\.json|README\.md|plugin/crud/|scripts/)' | tr '\n' ' ')
 else

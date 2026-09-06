@@ -115,3 +115,21 @@ CREATE TABLE IF NOT EXISTS `menus` (
   KEY `idx_sort` (`sort`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='菜单管理';
 --SPLIT--
+
+-- ============================================================
+-- 后台示例表（MyTestController「测试管理」演示，随包开箱即用）
+-- 数据：Install.php seedAll() 在表空时插 1 条示例
+-- 菜单：seedAll() 幂等补「测试管理」（menus.path=/my-test）
+-- 删除：去掉本段 SQL + MyTestController/MyTest 模型 + 菜单行即可
+-- ============================================================
+--SPLIT--
+
+CREATE TABLE IF NOT EXISTS `my_test` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL DEFAULT '' COMMENT '名称',
+  `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
+  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态 1启用 0禁用',
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='后台示例表（webman-curd-admin 测试管理演示，可删除）';

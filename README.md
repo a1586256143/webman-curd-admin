@@ -1,4 +1,4 @@
-# webman-crud（webman 应用插件 · composer 分发版）
+# webman-curd-admin（webman 应用插件 · composer 分发版）
 
 自包含的 **CRUD / DSL / Schema 页面引擎 + 登录 / RBAC 中后台底座 + 内置前端** 插件。
 插件源码位于本包 `plugin/crud/`，宿主 `composer require` 后经
@@ -7,11 +7,23 @@
 > 命名空间 `plugin\crud\app\*`；配置读取 `config('plugin.crud.*')`；
 > 路由 `/api/*`（后端 API）与 `/app/crud/*`（内置前端页面，SPA），随插件自动生效。
 
+## 文档
+
+📖 **文档站**：浏览器直接打开 `docs/index.html`（自包含单页，无需服务器），含两篇文档：
+
+| 文档 | 内容 | Markdown 源 |
+|---|---|---|
+| **安装 · 升级 · 生产部署** | 单库架构与 `.env` 配置、composer 引入新项目、Web 安装向导（免重启）、CLI 安装、宿主内升级同步、supervisor / Nginx / 备份 / 回滚、踩坑速查 | `docs/插件安装升级与生产部署.md` |
+| **后台 DSL 使用** | 用 DSL 在后台造 CRUD / Schema 页面（数组式与 `grid()` 模板、插件内置 my_test「测试管理」示例、菜单 path 约定；宿主业务参考） | `docs/DSL-使用文档.md` |
+
+> 文档站由 `docs/tools/build_docs.cjs` 构建（需 marked）：改完 md 后在 `docs/` 目录执行
+> `node tools/build_docs.cjs` 重新生成 `index.html`。
+
 ## 目录结构
 
 ```
-webman-crud/
-├── composer.json          # 包定义（name: huafei/webman-crud）
+webman-curd-admin/
+├── composer.json          # 包定义（name: amcolin/webman-curd-admin）
 ├── plugin/crud/           # 应用插件源码（自包含，不依赖宿主 app 层）
 │   ├── app/
 │   │   ├── controller/    # Auth / Menu / Crud / CustomPage / Upload / Options / Page
@@ -31,7 +43,7 @@ webman-crud/
 │   ├── api/Install.php    # 安装器（建表/种子/RSA 密钥，webman 官方 zip 安装钩子兼容）
 │   ├── config/            # app.php / route.php / autoload.php / crypto.php
 │   │                       # crud.php（宿主接入调参）/ casbin.conf（随插件分发）
-│   ├── install.sql        # 8 张核心表 DDL（种子由 Install.php 幂等插入）
+│   ├── install.sql        # 核心表 DDL + my_test 后台示例表段（种子由 Install.php 幂等插入）
 │   ├── install-business.sql    # 业务库建表示例（项目自带，**不进**本通用包）
 │   ├── install.php        # CLI 引导：php plugin/crud/install.php（一键建表+种子+密钥）
 │   │                       # 支持 --business-sql=<path> --business-connection=<name>
@@ -40,13 +52,16 @@ webman-crud/
 │   ├── composer.sh          # composer wrapper：仅对 require/update/install 等触发 audit 的子命令自动 --no-audit
 │   ├── release.sh         # 发布脚本：宿主 plugin/crud → 本包 plugin/crud（排除 keys/business sql）
 │   ├── build-frontend.sh  # 构建内置前端并回灌 plugin/crud/public/
-│   ├── release-zip.sh     # 打 zip 发布包（dist/webman-crud-vX.Y.Z.zip）
+│   ├── release-zip.sh     # 打 zip 发布包（dist/webman-curd-admin-vX.Y.Z.zip）
 │   ├── sync-plugin.sh     # 升级同步：备份宿主 plugin/crud 后从 vendor 重拷最新插件文件
 │   └── check-plugin-overrides.sh  # 升级前 diff：检测宿主 plugin/crud 本地改动
 ├── src/Install.php        # composer 安装器（webman 2.x 官方机制：拷贝 plugin/crud + 生成 config）
-├── docs/
-│   ├── new-project-checklist.html  # 新项目接入流程表（P0–P8 + 高频坑位速查，当前为 v1.0.8）
-│   └── deploy.md          # 生产部署指南（首次安装 / supervisor / Nginx / 备份 / 回滚）
+├── docs/                       # 文档站（浏览器打开 index.html；md 源 + tools/build_docs.cjs 重建）
+│   ├── index.html              # 文档站（自包含单页，含下方两篇文档）
+│   ├── 插件安装升级与生产部署.md # 安装 / 升级 / 生产部署（composer 引入、Web 向导、CLI、supervisor/Nginx…）
+│   ├── DSL-使用文档.md          # 后台 DSL 使用（宿主业务参考；含内置 my_test「测试管理」示例）
+│   ├── tools/build_docs.cjs    # md → index.html 文档站构建脚本
+│   └── _legacy/                # 旧版文档归档（deploy.md / new-project-checklist.html，不参与构建）
 ```
 
 ## 在宿主 webman 项目中安装
@@ -65,26 +80,26 @@ webman-crud/
 
 ```bash
 # 方式 A：本地 path（开发期，发布后去掉 repositories 配置）
-composer config repositories.crud path "../webman-crud"
-composer require huafei/webman-crud:@dev
+composer config repositories.crud path "../webman-curd-admin"
+composer require amcolin/webman-curd-admin:@dev
 
 # 方式 B：私有 Git（推荐上线使用，已 git init + tag v1.0.x）
 #   仓库托管于 Gitee：https://gitee.com/colingit/webman-curd-admin.git
 composer config repositories.crud vcs "https://gitee.com/colingit/webman-curd-admin.git"
-composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 @dev 漂移
+composer require amcolin/webman-curd-admin:^1.0 --no-audit   # 走 tag 版本，避免 @dev 漂移
 #   ⚠️ audit 红字（国内访问 packagist.org 失败）只是尾部告警、exit 0 不影响安装；
-#   不想每次手打 --no-audit：alias composer='<webman-crud>/scripts/composer.sh'（见底部 FAQ）
+#   不想每次手打 --no-audit：alias composer='<webman-curd-admin>/scripts/composer.sh'（见底部 FAQ）
 
 # 方式 C：私有 Satis / Packagist（团队统一，无需每个项目配 repositories）
 #   本仓库已附 satis.json 模板（指向本 Gitee 仓库），放到 Satis 服务器执行
 #   `satis build satis.json web/` 后部署；团队统一配一次源即可直接 require：
 #     composer config repositories.crud-satis composer "https://satis.your-company.com"
-#     composer require huafei/webman-crud
+#     composer require amcolin/webman-curd-admin
 #   记得把 satis.json 里的 homepage / Gitee URL 改成你的真实地址。
 ```
 
 > 本包已初始化 git 仓库并打 `v1.0.0+` 标签；上线建议走 **方式 B**（VCS + 版本约束），
-> 升级时用 `composer update huafei/webman-crud` 拉新 tag。
+> 升级时用 `composer update amcolin/webman-curd-admin` 拉新 tag。
 > ⚠️ 升级后 `plugin/crud` 文件本体不会自动更新（src/Install.php 仅在目录不存在时拷贝，
 > 以保护本地改动）——需要同步最新插件文件时执行 `bash scripts/sync-plugin.sh`
 > （先备份旧 plugin/crud 再整体重拷），详见下方「升级安全」。
@@ -107,12 +122,12 @@ composer require huafei/webman-crud:^1.0 --no-audit   # 走 tag 版本，避免 
 #    报 "Failed to audit installed packages." 仅是尾部告警——命令本身成功（exit 0）。
 #    消除红字：用本包提供的 wrapper `scripts/composer.sh`（仅对会触发 audit 的
 #    require/update/install 等子命令自动追加 --no-audit），或在本包目录执行后在你的 shell 加
-#    `alias composer='<webman-crud>/scripts/composer.sh'`。详见底部「audit 红字彻底消除」一节。
-composer require huafei/webman-crud:^1.0
+#    `alias composer='<webman-curd-admin>/scripts/composer.sh'`。详见底部「audit 红字彻底消除」一节。
+composer require amcolin/webman-curd-admin:^1.0
 # 验证：ls plugin/crud config/database.php config/crud.php
-#   兜底（极少见自动拷贝未触发）：composer dump-autoload && composer update huafei/webman-crud
-#   或用本包 wrapper：./scripts/composer.sh update huafei/webman-crud
-#   或 cp -r vendor/huafei/webman-crud/plugin/crud plugin/crud
+#   兜底（极少见自动拷贝未触发）：composer dump-autoload && composer update amcolin/webman-curd-admin
+#   或用本包 wrapper：./scripts/composer.sh update amcolin/webman-curd-admin
+#   或 cp -r vendor/amcolin/webman-curd-admin/plugin/crud plugin/crud
 
 # 2) 启动服务（先启动，再装库 —— Web 向导模式需要服务在线）
 #    端口默认 8787，位置 config/process.php 的 'listen' 行
@@ -166,7 +181,7 @@ admin_role_user / role_permission / casbin_rule / crud_configs / menus）。
 业务表（如 `hf_goods` / `mobile_recharge_orders` 等项目专有表）由项目自带：
 
 1. 项目根目录放 `install-business.sql`，语句间 `--SPLIT--` 分隔，`CREATE TABLE
-   IF NOT EXISTS` 保证幂等。**不**打包进 `huafei/webman-crud` 通用包。
+   IF NOT EXISTS` 保证幂等。**不**打包进 `amcolin/webman-curd-admin` 通用包。
 2. 跑 `install.php` 时通过 `--business-sql` 传参：
 
 ```bash
@@ -296,7 +311,7 @@ webman 的 `Route` 对「同 method + 同 path」重复注册会**直接抛异�
 ```bash
 # 本地打 zip（排除 keys / install-business.sql / release-zip.sh 自身）
 ./scripts/release-zip.sh 1.0.0
-# → dist/webman-crud-v1.0.0.zip（约 1.1M，130 文件，解压即用）
+# → dist/webman-curd-admin-v1.0.0.zip（约 1.1M，130 文件，解压即用）
 
 # 发布到 GitHub：
 git tag v1.0.0 && git push origin v1.0.0
@@ -311,7 +326,7 @@ git tag v1.0.0 && git push origin v1.0.0
 ### 升级安全（避免本地改动被静默覆盖）
 
 安装器策略：`plugin/crud` 已存在 → **跳过拷贝**（保护本地改动），因此
-`composer update huafei/webman-crud` 只会更新 `vendor/` 里的包，不会动宿主
+`composer update amcolin/webman-curd-admin` 只会更新 `vendor/` 里的包，不会动宿主
 `plugin/crud` 与 `config/` 下的文件。需要把新版插件文件同步到宿主时：
 
 ```bash
@@ -397,7 +412,7 @@ bash <项目根>/scripts/sync-plugin.sh
 
 ```bash
 # 一次性：临时用一次
-./scripts/composer.sh require huafei/webman-crud:^1.0
+./scripts/composer.sh require amcolin/webman-curd-admin:^1.0
 ./scripts/composer.sh update
 
 # 永久：把系统的 composer alias 成 wrapper（推荐）
@@ -417,7 +432,7 @@ source ~/.zshrc
 
 ### 登录后台报 `Class "support\Redis" not found`
 
-本包已 require `webman/redis`（v1.0.8+），`composer require huafei/webman-crud:^1.0` 会自动拉齐。
+本包已 require `webman/redis`（v1.0.8+），`composer require amcolin/webman-curd-admin:^1.0` 会自动拉齐。
 若你用的是旧版（v1.0.7 及以前），手动补一行：
 
 ```bash

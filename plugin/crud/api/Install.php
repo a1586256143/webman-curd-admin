@@ -12,17 +12,22 @@ use support\Db;
  *  3. webman 官方插件安装器/市场 zip 安装（自动发现本类 install/update 钩子）
  *
  * 执行内容：
- *  A. 建表：执行同目录 install.sql 的 8 张核心表（admin_users/admin_tokens/roles/
+ *  A. 建表：执行同目录 install.sql 的核心表（admin_users/admin_tokens/roles/
  *     admin_role_user/role_permission/casbin_rule/crud_configs/menus）
+ *     及后台示例表 my_test（MyTestController「测试管理」演示用，可删除）
  *  B. （可选）建表：按 --business-sql 传入的路径依次执行额外 SQL，连接走
  *     config('plugin.crud.crud.business_connection')（默认 mysql_business）
- *  C. 种子：roles 三默认角色、menus 基础菜单、admin 初始账号（admin/admin123，
- *     仅当表为空时插入；密码用运行时 password_hash 生成）
+ *  C. 种子：roles admin 角色（仅插超级管理员）、menus 基础菜单、admin 初始账号
+ *     （admin/admin123，仅当表为空时插入；密码用运行时 password_hash 生成）；
+ *     my_test 表存在时补 1 条示例数据 + 后台「测试管理」菜单（幂等，老项目升级可补齐）
  *  D. 密钥：生成 RSA-2048 密钥对到 config/keys/（api_rsa_private.pem / api_rsa_public.pem），
  *     供 API_ENCRYPT=true 的信封加密部署使用（公钥需替换进前端后重新构建）
  *
- * DB 连接：认证库 config('plugin.crud.crud.admin_connection')（默认 mysql）；
- * 业务库 config('plugin.crud.crud.business_connection')（默认 mysql_business）。
+ * DB 连接（单库架构，认证与业务同一库）：
+ * 认证库 config('plugin.crud.crud.admin_connection')（默认 mysql）；
+ * 业务库 config('plugin.crud.crud.business_connection')（默认 mysql_business，
+ * 与 mysql 指向同一 DB_NAME）。连接配置来自 .env 的 DB_* 键（config/database.php
+ * 用 env() 读取）。
  *
  * 注意：本类位于 api/ 目录，不在宿主 composer psr-4（plugin\crud\app\）映射内，
  *       调用方需显式 require 本文件后再使用（install.php 引导已处理）。
@@ -47,12 +52,13 @@ class Install
     protected static $onProgress = null;
 
     /**
-     * 安装完成标记文件（宿主根 config/crud-installed.lock）：
+     * 安装完成标记文件（宿主根 runtime/crud-installed.lock）：
      * Web 安装向导以此判定「已安装」并拒绝重复安装；删除该文件可重新进入向导。
+     * 放 runtime 目录（运行态产物；重装 = 删锁 + 清库）。
      */
     protected static function lockFile(): string
     {
-        return dirname(__DIR__, 3) . '/config/crud-installed.lock';
+        return dirname(__DIR__, 3) . '/runtime/crud-installed.lock';
     }
 
     /**
@@ -197,7 +203,8 @@ class Install
      *
      * 解决首跑最常见的 1049 Unknown database：新项目尚未建库时 install.php
      * 直接建表必然失败。配置来源 config('database.connections.*')（自动生成的
-     * config/database.php 优先读宿主 config/crud.php 的 database 段，其次 .env）。
+     * config/database.php 读 .env 的 DB_* 键；单库架构下 mysql 与 mysql_business
+     * 指向同一 DB_NAME，本方法按 (host,port,user,database) 去重只建一次）。
      *
      * @return bool 全部就绪/建好返回 true
      */
@@ -218,18 +225,18 @@ class Install
             $pass = (string)($cfg['password'] ?? '');
             $db   = (string)($cfg['database'] ?? '');
             if ($host === '' || $db === '') {
-                static::report(false, '', "连接 {$conn} 配置不完整（缺 host/database），请检查 config/crud.php 的 database 段");
+                static::report(false, '', "连接 {$conn} 配置不完整（缺 host/database），请检查 .env 的 DB_HOST/DB_NAME 等 DB_* 键");
                 $ok = false;
                 continue;
             }
             if (!preg_match('/^[A-Za-z0-9_\-]+$/', $db)) {
-                static::report(false, '', "库名含非法字符（仅允许字母数字下划线连字符）: {$db}，请检查 config/crud.php");
+                static::report(false, '', "库名含非法字符（仅允许字母数字下划线连字符）: {$db}，请检查 .env 的 DB_NAME");
                 $ok = false;
                 continue;
             }
             $key = "{$host}:{$port}|{$user}|{$db}";
             if (isset($seen[$key])) {
-                continue; // 与已处理连接指向同一库（认证=业务同库场景）
+                continue; // 与已处理连接指向同一库（单库：认证=业务同库）
             }
             $seen[$key] = true;
             try {
@@ -243,7 +250,7 @@ class Install
                 static::report(true, "数据库已就绪: {$db}（不存在则已自动创建，连接 {$conn}）");
             } catch (\Throwable $e) {
                 $ok = false;
-                static::report(false, '', "自动建库失败 ({$conn}/{$db}): " . $e->getMessage() . '（请先手动 CREATE DATABASE，或核对 config/crud.php 的连接配置）');
+                static::report(false, '', "自动建库失败 ({$conn}/{$db}): " . $e->getMessage() . '（请先手动 CREATE DATABASE，或核对 .env 的 DB_* 键）');
             }
         }
         return $ok;
@@ -423,6 +430,69 @@ class Install
         } catch (\Throwable $e) {
             $ok = false;
             static::report(false, '', 'admin 账号种子失败: ' . $e->getMessage());
+        }
+
+        // my_test 后台示例（MyTestController + my_test 表，开箱演示）：
+        // 表存在时 → ① 空表插 1 条示例数据 ② menus 补「测试管理」菜单（path=/my-test，
+        // 幂等：已存在跳过，老项目升级执行 update() 时也能自动补齐）。
+        // 表不存在（老项目尚未建 my_test）时跳过并提示，不阻断安装/升级。
+        try {
+            $testTableExists = $db->getSchemaBuilder()->hasTable('my_test');
+        } catch (\Throwable $e) {
+            $testTableExists = false;
+        }
+
+        if ($testTableExists) {
+            // 1) 示例数据（空表插 1 条）
+            try {
+                if ($db->table('my_test')->count() === 0) {
+                    $now = date('Y-m-d H:i:s');
+                    $db->table('my_test')->insert([
+                        'name'       => 'webman-curd-admin 安装成功',
+                        'remark'     => '安装向导自动写入的示例数据，可在后台「测试管理」中增删改查',
+                        'status'     => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                    static::report(true, 'my_test 示例数据已插入（后台「测试管理」演示用）');
+                } else {
+                    static::report(true, 'my_test 已有数据，跳过示例种子');
+                }
+            } catch (\Throwable $e) {
+                echo '[WARN] my_test 示例数据写入失败（可忽略）: ' . $e->getMessage() . PHP_EOL;
+            }
+
+            // 2) 后台菜单「测试管理」（menus 无该顶级菜单时插入，幂等）
+            try {
+                $hasMenu = $db->table('menus')
+                    ->where('parent_id', 0)
+                    ->where('path', '/my-test')
+                    ->count() > 0;
+                if (!$hasMenu) {
+                    $now = date('Y-m-d H:i:s');
+                    $db->table('menus')->insert([
+                        'parent_id'  => 0,
+                        'title'      => '测试管理',
+                        'icon'       => 'Collection',
+                        'path'       => '/my-test',
+                        'component'  => '',
+                        'permission' => '',
+                        'sort'       => 4,
+                        'type'       => 1,
+                        'visible'    => 1,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                    static::report(true, '后台菜单已补充：「测试管理」（/my-test，MyTestController 演示页）');
+                } else {
+                    static::report(true, '「测试管理」菜单已存在，跳过');
+                }
+            } catch (\Throwable $e) {
+                echo '[WARN] 「测试管理」菜单写入失败（可忽略，重跑 install.php 可补齐）: ' . $e->getMessage() . PHP_EOL;
+            }
+        } else {
+            echo '[INFO]  my_test 表不存在，跳过内置示例（数据 + 菜单）。该表随 install.sql 创建；老项目可重装或手动执行其中建表 SQL 补齐' . PHP_EOL;
+            static::emit('info', 'my_test 表不存在，跳过内置示例（数据 + 菜单）');
         }
 
         return $ok;

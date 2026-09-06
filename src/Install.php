@@ -13,7 +13,7 @@ use RecursiveIteratorIterator;
  *   framework 的 support\Plugin::install 读取本次被安装包的 PSR-4，定位到
  *   {命名空间}Install::WEBMAN_PLUGIN 常量，再调用本类的 install()——
  *   把本包内的 plugin/crud 同步到宿主 {项目根}/plugin/crud。
- *   因此宿主只需 `composer require huafei/webman-crud`，无需任何手动拷贝。
+ *   因此宿主只需 `composer require amcolin/webman-curd-admin`，无需任何手动拷贝。
  *
  * 幂等安全策略：
  *   - 目标 plugin/crud 已存在（本地开发中的插件）→ 跳过，绝不覆盖本地改动；
@@ -45,13 +45,13 @@ class Install
             return;
         }
         if (is_dir($dst)) {
-            echo "  [webman-crud] plugin/crud 已存在，跳过拷贝（保留本地版本）\n";
+            echo "  [webman-curd-admin] plugin/crud 已存在，跳过拷贝（保留本地版本）\n";
         } else {
             if (!is_dir(dirname($dst))) {
                 mkdir(dirname($dst), 0755, true);
             }
             self::copyDir($src, $dst);
-            echo "  [webman-crud] 已安装应用插件: plugin/crud\n";
+            echo "  [webman-curd-admin] 已安装应用插件: plugin/crud\n";
         }
         self::ensureCrudConfig($root);
         self::ensureDatabaseConfig($root);
@@ -76,12 +76,12 @@ class Install
     }
 
     /**
-     * 确保宿主存在 config/crud.php（本插件的集中配置入口）：
-     *   - 缺失 → 生成默认模板（database 段 + 插件调参说明）；
+     * 确保宿主存在 config/crud.php（本插件的插件调参入口）：
+     *   - 缺失 → 生成默认模板（仅插件调参，不含数据库）；
      *   - 已存在 → 绝不覆盖（可能已被用户/其他工具写入）。
      *
-     * 该文件是「新项目无需配 .env」的关键：config/database.php 与插件配置
-     * （plugin/crud/config/crud.php）都会优先读它。
+     * 数据库连接不在这里：由 .env 的 DB_* 键承载（config/database.php 用 env() 读取）。
+     * 该文件的顶层同名键覆盖 plugin/crud/config/crud.php 的内置默认值。
      */
     protected static function ensureCrudConfig(string $root): void
     {
@@ -94,47 +94,41 @@ class Install
             return; // 已有配置，不覆盖
         }
         file_put_contents($file, self::crudConfigTemplate());
-        echo "  [webman-crud] 已生成集中配置 config/crud.php（数据库与插件调参入口，不再依赖 .env）\n";
+        echo "  [webman-curd-admin] 已生成集中配置 config/crud.php（插件调参入口；数据库连接走 .env 的 DB_* 键）\n";
     }
 
     /**
      * 宿主 config/crud.php 默认模板
+     *
+     * 只承载【插件调参】；数据库信息不放这里（安装向导写入宿主 .env 的 DB_*，
+     * config/database.php 用 env() 读取）。认证库与业务库【同一库】。
      */
     protected static function crudConfigTemplate(): string
     {
         return <<<'PHP'
 <?php
 /**
- * webman-crud 插件集中配置（首次 composer require 时由 huafei/webman-crud 自动生成；
- * 已存在则不会覆盖，可自由修改）。新项目**无需在 .env 配 DB_* / CRUD_***——
- * 数据库与插件调参全部集中在本文件，避免覆盖宿主已有 .env。
+ * webman-curd-admin 插件集中配置（首次 composer require 时由 amcolin/webman-curd-admin 自动生成；
+ * 已存在则不会覆盖，可自由修改）。
  *
- * 取值关系：
- *   - database 段 → 自动生成的 config/database.php 的 mysql / mysql_business 连接
- *     （config/database.php 优先读本段，本段留空的键回退 .env 的 DB_*）
- *   - 下方注释的插件调参键 → 覆盖 plugin/crud/config/crud.php 的同名默认值
- *   - plugin/crud/install.php 会自动 CREATE DATABASE（库不存在时）
+ * 职责边界：
+ *   - 本文件只做【插件调参】。数据库连接信息（DB_HOST / DB_PORT / DB_NAME /
+ *     DB_USER / DB_PASSWORD）写入宿主 .env，由 config/database.php 用 env() 读取
+ *     （Web 安装向导会自动写 .env；手动部署可参考 plugin/crud/env.example）。
+ *   - 认证库与业务库【始终同一库】（单库架构），已无 DB_BUSINESS_NAME / 分库选项。
+ *   - 顶层键与 plugin/crud/config/crud.php 内置默认值同名时覆盖生效；
+ *     不写的键沿用内置默认。
  */
 return [
-    // ---- 数据库（安装/建表/模型库使用）----
-    // 默认【单库模式】：认证库与业务库放同一个库（business_db 留空即同 admin_db）。
-    // 如需分库：填独立的 business_db，并确保数据库账号有权限建库/读写。
-    'database' => [
-        'host'        => '127.0.0.1',
-        'port'        => '3306',
-        'username'    => 'root',
-        'password'    => '',
-        // 认证/管理面库：admin_users/roles/menus/casbin_rule/crud_configs 等核心表
-        'admin_db'    => 'webman_crud',
-        // 业务库：业务模型 CRUD 默认库；留空 = 与 admin_db 同库（单库模式，推荐）
-        'business_db' => '',
-    ],
+    // 前端挂载前缀（改了需同步重建前端：VITE_BASE_PATH）
+    'page_base' => '/app/crud',
 
-    // ---- 以下为插件调参（键与 plugin/crud/config/crud.php 同名才生效；不写用内置默认）----
-    // 'admin_connection'         => 'mysql',          // 认证库连接名（config/database.php connections 键）
-    // 'business_connection'      => 'mysql_business', // 业务库连接名
-    // 'admin_require_permission' => false,            // /api/admin/* 是否强制 RBAC
-    // 'page_base'                => '/app/crud',      // 前端挂载前缀（改需同步重建前端）
+    // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
+    'admin_require_permission' => false,
+
+    // 连接名（config/database.php connections 键；单库下两者指向同一 DB_NAME）：
+    // 'admin_connection'    => 'mysql',            // 认证库连接名
+    // 'business_connection' => 'mysql_business',   // 业务模型默认连接名
 ];
 PHP;
     }
@@ -157,74 +151,56 @@ PHP;
             $content = (string)file_get_contents($file);
             if (!str_contains($content, 'your_database') && !str_contains($content, 'your_username')) {
                 if (!str_contains($content, 'mysql_business')) {
-                    echo "  [webman-crud] 提示：宿主 config/database.php 未含 mysql_business 连接，业务表建表/迁移会失败；\n";
-                    echo "      请在 config/crud.php 的 database 段配置 business_db 后重跑安装器，或参考 plugin/crud/database.business.example.php 手动补上。\n";
+                    echo "  [webman-curd-admin] 提示：宿主 config/database.php 未含 mysql_business 连接，业务表建表/迁移会失败；\n";
+                    echo "      单库架构下它应与 mysql 指向同一 DB_NAME。可删除 config/database.php 后重跑 composer require/update 由本包重新生成，\n";
+                    echo "      或参考 plugin/crud/database.business.example.php 手动补上该连接。\n";
                 }
                 return; // 已有自定义配置，跳过
             }
             if (@rename($file, $file . '.webman-db.bak') === false) {
-                echo "  [webman-crud] 警告：config/database.php 为占位模板但备份失败，跳过替换（请手动配置）\n";
+                echo "  [webman-curd-admin] 警告：config/database.php 为占位模板但备份失败，跳过替换（请手动配置）\n";
                 return;
             }
-            echo "  [webman-crud] 检测到 webman/database 占位 config/database.php，已备份为 database.php.webman-db.bak\n";
+            echo "  [webman-curd-admin] 检测到 webman/database 占位 config/database.php，已备份为 database.php.webman-db.bak\n";
             $needWrite = true;
         }
         if ($needWrite) {
             file_put_contents($file, self::databaseConfigTemplate());
-            echo "  [webman-crud] 已生成 env 驱动的 config/database.php（mysql + mysql_business 读 DB_* 键）\n";
+            echo "  [webman-curd-admin] 已生成 env 驱动的 config/database.php（mysql + mysql_business 读 DB_* 键）\n";
         }
     }
 
     /**
-     * env / config/crud.php 驱动的数据库配置模板
+     * env 驱动的数据库配置模板
      *
-     * 取值优先级：宿主 config/crud.php 的 database 段（推荐）> .env 的 DB_* 键 > 内置默认。
+     * 连接信息全部取自 .env 的 DB_* 键（安装向导 / 手动部署写入）。单库架构：
+     * 认证库与业务库同一库，mysql_business 与 mysql 指向同一 DB_NAME，
+     * 已无 DB_BUSINESS_NAME。
      */
     protected static function databaseConfigTemplate(): string
     {
         return <<<'PHP'
 <?php
 /**
- * webman-crud 自动生成的数据库配置模板（宿主 config/database.php 缺失或为
- * webman/database 占位模板时，由 huafei/webman-crud 的 src/Install.php 生成，
+ * webman-curd-admin 自动生成的数据库配置模板（宿主 config/database.php 缺失或为
+ * webman/database 占位模板时，由 amcolin/webman-curd-admin 的 src/Install.php 生成，
  * 可自由修改）。
  *
- * 取值优先级：
- *   1. 宿主 config/crud.php 的 database 段（新项目推荐入口，无需 .env）
- *   2. .env 的 DB_* 键（兼容老宿主/传统用法）
- *
- * 默认【单库模式】：mysql_business 未单独指定库名时，与 mysql 指向同一库
- * （业务库名取值链：config/crud.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
- *
- * - mysql          ：认证/管理面库（admin_users / roles / menus / casbin_rule ...）
- * - mysql_business ：业务库（CRUD_BUSINESS_CONNECTION 默认连接名；单库模式=同 mysql 库）
+ * 取值：全部来自 .env 的 DB_* 键（Web 安装向导 / install.php 会自动写入 .env，
+ * 新项目无需手工配）。【单库架构】：认证与业务同一库——
+ *   - mysql          ：认证/管理面库（admin_users / roles / menus / casbin_rule ...）
+ *   - mysql_business ：业务模型默认连接名，与 mysql 指向同一 DB_NAME（别名）
  */
-$__crudDb = [];
-$__crudFile = __DIR__ . '/crud.php';
-if (is_file($__crudFile)) {
-    $__cfg = require $__crudFile;
-    if (is_array($__cfg) && isset($__cfg['database']) && is_array($__cfg['database'])) {
-        $__crudDb = $__cfg['database'];
-    }
-}
-$__pick = static function (string $key, string $envKey, string $default) use ($__crudDb): string {
-    return (isset($__crudDb[$key]) && $__crudDb[$key] !== '')
-        ? (string)$__crudDb[$key]
-        : (string)env($envKey, $default);
-};
-$__adminDb = $__pick('admin_db', 'DB_NAME', 'webman_crud');
-$__businessDb = $__pick('business_db', 'DB_BUSINESS_NAME', $__adminDb);
-
 return [
     'default' => 'mysql',
     'connections' => [
         'mysql' => [
             'driver'    => 'mysql',
-            'host'      => $__pick('host', 'DB_HOST', '127.0.0.1'),
-            'port'      => $__pick('port', 'DB_PORT', '3306'),
-            'database'  => $__adminDb,
-            'username'  => $__pick('username', 'DB_USER', 'root'),
-            'password'  => $__pick('password', 'DB_PASSWORD', ''),
+            'host'      => env('DB_HOST', '127.0.0.1'),
+            'port'      => env('DB_PORT', '3306'),
+            'database'  => env('DB_NAME', 'webman_crud'),
+            'username'  => env('DB_USER', 'root'),
+            'password'  => env('DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',
             'collation' => 'utf8mb4_general_ci',
             'prefix'    => '',
@@ -233,11 +209,11 @@ return [
         ],
         'mysql_business' => [
             'driver'    => 'mysql',
-            'host'      => $__pick('host', 'DB_HOST', '127.0.0.1'),
-            'port'      => $__pick('port', 'DB_PORT', '3306'),
-            'database'  => $__businessDb,
-            'username'  => $__pick('username', 'DB_USER', 'root'),
-            'password'  => $__pick('password', 'DB_PASSWORD', ''),
+            'host'      => env('DB_HOST', '127.0.0.1'),
+            'port'      => env('DB_PORT', '3306'),
+            'database'  => env('DB_NAME', 'webman_crud'),
+            'username'  => env('DB_USER', 'root'),
+            'password'  => env('DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',
             'collation' => 'utf8mb4_general_ci',
             'prefix'    => '',
@@ -261,7 +237,7 @@ PHP;
         if ($cwd) {
             return rtrim($cwd, '/');
         }
-        // 包位于 vendor/huafei/webman-crud/src
+        // 包位于 vendor/amcolin/webman-curd-admin/src
         return dirname(__DIR__, 4);
     }
 

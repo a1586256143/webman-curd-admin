@@ -10,20 +10,21 @@ use Webman\Http\Response;
  * 访问：
  *   GET  /app/crud-installer          → 向导页面（静态页）
  *   GET  /api/crud-installer/status   → 是否已安装
- *   POST /api/crud-installer/setup    → 提交并执行安装（DB 写 .env，其它配置写 config/crud.php）
+ *   POST /api/crud-installer/setup    → 提交并执行安装（DB 写 .env，调参写 config/crud.php）
  *   GET  /api/crud-installer/progress → 安装进度（轮询，JSONL）
  *
- * 设计约定（与 v1.0.5 配置方案一致）：
- *   - 数据库信息（DB_HOST/PORT/NAME/USER/PASSWORD/…）写入宿主 .env：按键合并/替换，
- *     绝不删除 .env 里其它内容（回应“不要 cp env.example 覆盖宿主 .env”）；
- *   - 插件调参（page_base 等）写入 config/crud.php，并移除其 database 段
- *     （避免占位值抢占 .env —— config/database.php 取数优先级 config/crud.php > .env）；
+ * 配置分工（单库架构）：
+ *   - 数据库信息（DB_HOST/PORT/NAME/USER/PASSWORD）写入宿主 .env：按键合并/替换，
+ *     绝不删除 .env 里其它内容；config/database.php 用 env() 读取这些键。
+ *   - 认证库与业务库【同一库】（强制单库，向导不提供分库选项，无 DB_BUSINESS_NAME）。
+ *   - 插件调参（page_base 等）写入宿主 config/crud.php（仅调参，不含数据库段）。
  *   - 执行安装用子进程 php plugin/crud/install.php（独立加载 .env/config，
  *     规避运行期配置缓存），进度写 runtime/crud-installer-progress.log 供轮询；
- *   - 安装成功生成 config/crud-installed.lock（由 api/Install 统一写），
+ *   - 安装成功生成 runtime/crud-installed.lock（由 api/Install 统一写），
  *     存在即拒绝再次安装；删除锁文件可重新进入向导（需先清库）。
- *
- * 默认【单库模式】：业务库与认证库放同一个库（business_db 不填）。
+ *   - 安装成功【自动平滑 reload】（免手动重启，webman-admin 同款）：向 master 发
+ *     SIGUSR1 → worker 处理完当前请求后重启并重读 .env/config → 新 DB_* 立即生效
+ *     （避免 1045），无需 php start.php restart；信号不可用/Windows 时回退手动命令。
  */
 class InstallerController
 {
@@ -33,10 +34,10 @@ class InstallerController
     /** 进度文件相对宿主根 */
     protected const PROGRESS_FILE = '/runtime/crud-installer-progress.log';
 
-    /** 已安装锁（与 plugin\crud\api\Install::lockFile 一致） */
+    /** 已安装锁（与 plugin\crud\api\Install::lockFile 一致；放 runtime，属运行态文件） */
     protected static function lockFile(): string
     {
-        return static::hostRoot() . '/config/crud-installed.lock';
+        return static::hostRoot() . '/runtime/crud-installed.lock';
     }
 
     protected static function hostRoot(): string
@@ -103,9 +104,6 @@ class InstallerController
             'user'     => trim((string)($body['db_user'] ?? '')),
             'password' => (string)($body['db_pass'] ?? ''),
         ];
-        // 单库模式：business_db 为空 → .env 不写 DB_BUSINESS_NAME，自动回退认证库
-        $sameDb = !empty($body['business_same']);
-        $businessDb = $sameDb ? '' : trim((string)($body['business_db'] ?? ''));
         $adminUser = trim((string)($body['admin_user'] ?? ''));
         $adminPass = (string)($body['admin_pass'] ?? '');
         $adminPass2 = (string)($body['admin_pass2'] ?? '');
@@ -124,9 +122,6 @@ class InstallerController
         if (!preg_match('/^[A-Za-z0-9_\-]+$/', $db['name'])) {
             $errors[] = '数据库名只能包含字母/数字/下划线/连字符';
         }
-        if (!$sameDb && $businessDb !== '' && !preg_match('/^[A-Za-z0-9_\-]+$/', $businessDb)) {
-            $errors[] = '业务库名只能包含字母/数字/下划线/连字符';
-        }
         if (!preg_match('/^[A-Za-z0-9_\-]{2,32}$/', $adminUser)) {
             $errors[] = '管理员账号需为 2-32 位字母/数字/下划线/连字符';
         }
@@ -144,14 +139,12 @@ class InstallerController
         $progressFile = static::progressFile();
 
         try {
-            // 0) 写 .env（数据库信息；按键替换/追加，不删其它内容）
-            static::writeEnv($root, $db, $businessDb);
+            // 0) 写 .env（数据库信息是唯一 DB 来源；按键替换/追加，不删其它内容）
+            static::writeEnv($root, $db);
 
-            // 1) 写 config/crud.php：同时写入 database 段（核心：worker 启动后 config 已加载，
-            //    仅靠 .env 无法让运行时 env() 返回新密码——写 config/crud.php 后，生成的
-            //    config/database.php 模板 $__pick() 会优先取这里的 database 段，避免 1045）。
+            // 1) 写 config/crud.php（仅插件调参，不含数据库段）
             //    原文件先备份 config/crud.php.wizard.bak。
-            static::writeCrudConfig($root, $pageBase, $db, $businessDb);
+            static::writeCrudConfig($root, $pageBase);
 
             // 2) 清空进度文件 → 子进程执行安装（独立进程重新加载 .env，规避运行期配置缓存）
             @unlink($progressFile);
@@ -179,6 +172,12 @@ class InstallerController
             $steps = static::readProgress($progressFile);
             $ok = ($exitCode === 0 && is_file(static::lockFile()));
 
+            // 安装成功 → 触发平滑 reload（向 master 发 SIGUSR1，webman-admin 同款机制）：
+            // worker 处理完当前请求后退出重启，新 worker 重新执行 support/bootstrap.php
+            // （Dotenv 重读 .env + Config::clear 重载 config/database.php）→ 新 DB_* 生效，
+            // 无需手动 restart。失败时 auto_reload=false，前端回退手动命令。
+            $autoReload = $ok && static::signalReload();
+
             return static::json([
                 'ok'       => $ok,
                 'exit'     => $exitCode,
@@ -189,9 +188,10 @@ class InstallerController
                 'stderr'   => trim((string)$err) !== '' ? mb_substr($err, 0, 2000) : '',
                 'admin'    => $adminUser,
                 'page_base' => $pageBase,
-                // 安装成功时附带重启命令（webman worker 配置在启动时固化，wizard 写完
-                // config/crud.php 后需 restart 才生效；避免 1045 Access denied 等
-                // 「config 已更新但 worker 还用旧配置」类问题）
+                // 已触发平滑 reload（SIGUSR1）：worker 处理完当前请求后重启并重读
+                // .env/config，新 DB_* 即刻生效（避免 1045）。auto_reload=true 时前端
+                // 短暂等待后进入后台；restart_cmd 保留为信号不可用/守护场景的兜底提示。
+                'auto_reload' => $autoReload,
                 'restart_cmd' => $ok ? 'php start.php restart' : '',
             ]);
         } catch (\Throwable $e) {
@@ -215,12 +215,50 @@ class InstallerController
     // ============================================================
 
     /**
-     * 把数据库信息合并写入 .env：
+     * 安装成功后触发 webman 平滑 reload（免手动重启，webman-admin 同款机制）。
+     *
+     * 原理：
+     *   - .env / config 由 worker 进程启动时固化（support/bootstrap.php 里
+     *     Dotenv->load() + Config::clear()），写 .env 后运行中 worker 仍是旧值 →
+     *     数据库请求 1045。必须让 worker 重启重读配置；
+     *   - 向 master（当前 worker 的父进程）发 SIGUSR1 = workerman reload 信号：
+     *     master 逐个让 reloadable worker 处理完当前请求后退出并 fork 新 worker，
+     *     新 worker 重新执行 bootstrap → .env/config 全部重载 → 新 DB_* 生效；
+     *   - reload 平滑且轻量：master 不退出、端口不断开、正在处理的 HTTP 响应
+     *     能正常返回（默认 stop_timeout 兜底强杀），远优于 restart（杀 master 重建）。
+     *
+     * 限制（返回 false，前端回退手动 restart_cmd）：
+     *   - Windows（无 posix_kill / workerman 无信号机制）
+     *   - PHP 未装 posix 扩展
+     *
+     * @return bool 信号是否已发出（reload 是否完成看 runtime 日志/worker 重启）
+     */
+    protected static function signalReload(): bool
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            return false; // Windows：workerman 无信号 reload，需手动重启
+        }
+        if (!function_exists('posix_kill') || !defined('SIGUSR1')) {
+            return false; // 缺 posix 扩展
+        }
+        $masterPid = function_exists('posix_getppid') ? posix_getppid() : 0;
+        if ($masterPid <= 0) {
+            return false;
+        }
+        set_error_handler(static fn() => true);
+        $ok = posix_kill($masterPid, SIGUSR1); // 当前 worker 的父进程 = master
+        restore_error_handler();
+        return $ok;
+    }
+
+    /**
+     * 把数据库信息合并写入 .env（单库架构，仅 DB_HOST/PORT/NAME/USER/PASSWORD 五个键）：
      *  - 已有键：原位替换（不删其它行/注释/键）
      *  - 缺失键：按标准顺序追加到文件尾
+     *  - 遗留的 DB_BUSINESS_NAME 键自动剔除（分库已废弃）
      * 值统一单引号包裹（phpdotenv 字面量语义），密码含 #/空格/引号均安全。
      */
-    protected static function writeEnv(string $root, array $db, string $businessDb): void
+    protected static function writeEnv(string $root, array $db): void
     {
         $envPath = $root . '/.env';
         $exists = is_file($envPath);
@@ -230,12 +268,11 @@ class InstallerController
         }
 
         $want = [
-            'DB_HOST'          => $db['host'],
-            'DB_PORT'          => $db['port'],
-            'DB_NAME'          => $db['name'],
-            'DB_USER'          => $db['user'],
-            'DB_PASSWORD'      => $db['password'],
-            'DB_BUSINESS_NAME' => $businessDb, // 空=单库，不写该键
+            'DB_HOST'     => $db['host'],
+            'DB_PORT'     => $db['port'],
+            'DB_NAME'     => $db['name'],
+            'DB_USER'     => $db['user'],
+            'DB_PASSWORD' => $db['password'],
         ];
 
         $set = [];
@@ -245,11 +282,10 @@ class InstallerController
             if ($trim !== '' && $trim[0] !== '#') {
                 if (preg_match('/^(DB_(?:HOST|PORT|NAME|USER|PASSWORD|BUSINESS_NAME))\s*=/', $line, $m)) {
                     $key = $m[1];
-                    $val = $want[$key] ?? '';
-                    if ($key === 'DB_BUSINESS_NAME' && $val === '') {
-                        continue; // 单库模式：不保留旧业务库键（避免误导）
+                    if ($key === 'DB_BUSINESS_NAME') {
+                        continue; // 单库架构：剔除遗留的分库键
                     }
-                    $out[] = $key . '=' . static::envQuote($val);
+                    $out[] = $key . '=' . static::envQuote($want[$key]);
                     $set[$key] = true;
                     continue;
                 }
@@ -257,19 +293,15 @@ class InstallerController
             $out[] = $line;
         }
         // 追加缺失键（按固定顺序，保证可读）
-        $order = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_BUSINESS_NAME'];
+        $order = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
         $appended = false;
         foreach ($order as $key) {
-            $val = $want[$key] ?? '';
-            if ($key === 'DB_BUSINESS_NAME' && $val === '') {
-                continue; // 单库模式不写
-            }
             if (!isset($set[$key])) {
                 if (!$appended) {
                     $out[] = '';
                     $appended = true;
                 }
-                $out[] = $key . '=' . static::envQuote($val);
+                $out[] = $key . '=' . static::envQuote($want[$key]);
             }
         }
 
@@ -285,49 +317,40 @@ class InstallerController
     }
 
     /**
-     * 写 config/crud.php（插件调参 + 数据库连接入口）：
-     *  - 包含 database 段（DB 信息同时写在这里；config/database.php 模板 $__pick()
-     *    优先取本文件的 database 段，绕开 .env 的 putenv 缓存问题）。
-     *  - 原文件先备份 config/crud.php.wizard.bak
+     * 写 config/crud.php（仅插件调参，不含数据库段）：
+     * 数据库连接唯一入口是 .env 的 DB_*（config/database.php 用 env() 读取）。
+     * 原文件先备份 config/crud.php.wizard.bak
      */
-    protected static function writeCrudConfig(string $root, string $pageBase, array $db, string $businessDb): void
+    protected static function writeCrudConfig(string $root, string $pageBase): void
     {
         $file = $root . '/config/crud.php';
         if (is_file($file)) {
             @copy($file, $file . '.wizard.bak');
         }
-        // 单库模式：business_db 空则填回 admin_db，保证 mysql_business 也有明确库名
-        $businessDbOut = $businessDb !== '' ? $businessDb : $db['name'];
-        $pageBaseOut = addslashes($pageBase); // 仅防 PHP 字符串解析异常
-        $dbHostOut = addslashes($db['host']);
-        $dbNameOut = addslashes($db['name']);
-        $dbUserOut = addslashes($db['user']);
-        $dbPassOut = addslashes($db['password']);
-        $businessDbEsc = addslashes($businessDbOut);
-        $php = <<<PHP
+        $pageBaseOut = $pageBase !== '' ? $pageBase : '/app/crud';
+        $pageBaseEsc = addslashes($pageBaseOut);
+        $php = str_replace('__PAGE_BASE__', $pageBaseEsc, <<<'PHP'
 <?php
 /**
- * webman-crud 插件集中配置（Web 安装向导生成）
- * - database 段：DB 连接。config/database.php 模板 \$__pick() 优先读这里（避免
- *   .env 的 putenv 在 worker 启动后无法刷新导致的 1045 Access denied）。
- * - 其它段：插件调参
+ * webman-curd-admin 插件集中配置（Web 安装向导生成）
+ *
+ * 本文件只承载【插件调参】；数据库连接信息在宿主 .env（DB_*，由 config/database.php
+ * 用 env() 读取）。认证库与业务库同一库（单库架构）。
+ * 顶层键覆盖 plugin/crud/config/crud.php 同名默认值，不写的键沿用内置默认。
  */
 return [
-    // ---- 数据库（认证/管理面 + 业务库；单库模式下两连接指向同库）----
-    'database' => [
-        'host'        => '{$dbHostOut}',
-        'port'        => '{$db['port']}',
-        'username'    => '{$dbUserOut}',
-        'password'    => '{$dbPassOut}',
-        'admin_db'    => '{$dbNameOut}',
-        'business_db' => '{$businessDbEsc}',
-    ],
     // 前端挂载前缀（改了需同步重建前端：VITE_BASE_PATH）
-    'page_base' => rtrim(env('CRUD_PAGE_BASE', '{$pageBaseOut}'), '/'),
+    'page_base' => '__PAGE_BASE__',
+
     // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
-    'admin_require_permission' => env('CRUD_ADMIN_REQUIRE_PERMISSION', false),
+    'admin_require_permission' => false,
+
+    // 连接名（config/database.php connections 键；单库下两者指向同一 DB_NAME）：
+    // 'admin_connection'    => 'mysql',            // 认证库连接名
+    // 'business_connection' => 'mysql_business',   // 业务模型默认连接名
 ];
-PHP;
+PHP
+        );
         file_put_contents($file, $php, LOCK_EX);
     }
 

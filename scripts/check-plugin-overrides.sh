@@ -67,7 +67,7 @@ done <<< "$DIFF_OUT"
 
 echo
 if [ "$CHANGED" -eq 0 ]; then
-  echo "✅ 未发现本地改动，可安全执行 composer update huafei/webman-crud"
+  echo "✅ 未发现本地改动，可安全执行 composer update amcolin/webman-curd-admin"
   exit 0
 else
   echo "⚠️  发现本地改动！升级前请处理（git stash / 提交 / 迁回插件配置化）。"

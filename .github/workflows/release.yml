@@ -61,7 +61,7 @@ jobs:
       # 6. 上传 artifact（无论是否创建 Release 都可下载）
       - uses: actions/upload-artifact@v4
         with:
-          name: webman-crud-${{ github.ref_name }}
+          name: webman-curd-admin-${{ github.ref_name }}
           path: dist/*.zip
 
       # 7. 创建 GitHub Release 并附 zip

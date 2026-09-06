@@ -7,17 +7,18 @@
  * 的 'connections' 数组中即可。
  *
  * 通常你不需要手动做：src/Install.php 检测到宿主 config/database.php 缺失或为
- * webman/database 占位模板时，会自动生成一份 env 驱动的完整配置
- * （含 mysql 与 mysql_business，读 DB_* 键）。
+ * webman/database 占位模板时，会自动生成一份 env 驱动的完整配置（含 mysql 与
+ * mysql_business）。【单库架构】：mysql_business 与 mysql 指向同一 DB_NAME
+ * （认证库与业务库同一库），不存在独立的业务库名。
  *
- * 对应 .env 键：DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD / DB_BUSINESS_NAME
+ * 对应 .env 键：DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD
  */
 return [
     'mysql_business' => [
         'driver'    => 'mysql',
         'host'      => env('DB_HOST', '127.0.0.1'),
         'port'      => env('DB_PORT', '3306'),
-        'database'  => env('DB_BUSINESS_NAME', 'my_business'),
+        'database'  => env('DB_NAME', 'webman_crud'),
         'username'  => env('DB_USER', 'root'),
         'password'  => env('DB_PASSWORD', ''),
         'charset'   => 'utf8mb4',

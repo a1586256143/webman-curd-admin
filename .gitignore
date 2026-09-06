@@ -3,6 +3,7 @@
 node_modules
 *.log
 .DS_Store
+.idea/
 
 # 安装时生成（勿入包）
 plugin/crud/config/keys/

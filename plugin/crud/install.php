@@ -5,21 +5,20 @@
  *
  * 用法（在 webman 宿主根目录执行）：
  *   php plugin/crud/install.php
- *   php plugin/crud/install.php --business-sql=plugin/crud/install-business.sql
+ *   php plugin/crud/install.php --business-sql=install-business.sql   # 项目自带的业务表 SQL（放宿主根）
  *   php plugin/crud/install.php --business-sql=path/a.sql --business-sql=path/b.sql
- *   php plugin/crud/install.php --business-connection=mysql_business
  *   php plugin/crud/install.php --admin-user=admin --admin-pass=secret   # 自定义初始管理员
  *   php plugin/crud/install.php --progress-file=runtime/crud-installer.log  # 进度 JSONL 输出（Web 向导用）
  *
  * 等价于调用 \plugin\crud\api\Install::install()，但先完成 webman 配置加载：
  *  - require 宿主 vendor/autoload.php
- *  - 加载 .env（数据库连接等环境变量）
+ *  - 加载 .env（数据库连接等环境变量：DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD）
  *  - 以 support/bootstrap.php 相同方式加载全部 config（含 plugin/crud/config/*）
  *    —— 不启动 worker、不注册路由，仅让 config('plugin.crud.*') / support\Db 可用
  *
- * --business-sql 接受多个（可重复或逗号分隔），路径为相对插件目录（plugin/crud/）
- *  或绝对路径；连接名走 config('plugin.crud.crud.business_connection')（默认 mysql_business），
- * 可用 --business-connection=<name> 临时覆盖。
+ * --business-sql 接受多个（可重复或逗号分隔），路径为宿主项目相对路径或绝对路径；
+ * 连接名走 config('plugin.crud.crud.business_connection')（默认 mysql_business，
+ * 单库架构下与认证库 mysql 指向同一 DB_NAME），可用 --business-connection=<name> 临时覆盖。
  *
  * 注意：php -S 或常驻进程场景请勿在服务运行中执行建表，MySQL DDL 会锁表。
  */

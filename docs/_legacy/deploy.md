@@ -1,12 +1,12 @@
 # 生产部署指南（nginx + supervisor + 备份）
 
-适用于 `huafei/webman-crud` 接入后的新项目上线。
+适用于 `amcolin/webman-curd-admin` 接入后的新项目上线。
 
 ## 0. 首次安装（新项目，部署前完成一次）
 
 ```bash
 # ① 装包（自动：拷贝 plugin/crud + 拉齐依赖 webman/database/redis/casbin + 生成 config）
-composer require huafei/webman-crud:^1.0
+composer require amcolin/webman-curd-admin:^1.0
 #    audit 红字（访问 packagist.org 失败）仅尾部告警、exit 0；不想看到就 alias 到
 #    scripts/composer.sh（详见主 README FAQ）
 

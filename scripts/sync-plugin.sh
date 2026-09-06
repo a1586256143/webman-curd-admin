@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ============================================================
-# 升级 webman-crud：把 vendor 里最新包的 plugin/crud 重新同步到宿主
+# 升级 webman-curd-admin：把 vendor 里最新包的 plugin/crud 重新同步到宿主
 #
 # 背景：src/Install.php 的拷贝策略是「plugin/crud 已存在则跳过」（保护本地改动），
 #       因此 composer update 拉到新版本后，plugin/crud 内的文件（api/Install.php、
 #       config/crud.php 等）不会自动更新。本脚本用于升级场景：
 #         1) 备份当前 plugin/crud → plugin/crud.bak-<时间戳>（含 config/keys）
-#         2) 从 vendor/huafei/webman-crud/plugin/crud 整体重拷
+#         2) 从 vendor/amcolin/webman-curd-admin/plugin/crud 整体重拷
 #
 # 用法：在宿主项目根执行
 #   bash plugin/crud/../../scripts/sync-plugin.sh        # 绝对/相对路径均可
@@ -20,17 +20,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # scripts/ 的上一级即宿主项目根（脚本可能在 vendor 包内 scripts/ 或项目 scripts/）
 HOST_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# 若脚本位于 vendor/huafei/webman-crud/scripts → 宿主根是上上级 vendor/huafei/webman-crud/../../..
-if [[ "${SCRIPT_DIR}" == *"/vendor/huafei/webman-crud/scripts" ]]; then
+# 若脚本位于 vendor/amcolin/webman-curd-admin/scripts → 宿主根是上上级 vendor/amcolin/webman-curd-admin/../../..
+if [[ "${SCRIPT_DIR}" == *"/vendor/amcolin/webman-curd-admin/scripts" ]]; then
     HOST_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 fi
 
-SRC="${HOST_ROOT}/vendor/huafei/webman-crud/plugin/crud"
+SRC="${HOST_ROOT}/vendor/amcolin/webman-curd-admin/plugin/crud"
 DST="${HOST_ROOT}/plugin/crud"
 
 if [[ ! -d "${SRC}" ]]; then
     echo "[ERROR] vendor 内未找到插件源码: ${SRC}"
-    echo "       请确认已 composer require huafei/webman-crud（或先 composer update）"
+    echo "       请确认已 composer require amcolin/webman-curd-admin（或先 composer update）"
     exit 1
 fi
 

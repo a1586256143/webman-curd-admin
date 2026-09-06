@@ -4,9 +4,12 @@
  *
  * 配置读取优先级（高 → 低）：
  *   1. 宿主 config/crud.php（推荐入口，顶层同名键覆盖本文件默认值；
- *      首次 composer require 时由 src/Install.php 自动生成，不会覆盖宿主 .env）
- *   2. .env 的 CRUD_* 键（兼容旧用法：CRUD_ADMIN_CONNECTION 等）
- *   3. 本文件默认值（对齐「嵌入宿主开发」时的取值）
+ *      首次 composer require 时由 src/Install.php 自动生成）
+ *   2. 本文件默认值
+ *
+ * 注：数据库连接不在插件配置里——由 .env 的 DB_* 键承载，config/database.php 用
+ * env() 读取；认证库与业务库【同一库】（单库架构）。旧 CRUD_* 环境变量用法已移除，
+ * 插件调参统一收敛到宿主 config/crud.php。
  *
  * 本文件声明「与宿主约定」的可调点：
  *  - 库连接名：认证/菜单/RBAC 策略库（admin_connection）与业务模型库（business_connection）
@@ -17,10 +20,10 @@
 $defaults = [
     // 认证/菜单/RBAC 库连接名（admin_users / admin_tokens / roles / menus /
     // role_permission / crud_configs / casbin_rule 所在库）
-    'admin_connection' => env('CRUD_ADMIN_CONNECTION', 'mysql'),
+    'admin_connection' => 'mysql',
 
-    // 业务库连接名（业务模型 CRUD 默认所在库）
-    'business_connection' => env('CRUD_BUSINESS_CONNECTION', 'mysql_business'),
+    // 业务库连接名（业务模型 CRUD 默认所在库；单库架构下与 mysql 指向同一 DB_NAME）
+    'business_connection' => 'mysql_business',
 
     // 宿主模型扫描约定（自动登记进 ModelRegistry）
     'model_dir'       => base_path() . '/app/model',
@@ -50,17 +53,17 @@ $defaults = [
     //   true          = 走 casbin 校验，obj 由路径推导（/api/admin/users → obj=admin act=users）
     // 新项目建议设 true：默认 admin 角色有 p,admin,*,* 不受影响，
     // 其余角色需在「角色管理」勾选对应权限后才可访问。
-    'admin_require_permission' => env('CRUD_ADMIN_REQUIRE_PERMISSION', false),
+    'admin_require_permission' => false,
 
     // 插件内置前端（dist 放 plugin/crud/public/，见 install.sql 同目录 README）
     // page_base：页面与静态资源的 URL 前缀（无尾斜杠），前端构建时 VITE_BASE_PATH 需一致
-    'page_base'  => rtrim(env('CRUD_PAGE_BASE', '/app/crud'), '/'),
+    'page_base'  => '/app/crud',
     'public_dir' => dirname(__DIR__) . '/public',
 ];
 
-// 宿主 config/crud.php 顶层同名键覆盖默认值（无同名键的项保持默认；database 组等
-// 额外键一并并入，仅作为集中配置载体，不参与插件运行逻辑）。
-// 新项目推荐全部插件配置写在此文件，无需在宿主 .env 配 DB_* / CRUD_*。
+// 宿主 config/crud.php 顶层同名键覆盖默认值（无同名键的项保持默认）。
+// 插件调参统一写在该文件（宿主根 config/crud.php），由 src/Install.php 首次
+// composer require 时自动生成。
 if (function_exists('base_path')) {
     $hostCrudFile = base_path() . '/config/crud.php';
     if (is_file($hostCrudFile)) {

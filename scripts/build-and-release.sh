@@ -8,7 +8,7 @@
 #  - 需要 env -u NODE_OPTIONS npm（沙箱/IDE 注入 fs broker 时）
 #
 # 流程：build-frontend.sh（按 VITE_BASE_PATH 构建 → 回灌 plugin/crud/public/）
-#       → release-zip.sh（打 dist/webman-crud-vX.Y.Z.zip）
+#       → release-zip.sh（打 dist/webman-curd-admin-vX.Y.Z.zip）
 #
 # 用法：
 #   CRUD_FRONTEND_DIR=~/code/crud-frontend ./scripts/build-and-release.sh
