@@ -6,8 +6,8 @@ node_modules
 .idea/
 
 # 安装时生成（勿入包）
-plugin/crud/config/keys/
-plugin/crud/install.lock
+plugin/curd/config/keys/
+plugin/curd/install.lock
 
 # 本地发布脚本输出
 /dist/

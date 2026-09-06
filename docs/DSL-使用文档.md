@@ -1,35 +1,36 @@
 # webman-huafei-platform 后台 DSL 使用文档
 
-> 适用版本：2026-09-06（Schema 页面引擎已迁入 plugin/crud 插件；插件自带「测试管理」后台示例
-> my_test / MyTestController，安装时自动建表 + 幂等补菜单，可作为新控制器最小参考）
+> 适用版本：2026-09-06（Schema 页面引擎已迁入 plugin/curd 插件；插件自带「测试管理」后台示例
+> my_test / MyTestController——安装器把示例代码落位到宿主根 `app/controller/admin/api/MyTestController.php`
+> + `app/model/MyTest.php`（源在包 `examples/`），安装时自动建表 + 幂等补菜单，可作为新控制器最小参考）
 >
 > 本文面向「用 DSL 在话费平台后台造页面」的开发者。后端 DSL 分两类：
 >
 > | DSL | 用途 | 形态 | 代码位置 |
 > |---|---|---|---|
-> | **CRUD DSL** | 列表管理页（表格/搜索/表单/自定义操作/导出/汇总条） | `Grid/Form/Filter/Column/Action` 流式声明 | `plugin/crud/app/dsl/` |
-> | **Schema 页面 DSL** | 展示型页面（首页/看板，组件套组件 + 24 栏栅格 + 数据注入） | `PageSchema + blocks` 编译成 JSON 组件树 | `plugin/crud/app/schema/` |
+> | **CURD DSL** | 列表管理页（表格/搜索/表单/自定义操作/导出/汇总条） | `Grid/Form/Filter/Column/Action` 流式声明 | `plugin/curd/app/dsl/` |
+> | **Schema 页面 DSL** | 展示型页面（首页/看板，组件套组件 + 24 栏栅格 + 数据注入） | `PageSchema + blocks` 编译成 JSON 组件树 | `plugin/curd/app/schema/` |
 
 ---
 
 ## 1. 分层与文件归属（先读这一段）
 
-自研 CRUD 插件 `plugin/crud` 提供**通用引擎**，业务项目（本项目 `webman-huafei-platform`）在 **app 层**消费它。两者严格分工：
+自研 CURD 插件 `plugin/curd` 提供**通用引擎**，业务项目（本项目 `webman-huafei-platform`）在 **app 层**消费它。两者严格分工：
 
 | 内容 | 归属 | 说明 |
 |---|---|---|
-| Schema 引擎（SchemaNode / PageSchema / PageRegistry / blocks 全部节点类） | 插件 `plugin/crud/app/schema/` | 命名空间 `plugin\crud\app\schema\*`，与业务无关 |
-| 自定义页面分发控制器 `CustomPageController`（`.vue` + Schema 两种分发） | 插件 `plugin/crud/app/controller/CustomPageController.php` | 路由在插件 `plugin/crud/config/route.php` |
+| Schema 引擎（SchemaNode / PageSchema / PageRegistry / blocks 全部节点类） | 插件 `plugin/curd/app/schema/` | 命名空间 `plugin\curd\app\schema\*`，与业务无关 |
+| 自定义页面分发控制器 `CustomPageController`（`.vue` + Schema 两种分发） | 插件 `plugin/curd/app/controller/CustomPageController.php` | 路由在插件 `plugin/curd/config/route.php` |
 | Schema / .vue 页面 **内容接口** 路由 `GET /api/custom/pages`、`GET /api/custom/page` | 插件 | 随插件自动加载 |
 | **业务 Schema 页面类**（如首页 `HomePage`） | 业务 `app/controller/admin/api/HomePage.php` | 用户级文件，自己 `use` 插件 DSL |
 | Schema 页面**数据接口**（dataApi 指向的业务统计） | 业务 `app/controller/admin/api/SchemaPageDataController.php` | 查业务表，属业务逻辑 |
 | Schema 页面**注册**（`PageRegistry::register`） | 业务 `config/route.php` 顶部 | 业务对插件扩展点的声明 |
 | `.vue` 自定义页面文件 | 业务 `app/custom/pages/*.vue` | 插件只读取分发，不存放 |
-| CRUD 业务控制器（Model + Grid） | 业务 `app/controller/admin/api/*Controller.php` | extends `BaseAdminController` |
-| CRUD 路由注册 `RouteControllerRegistry::registerMany` | 业务 `config/route.php` | |
+| CURD 业务控制器（Model + Grid） | 业务 `app/controller/admin/api/*Controller.php` | extends `BaseAdminController` |
+| CURD 路由注册 `RouteControllerRegistry::registerMany` | 业务 `config/route.php` | |
 
 **页面访问入口约定**（前端统一承载，菜单 path 填它）：
-- CRUD 页：`/mobile-recharge-orders` 这类（即 registerMany 的 key）
+- CURD 页：`/mobile-recharge-orders` 这类（即 registerMany 的 key）
 - Schema / .vue 自定义页：`/custom-page/<页面名>`（前端 catch-all 路由命中）
 
 ---
@@ -44,7 +45,7 @@
 { "type": "card", "props": { "header": "今日概览" }, "children": [ … ] }
 ```
 
-`type` 在**前后端注册表**里登记（后端 `plugin/crud/app/schema/blocks/` 的类，前端 `frontend/src/schema/componentRegistry.js`），`props` 走白名单透传。**Schema 是纯数据、无脚本**，比自定义 .vue 更可控。
+`type` 在**前后端注册表**里登记（后端 `plugin/curd/app/schema/blocks/` 的类，前端 `frontend/src/schema/componentRegistry.js`），`props` 走白名单透传。**Schema 是纯数据、无脚本**，比自定义 .vue 更可控。
 
 ### 2.2 新建一个页面（三步）
 
@@ -54,10 +55,10 @@
 <?php
 namespace app\controller\admin\api;
 
-use plugin\crud\app\schema\PageSchema;
-use plugin\crud\app\schema\blocks\Col;
-use plugin\crud\app\schema\blocks\Card;
-use plugin\crud\app\schema\blocks\Row;
+use plugin\curd\app\schema\PageSchema;
+use plugin\curd\app\schema\blocks\Col;
+use plugin\curd\app\schema\blocks\Card;
+use plugin\curd\app\schema\blocks\Row;
 
 class DashPage
 {
@@ -182,16 +183,16 @@ $node->node($anyNode);                               // 挂载任意已构造好
 
 以加一个「链接按钮」为例：
 
-1. **后端** `plugin/crud/app/schema/blocks/Button.php`：`class Button extends SchemaNode { __construct(){ $this->type='button'; } public function text($v){ return $this->set('text',$v); } }`（并可在 `HasBlocks::button()` 加便捷入口）；
+1. **后端** `plugin/curd/app/schema/blocks/Button.php`：`class Button extends SchemaNode { __construct(){ $this->type='button'; } public function text($v){ return $this->set('text',$v); } }`（并可在 `HasBlocks::button()` 加便捷入口）；
 2. **前端** `componentRegistry.js` 登记一行：`button: { component: ElButton, props: ['text','type','link', ...COMMON] }`。
 
 渲染器零改动。当前已注册 type 全表 = 第 2.4~2.6 节列出的 17 个。
 
 ---
 
-## 3. CRUD 业务页 DSL
+## 3. CURD 业务页 DSL
 
-### 3.1 新增一个 CRUD 页（五步）
+### 3.1 新增一个 CURD 页（五步）
 
 1. **Model**（业务 `app/model/`）：extends 平台 BaseModel、设 `$table`，必要时加常量字典；
 2. **Controller**（业务 `app/controller/admin/api/`）：extends `BaseAdminController`，声明 `$modelClass / $title`，实现 `grid()`；
@@ -343,8 +344,8 @@ $grid->setRules([...]);                             // 提交前校验（参考�
 ## 4. 菜单 / 权限 / 生效
 
 - **菜单命令**：`php webman make:permission --name 页面名 --slug 唯一slug --type 1 --path <path> --icon <el-icon名> --sort n`；`--type 1` 为菜单页。删除/更新菜单在后台「菜单管理」或 `php webman make:permission` 交互内处理。
-- **path 取值**：CRUD 页 = registerMany key（`/mobile-recharge-orders`）；Schema/.vue 页 = `/custom-page/<name>`。
-- **鉴权中间件**：CRUD 与 custom 路由都挂在统一 `CorsMiddleware + AuthCheck + PermissionCheck` 上。白名单段（仅需登录、不校验权限节点）：`/api/auth/`、`/api/menu`、`/api/crud/config`、`/api/admin/`、`/api/custom/`、`/api/schema/`（业务 Schema 数据接口段，白名单在 `app/middleware/PermissionCheck.php`）。
+- **path 取值**：CURD 页 = registerMany key（`/mobile-recharge-orders`）；Schema/.vue 页 = `/custom-page/<name>`。
+- **鉴权中间件**：CURD 与 custom 路由都挂在统一 `CorsMiddleware + AuthCheck + PermissionCheck` 上。白名单段（仅需登录、不校验权限节点）：`/api/auth/`、`/api/menu`、`/api/curd/config`、`/api/admin/`、`/api/custom/`、`/api/schema/`（业务 Schema 数据接口段，白名单在 `app/middleware/PermissionCheck.php`）。
 - **接口加密**：请求/响应默认走 RSA+AES 信封（`ApiCrypto` 全局中间件，`X-Encrypt-Data` / `{data:...}`），前端 `request` 拦截器透明处理——**DSL 层无感知**。数据接口直接返回 `json(['code'=>200,'msg'=>'ok','data'=>...])` 即可。
 - **生效方式**：
   - 新增/修改 PHP 类、路由、注册 → `php start.php restart`（改 config 与常驻内存类需重启；纯路由/页面内容 reload 亦可）；
@@ -368,4 +369,4 @@ $grid->setRules([...]);                             // 提交前校验（参考�
 
 ---
 
-*文档配套可运行示例：Schema → `app/controller/admin/api/HomePage.php` + `SchemaPageDataController`；CRUD → `app/controller/admin/api/MROrdersController.php` + `app/controller/admin/api/actions/`；最小参考 → 插件内置「测试管理」`MyTestController`。插件安装 / 宿主内升级 / 生产部署见本目录《插件安装升级与生产部署》。*
+*文档配套可运行示例：Schema → `app/controller/admin/api/HomePage.php` + `SchemaPageDataController`；CURD → `app/controller/admin/api/MROrdersController.php` + `app/controller/admin/api/actions/`；最小参考 → 安装器落位到宿主根的示例 `app/controller/admin/api/MyTestController.php`（源在 `examples/`，含完整写法注释）。插件安装 / 宿主内升级 / 生产部署见本目录《插件安装升级与生产部署》。*

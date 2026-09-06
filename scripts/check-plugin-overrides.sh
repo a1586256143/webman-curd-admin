@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# 升级前检查：检测「项目内 plugin/crud」相对「插件包原始副本」的本地改动。
+# 升级前检查：检测「项目内 plugin/curd」相对「插件包原始副本」的本地改动。
 #
-# 背景：webman 的 support\Plugin::install 会把插件包内的 plugin/crud 覆盖式
-#       拷贝到宿主项目的 plugin/crud。若你在项目内改过插件文件，composer update
+# 背景：webman 的 support\Plugin::install 会把插件包内的 plugin/curd 覆盖式
+#       拷贝到宿主项目的 plugin/curd。若你在项目内改过插件文件，composer update
 #       会静默覆盖这些改动且无任何提示 —— 本脚本提前暴露风险。
 #
 # 用法：
@@ -15,16 +15,16 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG_PLUGIN="$SCRIPT_DIR/../plugin/crud"          # 插件包内的权威副本
+PKG_PLUGIN="$SCRIPT_DIR/../plugin/curd"          # 插件包内的权威副本
 PROJECT_ROOT="${1:-$(pwd)}"
-PROJ_PLUGIN="$PROJECT_ROOT/plugin/crud"
+PROJ_PLUGIN="$PROJECT_ROOT/plugin/curd"
 
 if [ ! -d "$PKG_PLUGIN" ]; then
   echo "错误: 找不到插件包副本: $PKG_PLUGIN" >&2
   exit 2
 fi
 if [ ! -d "$PROJ_PLUGIN" ]; then
-  echo "项目 $PROJECT_ROOT 未安装 plugin/crud（先 composer require）" >&2
+  echo "项目 $PROJECT_ROOT 未安装 plugin/curd（先 composer require）" >&2
   exit 2
 fi
 

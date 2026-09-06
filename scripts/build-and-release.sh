@@ -3,25 +3,25 @@
 # 构建内置前端并打包发布 zip（一体化）。
 #
 # 前置：
-#  - 环境变量 CRUD_FRONTEND_DIR 指向前端源码仓库（或首个参数传入）
+#  - 环境变量 CURD_FRONTEND_DIR 指向前端源码仓库（或首个参数传入）
 #  - 前端源码仓库为独立 git 仓库（建议），与插件包解耦
 #  - 需要 env -u NODE_OPTIONS npm（沙箱/IDE 注入 fs broker 时）
 #
-# 流程：build-frontend.sh（按 VITE_BASE_PATH 构建 → 回灌 plugin/crud/public/）
+# 流程：build-frontend.sh（按 VITE_BASE_PATH 构建 → 回灌 plugin/curd/public/）
 #       → release-zip.sh（打 dist/webman-curd-admin-vX.Y.Z.zip）
 #
 # 用法：
-#   CRUD_FRONTEND_DIR=~/code/crud-frontend ./scripts/build-and-release.sh
-#   ./scripts/build-and-release.sh ~/code/crud-frontend
+#   CURD_FRONTEND_DIR=~/code/curd-frontend ./scripts/build-and-release.sh
+#   ./scripts/build-and-release.sh ~/code/curd-frontend
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-FRONTEND_DIR="${1:-${CRUD_FRONTEND_DIR:-}}"
+FRONTEND_DIR="${1:-${CURD_FRONTEND_DIR:-}}"
 if [ -z "$FRONTEND_DIR" ]; then
-  echo "用法: $0 <前端源码目录>   （或设置环境变量 CRUD_FRONTEND_DIR）" >&2
+  echo "用法: $0 <前端源码目录>   （或设置环境变量 CURD_FRONTEND_DIR）" >&2
   exit 1
 fi
 if [ ! -f "$FRONTEND_DIR/package.json" ]; then

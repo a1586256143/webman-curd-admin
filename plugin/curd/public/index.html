@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Webman Admin - 现代化后台管理系统" />
+    <meta name="theme-color" content="#409EFF" />
+    <meta name="msapplication-TileColor" content="#409EFF" />
+
+    <!-- 首屏加载前同步恢复主题，避免刷新时先闪现默认背景。 -->
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('admin_theme') || 'ocean';
+          var root = document.documentElement;
+          root.dataset.theme = theme;
+          root.classList.toggle('dark', theme === 'dark');
+        } catch (e) {
+          document.documentElement.dataset.theme = 'ocean';
+        }
+      }());
+    </script>
+    
+    <!-- 预连接到关键域名 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- 加载状态样式 -->
+    <style>
+      /* 主题变量 */
+      :root {
+        --primary-color: #409EFF;
+        --success-color: #67C23A;
+        --warning-color: #E6A23C;
+        --danger-color: #F56C6C;
+        --info-color: #909399;
+        --bg-color: #F5F7FA;
+        --text-color: #303133;
+        --border-color: #DCDFE6;
+      }
+      
+      /* 暗黑模式 */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-color: #1A1A1A;
+          --text-color: #E5EAF3;
+          --border-color: #4C4D4F;
+        }
+      }
+      
+      /* 加载动画 */
+      #app-loading {
+        --loading-bg: #f5f7fb;
+        --loading-text: #1f2937;
+        --loading-accent: #2563eb;
+        --loading-spinner-track: rgba(37, 99, 235, 0.2);
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--loading-bg);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+      }
+      
+      #app-loading.hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+      
+      .loading-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid var(--loading-spinner-track);
+        border-top-color: var(--loading-accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      .loading-text {
+        margin-top: 20px;
+        color: var(--loading-text);
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: 1px;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      
+      /* 首屏加载主题：与应用内 ocean/light/dark/green 保持一致。 */
+      html[data-theme='ocean'] #app-loading {
+        --loading-bg: #eef4ff;
+        --loading-text: #172554;
+        --loading-accent: #2563eb;
+        --loading-spinner-track: rgba(37, 99, 235, 0.2);
+      }
+
+      html[data-theme='light'] #app-loading {
+        --loading-bg: #f8fafc;
+        --loading-text: #334155;
+        --loading-accent: #64748b;
+        --loading-spinner-track: rgba(100, 116, 139, 0.2);
+      }
+
+      html[data-theme='dark'] #app-loading {
+        --loading-bg: #020617;
+        --loading-text: #e2e8f0;
+        --loading-accent: #60a5fa;
+        --loading-spinner-track: rgba(96, 165, 250, 0.25);
+      }
+
+      html[data-theme='green'] #app-loading {
+        --loading-bg: #effcf9;
+        --loading-text: #134e4a;
+        --loading-accent: #0f9f8f;
+        --loading-spinner-track: rgba(15, 159, 143, 0.2);
+      }
+
+      html[data-theme='purple'] #app-loading {
+        --loading-bg: #f6f1ff;
+        --loading-text: #3b266d;
+        --loading-accent: #8b5cf6;
+        --loading-spinner-track: rgba(139, 92, 246, 0.2);
+      }
+
+      html[data-theme='orange'] #app-loading {
+        --loading-bg: #fff5ed;
+        --loading-text: #642f16;
+        --loading-accent: #ea580c;
+        --loading-spinner-track: rgba(234, 88, 12, 0.2);
+      }
+
+      html[data-theme='rose'] #app-loading {
+        --loading-bg: #fff1f4;
+        --loading-text: #641b2d;
+        --loading-accent: #e11d48;
+        --loading-spinner-track: rgba(225, 29, 72, 0.2);
+      }
+
+      html[data-theme='slate'] #app-loading {
+        --loading-bg: #f1f4f7;
+        --loading-text: #263445;
+        --loading-accent: #475569;
+        --loading-spinner-track: rgba(71, 85, 105, 0.2);
+      }
+
+      /* 字体优化 */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      
+      /* 滚动条美化 */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 3px;
+        transition: background 0.3s;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+      }
+      
+      /* 暗黑模式滚动条 */
+      @media (prefers-color-scheme: dark) {
+        ::-webkit-scrollbar-track {
+          background: #2c2c2c;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: #555;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: #666;
+        }
+      }
+    </style>
+    
+    <title>Webman Admin - 现代化后台管理系统</title>
+    <script type="module" crossorigin src="/app/curd/assets/index-ba2889b6.js"></script>
+    <link rel="modulepreload" crossorigin href="/app/curd/assets/vue-vendor-3c5d4443.js">
+    <link rel="modulepreload" crossorigin href="/app/curd/assets/axios-058efe08.js">
+    <link rel="stylesheet" href="/app/curd/assets/index-8975640f.css">
+  </head>
+  <body>
+    <!-- 加载动画 -->
+    <div id="app-loading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">加载中...</div>
+    </div>
+    
+    <div id="app"></div>
+    
+    
+    
+    <script>
+      // 隐藏加载动画
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var loading = document.getElementById('app-loading');
+          if (loading) {
+            loading.classList.add('hidden');
+            setTimeout(function() {
+              loading.remove();
+            }, 500);
+          }
+        }, 300);
+      });
+      
+      // 如果 5 秒后还没加载完成，也隐藏加载动画
+      setTimeout(function() {
+        var loading = document.getElementById('app-loading');
+        if (loading && !loading.classList.contains('hidden')) {
+          loading.classList.add('hidden');
+          setTimeout(function() {
+            loading.remove();
+          }, 500);
+        }
+      }, 5000);
+    </script>
+  </body>
+</html>

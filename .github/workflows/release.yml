@@ -39,20 +39,20 @@ jobs:
       # 3. 内置前端产物完整性（index.html + assets/ 必须存在）
       - name: Verify frontend dist
         run: |
-          test -f plugin/crud/public/index.html
-          test -d plugin/crud/public/assets
-          N=$(find plugin/crud/public -type f | wc -l)
+          test -f plugin/curd/public/index.html
+          test -d plugin/curd/public/assets
+          N=$(find plugin/curd/public -type f | wc -l)
           echo "dist files: $N"
           test "$N" -gt 10
 
       # 4. 关键文件存在性（安装器 + DDL + 路由 + 前端控制器）
       - name: Verify key files
         run: |
-          test -f plugin/crud/install.sql
-          test -f plugin/crud/install.php
-          test -f plugin/crud/api/Install.php
-          test -f plugin/crud/config/route.php
-          test -f plugin/crud/app/controller/PageController.php
+          test -f plugin/curd/install.sql
+          test -f plugin/curd/install.php
+          test -f plugin/curd/api/Install.php
+          test -f plugin/curd/config/route.php
+          test -f plugin/curd/app/controller/PageController.php
 
       # 5. 打 zip（排除 keys / install-business.sql / release-zip.sh）
       - name: Build zip

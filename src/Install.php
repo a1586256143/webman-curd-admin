@@ -1,5 +1,5 @@
 <?php
-namespace Amcolin\WebmanCrudAdmin;
+namespace Amcolin\WebmanCurdAdmin;
 
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
@@ -12,11 +12,11 @@ use RecursiveIteratorIterator;
  * 机制（webman 官方应用插件分发）：
  *   framework 的 support\Plugin::install 读取本次被安装包的 PSR-4，定位到
  *   {命名空间}Install::WEBMAN_PLUGIN 常量，再调用本类的 install()——
- *   把本包内的 plugin/crud 同步到宿主 {项目根}/plugin/crud。
+ *   把本包内的 plugin/curd 同步到宿主 {项目根}/plugin/curd。
  *   因此宿主只需 `composer require amcolin/webman-curd-admin`，无需任何手动拷贝。
  *
  * 幂等安全策略：
- *   - 目标 plugin/crud 已存在（本地开发中的插件）→ 跳过，绝不覆盖本地改动；
+ *   - 目标 plugin/curd 已存在（本地开发中的插件）→ 跳过，绝不覆盖本地改动；
  *   - 仅当目标不存在时整体拷贝，排除 .git/node_modules 等构建目录。
  */
 class Install
@@ -24,7 +24,7 @@ class Install
     /**
      * 插件名（必须与包内 plugin/{name} 目录名一致）
      */
-    const WEBMAN_PLUGIN = 'crud';
+    const WEBMAN_PLUGIN = 'curd';
 
     /**
      * 拷贝时排除的目录/文件（相对插件根）
@@ -37,23 +37,24 @@ class Install
      */
     public static function install($isFirst = true): void
     {
-        $src = __DIR__ . '/../plugin/crud';
+        $src = __DIR__ . '/../plugin/curd';
         $root = self::projectRoot();
-        $dst = $root . '/plugin/crud';
+        $dst = $root . '/plugin/curd';
         if (!is_dir($src)) {
             self::ensureDatabaseConfig($root);
             return;
         }
         if (is_dir($dst)) {
-            echo "  [webman-curd-admin] plugin/crud 已存在，跳过拷贝（保留本地版本）\n";
+            echo "  [webman-curd-admin] plugin/curd 已存在，跳过拷贝（保留本地版本）\n";
         } else {
             if (!is_dir(dirname($dst))) {
                 mkdir(dirname($dst), 0755, true);
             }
             self::copyDir($src, $dst);
-            echo "  [webman-curd-admin] 已安装应用插件: plugin/crud\n";
+            echo "  [webman-curd-admin] 已安装应用插件: plugin/curd\n";
         }
-        self::ensureCrudConfig($root);
+        self::ensureExamples($root);
+        self::ensureCurdConfig($root);
         self::ensureDatabaseConfig($root);
     }
 
@@ -68,7 +69,7 @@ class Install
 
     /**
      * 卸载钩子：composer 卸载时无精确目标目录上下文，且删除宿主 plugin/
-     * 下目录有风险，故不自动删除；请手动删除 plugin/crud 后 reload 生效。
+     * 下目录有风险，故不自动删除；请手动删除 plugin/curd 后 reload 生效。
      */
     public static function uninstall(): void
     {
@@ -76,34 +77,80 @@ class Install
     }
 
     /**
-     * 确保宿主存在 config/crud.php（本插件的插件调参入口）：
+     * 确保宿主存在后台 CURD 示例（MyTestController「测试管理」，给用户看的示例文件）：
+     *   - 控制器：{项目}/app/controller/admin/api/MyTestController.php
+     *   - 模型：  {项目}/app/model/MyTest.php
+     * 示例源在包内 examples/ 目录；目标已存在则跳过（宿主可自由修改/删除）。
+     * 控制器与模型由插件 ModelRegistry 启动扫描自动登记，路由注册需在宿主
+     * config/route.php 加一行（本方法只打印引导，不自动改宿主路由文件）。
+     */
+    protected static function ensureExamples(string $root): void
+    {
+        $examplesDir = __DIR__ . '/../examples';
+        if (!is_dir($examplesDir)) {
+            return;
+        }
+        $map = [
+            'app/controller/admin/api/MyTestController.php' => 'MyTestController.php',
+            'app/model/MyTest.php'                          => 'MyTest.php',
+        ];
+        $created = [];
+        foreach ($map as $relative => $source) {
+            $dst = $root . '/' . $relative;
+            if (is_file($dst)) {
+                continue; // 已存在（宿主自建或本包先前落位），绝不覆盖
+            }
+            $src = $examplesDir . '/' . $source;
+            if (!is_file($src)) {
+                continue;
+            }
+            if (!is_dir(dirname($dst))) {
+                mkdir(dirname($dst), 0755, true);
+            }
+            if (@copy($src, $dst)) {
+                $created[] = $relative;
+            }
+        }
+        if ($created) {
+            echo "  [webman-curd-admin] 已落位后台 CURD 示例（可自由修改/删除）：\n";
+            foreach ($created as $rel) {
+                echo "      - $rel\n";
+            }
+            echo "  [webman-curd-admin] 路由注册（宿主 config/route.php，示例已含写法注释）：\n";
+            echo "      RouteControllerRegistry::register('/my-test', \\app\\controller\\admin\\api\\MyTestController::class);\n";
+            echo "      或加入 RouteControllerRegistry::registerMany([...]) 数组。my_test 表与「测试管理」菜单由安装向导自动创建。\n";
+        }
+    }
+
+    /**
+     * 确保宿主存在 config/curd.php（本插件的插件调参入口）：
      *   - 缺失 → 生成默认模板（仅插件调参，不含数据库）；
      *   - 已存在 → 绝不覆盖（可能已被用户/其他工具写入）。
      *
      * 数据库连接不在这里：由 .env 的 DB_* 键承载（config/database.php 用 env() 读取）。
-     * 该文件的顶层同名键覆盖 plugin/crud/config/crud.php 的内置默认值。
+     * 该文件的顶层同名键覆盖 plugin/curd/config/curd.php 的内置默认值。
      */
-    protected static function ensureCrudConfig(string $root): void
+    protected static function ensureCurdConfig(string $root): void
     {
         $configDir = $root . '/config';
-        $file = $configDir . '/crud.php';
+        $file = $configDir . '/curd.php';
         if (!is_dir($configDir)) {
             return;
         }
         if (is_file($file)) {
             return; // 已有配置，不覆盖
         }
-        file_put_contents($file, self::crudConfigTemplate());
-        echo "  [webman-curd-admin] 已生成集中配置 config/crud.php（插件调参入口；数据库连接走 .env 的 DB_* 键）\n";
+        file_put_contents($file, self::curdConfigTemplate());
+        echo "  [webman-curd-admin] 已生成集中配置 config/curd.php（插件调参入口；数据库连接走 .env 的 DB_* 键）\n";
     }
 
     /**
-     * 宿主 config/crud.php 默认模板
+     * 宿主 config/curd.php 默认模板
      *
      * 只承载【插件调参】；数据库信息不放这里（安装向导写入宿主 .env 的 DB_*，
      * config/database.php 用 env() 读取）。认证库与业务库【同一库】。
      */
-    protected static function crudConfigTemplate(): string
+    protected static function curdConfigTemplate(): string
     {
         return <<<'PHP'
 <?php
@@ -114,14 +161,14 @@ class Install
  * 职责边界：
  *   - 本文件只做【插件调参】。数据库连接信息（DB_HOST / DB_PORT / DB_NAME /
  *     DB_USER / DB_PASSWORD）写入宿主 .env，由 config/database.php 用 env() 读取
- *     （Web 安装向导会自动写 .env；手动部署可参考 plugin/crud/env.example）。
+ *     （Web 安装向导会自动写 .env；手动部署可参考 plugin/curd/env.example）。
  *   - 认证库与业务库【始终同一库】（单库架构），已无 DB_BUSINESS_NAME / 分库选项。
- *   - 顶层键与 plugin/crud/config/crud.php 内置默认值同名时覆盖生效；
+ *   - 顶层键与 plugin/curd/config/curd.php 内置默认值同名时覆盖生效；
  *     不写的键沿用内置默认。
  */
 return [
     // 前端挂载前缀（改了需同步重建前端：VITE_BASE_PATH）
-    'page_base' => '/app/crud',
+    'page_base' => '/app/curd',
 
     // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
     'admin_require_permission' => false,
@@ -153,7 +200,7 @@ PHP;
                 if (!str_contains($content, 'mysql_business')) {
                     echo "  [webman-curd-admin] 提示：宿主 config/database.php 未含 mysql_business 连接，业务表建表/迁移会失败；\n";
                     echo "      单库架构下它应与 mysql 指向同一 DB_NAME。可删除 config/database.php 后重跑 composer require/update 由本包重新生成，\n";
-                    echo "      或参考 plugin/crud/database.business.example.php 手动补上该连接。\n";
+                    echo "      或参考 plugin/curd/database.business.example.php 手动补上该连接。\n";
                 }
                 return; // 已有自定义配置，跳过
             }
@@ -198,7 +245,7 @@ return [
             'driver'    => 'mysql',
             'host'      => env('DB_HOST', '127.0.0.1'),
             'port'      => env('DB_PORT', '3306'),
-            'database'  => env('DB_NAME', 'webman_crud'),
+            'database'  => env('DB_NAME', 'webman_curd'),
             'username'  => env('DB_USER', 'root'),
             'password'  => env('DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',
@@ -211,7 +258,7 @@ return [
             'driver'    => 'mysql',
             'host'      => env('DB_HOST', '127.0.0.1'),
             'port'      => env('DB_PORT', '3306'),
-            'database'  => env('DB_NAME', 'webman_crud'),
+            'database'  => env('DB_NAME', 'webman_curd'),
             'username'  => env('DB_USER', 'root'),
             'password'  => env('DB_PASSWORD', ''),
             'charset'   => 'utf8mb4',

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # ============================================================
-# 升级 webman-curd-admin：把 vendor 里最新包的 plugin/crud 重新同步到宿主
+# 升级 webman-curd-admin：把 vendor 里最新包的 plugin/curd 重新同步到宿主
 #
-# 背景：src/Install.php 的拷贝策略是「plugin/crud 已存在则跳过」（保护本地改动），
-#       因此 composer update 拉到新版本后，plugin/crud 内的文件（api/Install.php、
-#       config/crud.php 等）不会自动更新。本脚本用于升级场景：
-#         1) 备份当前 plugin/crud → plugin/crud.bak-<时间戳>（含 config/keys）
-#         2) 从 vendor/amcolin/webman-curd-admin/plugin/crud 整体重拷
+# 背景：src/Install.php 的拷贝策略是「plugin/curd 已存在则跳过」（保护本地改动），
+#       因此 composer update 拉到新版本后，plugin/curd 内的文件（api/Install.php、
+#       config/curd.php 等）不会自动更新。本脚本用于升级场景：
+#         1) 备份当前 plugin/curd → plugin/curd.bak-<时间戳>（含 config/keys）
+#         2) 从 vendor/amcolin/webman-curd-admin/plugin/curd 整体重拷
 #
 # 用法：在宿主项目根执行
-#   bash plugin/crud/../../scripts/sync-plugin.sh        # 绝对/相对路径均可
+#   bash plugin/curd/../../scripts/sync-plugin.sh        # 绝对/相对路径均可
 #   # 或项目内已放副本：bash scripts/sync-plugin.sh
 #
 # 注意：升级前建议先跑 scripts/check-plugin-overrides.sh 检查本地是否改过插件文件，
-#       有本地改动请先自行合入备份（plugin/crud.bak-*）再删除备份。
+#       有本地改动请先自行合入备份（plugin/curd.bak-*）再删除备份。
 # ============================================================
 set -euo pipefail
 
@@ -25,8 +25,8 @@ if [[ "${SCRIPT_DIR}" == *"/vendor/amcolin/webman-curd-admin/scripts" ]]; then
     HOST_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 fi
 
-SRC="${HOST_ROOT}/vendor/amcolin/webman-curd-admin/plugin/crud"
-DST="${HOST_ROOT}/plugin/crud"
+SRC="${HOST_ROOT}/vendor/amcolin/webman-curd-admin/plugin/curd"
+DST="${HOST_ROOT}/plugin/curd"
 
 if [[ ! -d "${SRC}" ]]; then
     echo "[ERROR] vendor 内未找到插件源码: ${SRC}"
@@ -38,13 +38,13 @@ TS="$(date +%Y%m%d%H%M%S)"
 if [[ -d "${DST}" ]]; then
     BAK="${DST}.bak-${TS}"
     mv "${DST}" "${BAK}"
-    echo "[OK] 已备份现有 plugin/crud → ${BAK}"
+    echo "[OK] 已备份现有 plugin/curd → ${BAK}"
 fi
 
 mkdir -p "$(dirname "${DST}")"
 cp -R "${SRC}" "${DST}"
 rm -rf "${DST}/node_modules" "${DST}/.git" "${DST}/.idea"
 
-echo "[OK] 已从 vendor 同步最新 plugin/crud 到 ${DST}"
+echo "[OK] 已从 vendor 同步最新 plugin/curd 到 ${DST}"
 echo "     本地改动如需找回，见备份目录 ${BAK}（确认无误后可删除）"
-echo "     数据库配置：若之前已生成 config/crud.php，升级不会覆盖它（src/Install.php 跳过已存在文件）"
+echo "     数据库配置：若之前已生成 config/curd.php，升级不会覆盖它（src/Install.php 跳过已存在文件）"

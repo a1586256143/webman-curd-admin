@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Webman CURD · 安装向导</title>
+<style>
+  :root{
+    --bg:#f0f2f5; --card:#ffffff; --line:#e5e7eb; --text:#1f2329; --muted:#8a919f;
+    --brand:#2563eb; --brand-d:#1d4ed8; --ok:#16a34a; --err:#dc2626; --warn:#d97706;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  .wrap{max-width:640px;margin:0 auto;padding:36px 16px 60px}
+  header{text-align:center;margin-bottom:28px}
+  header .logo{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#2563eb,#4f46e5);display:inline-flex;align-items:center;justify-content:center;font-size:26px;color:#fff;font-weight:700;box-shadow:0 6px 18px rgba(37,99,235,.25)}
+  header h1{font-size:22px;margin-top:12px}
+  header p{color:var(--muted);font-size:13px;margin-top:6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{font-size:15px;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+  .card h2 .step{width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;display:inline-flex;align-items:center;justify-content:center;font-weight:600}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;margin-bottom:6px;color:#374151}
+  .field label .req{color:var(--err)}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  input[type=text],input[type=password],input[type=number]{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;outline:none;transition:border-color .15s
+  }
+  input:focus{border-color:var(--brand)}
+  .row{display:flex;gap:12px}
+  .row .field{flex:1}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;cursor:pointer;padding:8px 0}
+  .check input{width:16px;height:16px;accent-color:var(--brand)}
+  .btn{
+    width:100%;padding:12px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s
+  }
+  .btn:hover{background:var(--brand-d)}
+  .btn:disabled{background:#a5c1f5;cursor:not-allowed}
+  .btn.ok{background:var(--ok)}
+  .btn.ok:hover{background:#15803d}
+  /* 进度 */
+  .progress{display:none;margin-top:16px}
+  .progress .pbar{height:6px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:14px}
+  .progress .pbar i{display:block;height:100%;width:0;background:var(--brand);transition:width .3s}
+  .steps{list-style:none}
+  .steps li{display:flex;gap:8px;align-items:flex-start;padding:7px 0;font-size:13.5px;border-bottom:1px dashed #f0f0f0}
+  .steps li:last-child{border-bottom:none}
+  .steps .ic{width:18px;height:18px;flex:none;margin-top:1px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+  .ic-run{background:#dbeafe;color:var(--brand)}
+  .ic-ok{background:#dcfce7;color:var(--ok)}
+  .ic-err{background:#fee2e2;color:var(--err)}
+  .ic-info{background:#f3f4f6;color:var(--muted)}
+  .steps .msg{flex:1;word-break:break-all}
+  .steps .msg small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  /* 结果 / 已安装 */
+  .result{display:none;border-radius:var(--radius);padding:20px;margin-top:16px;font-size:14px;line-height:1.7}
+  .result.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#14532d}
+  .result.err{background:#fef2f2;border:1px solid #fecaca;color:#7f1d1d}
+  .result a{color:var(--brand)}
+  .installed-card{text-align:center;padding:34px 20px}
+  .installed-card .big{font-size:44px;margin-bottom:12px}
+  .installed-card p{color:var(--muted);font-size:13px;margin:6px 0 16px}
+  .tips{font-size:12px;color:var(--muted);line-height:1.8;margin-top:18px;background:#fafbfc;border:1px dashed #e5e7eb;border-radius:8px;padding:12px 14px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">CR</div>
+    <h1>Webman CURD 安装向导</h1>
+    <p>填写数据库与管理员信息，自动建库建表，几步完成部署</p>
+  </header>
+
+  <!-- 已安装 -->
+  <div class="card installed-card" id="installedBox" style="display:none">
+    <div class="big">✅</div>
+    <h2 style="justify-content:center">系统已安装</h2>
+    <p>检测到安装完成标记（runtime/curd-installed.lock）<br>直接进入后台登录，或删除标记文件后重新安装</p>
+    <button class="btn" style="width:auto;padding:10px 28px" onclick="location.href='/app/curd/'">进入后台 →</button>
+    <div class="tips">如需重新安装：① 删除 runtime/curd-installed.lock ② 清空/删除对应数据库 ③ 刷新本页。</div>
+  </div>
+
+  <!-- 安装表单 -->
+  <div id="formBox">
+    <div class="card">
+      <h2><span class="step">1</span>数据库连接</h2>
+      <div class="row">
+        <div class="field"><label>主机 <span class="req">*</span></label><input type="text" id="db_host" value="127.0.0.1"></div>
+        <div class="field" style="flex:0 0 110px"><label>端口 <span class="req">*</span></label><input type="number" id="db_port" value="3306"></div>
+      </div>
+      <div class="field"><label>数据库名 <span class="req">*</span></label><input type="text" id="db_name" placeholder="如 my_admin（不存在会自动创建）"><div class="hint">认证与业务表均装在此库（单库架构，系统默认）</div></div>
+      <div class="row">
+        <div class="field"><label>用户名 <span class="req">*</span></label><input type="text" id="db_user" value="root"></div>
+        <div class="field"><label>密码</label><input type="text" id="db_pass" placeholder="留空=无密码"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">2</span>后台管理员</h2>
+      <div class="row">
+        <div class="field"><label>账号 <span class="req">*</span></label><input type="text" id="admin_user" value="admin"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>密码 <span class="req">*</span>（≥6 位）</label><input type="text" id="admin_pass"></div>
+        <div class="field"><label>确认密码 <span class="req">*</span></label><input type="text" id="admin_pass2"></div>
+      </div>
+      <details style="margin-top:4px">
+        <summary style="font-size:13px;color:var(--muted);cursor:pointer">高级设置</summary>
+        <div class="field" style="margin-top:12px"><label>后台访问前缀（page_base）</label><input type="text" id="page_base" value="/app/curd"></div>
+      </details>
+    </div>
+
+    <button class="btn" id="submitBtn" onclick="submit()">开始安装</button>
+
+    <div class="progress card" id="progressBox">
+      <div class="pbar"><i id="pbarFill"></i></div>
+      <ul class="steps" id="stepsList"></ul>
+    </div>
+
+    <div class="result" id="resultBox"></div>
+  </div>
+</div>
+
+<script>
+var timer = null;
+function setBtn(loading, text){
+  var b = document.getElementById('submitBtn');
+  b.disabled = loading; b.textContent = text || (loading ? '安装中…' : '开始安装');
+}
+function stepsUI(list){
+  var box = document.getElementById('stepsList');
+  var pct = 0;
+  box.innerHTML = list.map(function(s, i){
+    var ic, cls;
+    if (s.type === 'error'){ ic = '✕'; cls = 'ic-err'; pct = 100; }
+    else if (s.type === 'info'){ ic = 'i'; cls = 'ic-info'; }
+    else { ic = '✓'; cls = 'ic-ok'; pct = Math.min(100, Math.round((i+1)/(list.length||1)*100)); }
+    return '<li><span class="ic ' + cls + '">' + ic + '</span><span class="msg">' + esc(s.msg) + (s.error ? '<small>' + esc(s.error) + '</small>' : '') + '</span></li>';
+  }).join('');
+  document.getElementById('pbarFill').style.width = pct + '%';
+}
+function esc(s){ return (s||'').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function pollProgress(){
+  if (timer) clearInterval(timer);
+  timer = setInterval(function(){
+    fetch('/api/curd-installer/progress').then(function(r){ return r.json(); }).then(function(j){
+      stepsUI(j.steps || []);
+    }).catch(function(){});
+  }, 400);
+}
+function showResult(ok, html){
+  var box = document.getElementById('resultBox');
+  box.className = 'result ' + (ok ? 'ok' : 'err');
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+function submit(){
+  var body = {
+    db_host:   document.getElementById('db_host').value.trim(),
+    db_port:   document.getElementById('db_port').value.trim(),
+    db_name:   document.getElementById('db_name').value.trim(),
+    db_user:   document.getElementById('db_user').value.trim(),
+    db_pass:   document.getElementById('db_pass').value,
+    admin_user:    document.getElementById('admin_user').value.trim(),
+    admin_pass:    document.getElementById('admin_pass').value,
+    admin_pass2:   document.getElementById('admin_pass2').value,
+    page_base:     document.getElementById('page_base').value.trim() || '/app/curd'
+  };
+  if (!body.db_name){ alert('请填写数据库名'); return; }
+  if (!body.admin_user || body.admin_pass.length < 6){ alert('管理员账号与 ≥6 位密码必填'); return; }
+  if (body.admin_pass !== body.admin_pass2){ alert('两次密码不一致'); return; }
+
+  setBtn(true, '安装中…');
+  document.getElementById('progressBox').style.display = 'block';
+  document.getElementById('resultBox').style.display = 'none';
+  stepsUI([]);
+  pollProgress();
+
+  fetch('/api/curd-installer/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(r){ return r.json(); }).then(function(j){
+    if (timer){ clearInterval(timer); timer = null; }
+    setBtn(false, '开始安装');
+    if (j.ok){
+      var base = (j.page_base || '/app/curd').replace(/\/+$/,'');
+      stepsUI(j.steps || []);
+      document.getElementById('pbarFill').style.width = '100%';
+      document.getElementById('submitBtn').style.display = 'none';
+      if (j.auto_reload){
+        // 已向 master 发 SIGUSR1（平滑 reload）：worker 处理完当前请求后重启并
+        // 重读 .env/config。短暂等待后进入后台（新 worker 就绪，避免撞上切换窗口）。
+        showResult(true, '<b>🎉 安装完成！</b>管理员 <b>' + esc(j.admin) + '</b> 已创建。<br>'
+          + '<span style="color:#2563eb">⚙ 正在刷新服务配置…</span>'
+          + '<br><small>自动生效中（约 2 秒），就绪后进入后台登录</small>');
+        setTimeout(function(){ location.href = base + '/'; }, 2000);
+      } else {
+        var restartHint = j.restart_cmd
+          ? '<br><br><b style="color:#d97706">⚠ 请执行：</b><code style="background:#1f2937;color:#fbbf24;padding:4px 8px;border-radius:4px;user-select:all">' + esc(j.restart_cmd) + '</code><br><small>worker 配置在启动时固化，写入新 DB 信息后必须重启进程（避免 1045 Access denied）</small>'
+          : '';
+        showResult(true, '<b>🎉 安装完成！</b>管理员 <b>' + esc(j.admin) + '</b> 已创建。<br>访问后台：<a href="' + base + '/">' + base + '/</a>（登录后请立即修改密码）' + restartHint);
+      }
+    } else {
+      stepsUI(j.steps || []);
+      var extra = j.message || '';
+      showResult(false, '<b>安装未完成</b><br>' + esc(extra) + (j.stderr ? '<br><small>' + esc(j.stderr) + '</small>' : ''));
+    }
+  }).catch(function(e){
+    if (timer){ clearInterval(timer); timer = null; }
+    setBtn(false, '开始安装');
+    showResult(false, '请求失败：' + esc(e.message || e) + '（请确认服务已启动）');
+  });
+}
+// 启动检测
+fetch('/api/curd-installer/status').then(function(r){ return r.json(); }).then(function(j){
+  if (j.installed){ document.getElementById('installedBox').style.display = 'block'; document.getElementById('formBox').style.display = 'none'; }
+}).catch(function(){});
+</script>
+</body>
+</html>
