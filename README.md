@@ -9,12 +9,13 @@
 
 ## 文档
 
-📖 **文档站**：浏览器直接打开 `docs/index.html`（自包含单页，无需服务器），含两篇文档：
+📖 **文档站**：浏览器直接打开 `docs/index.html`（自包含单页，无需服务器），含三篇文档：
 
 | 文档 | 内容 | Markdown 源 |
 |---|---|---|
 | **安装 · 升级 · 生产部署** | 单库架构与 `.env` 配置、composer 引入新项目、Web 安装向导（免重启）、CLI 安装、宿主内升级同步、supervisor / Nginx / 备份 / 回滚、踩坑速查 | `docs/插件安装升级与生产部署.md` |
 | **后台 DSL 使用** | 用 DSL 在后台造 CURD / Schema 页面（数组式与 `grid()` 模板、插件内置 my_test「测试管理」示例、菜单 path 约定；宿主业务参考） | `docs/DSL-使用文档.md` |
+| **可插拔认证与权限开关** | 换登录表/换校验逻辑（auth_provider 接口详解 + 完整示例）、权限总开关（关闭/开启行为、安装器联动、与 admin_require_permission 关系、端到端验证） | `docs/可插拔认证与权限开关.md` |
 
 > 文档站由 `docs/tools/build_docs.cjs` 构建（需 marked）：改完 md 后在 `docs/` 目录执行
 > `node tools/build_docs.cjs` 重新生成 `index.html`。
@@ -318,6 +319,96 @@ CURD_ADMIN_REQUIRE_PERMISSION = true
 - 授权方式：在「角色管理」勾选，或直接写 casbin_rule
   `INSERT INTO casbin_rule (ptype,v0,v1,v2) VALUES ('p','yunying','admin','users');`
 - `/api/auth/*`、`/api/menu`、`/api/curd/config`、`/api/custom/*` 仍在白名单（仅登录）
+
+### 自定义登录方式（换表 / 换校验逻辑）
+
+> 完整契约、身份数组约定、接入步骤与排错见 **[`docs/可插拔认证与权限开关.md`](docs/可插拔认证与权限开关.md)**。
+
+默认登录走 `admin_users` 表 + `password_verify`。如果你想换一张表、换校验方式（明文 / LDAP / OAuth / 外部 API），
+实现 `AuthProviderInterface` 并配置到 `config/curd.php` 的 `auth_provider` 即可，**token 签发与存储由包统一处理**，
+你只需返回「身份数组」。
+
+```php
+// 宿主 app/auth/MyAuthProvider.php
+namespace app\auth;
+
+use plugin\curd\app\auth\AuthProviderInterface;
+use support\Db;
+use support\Request;
+
+class MyAuthProvider implements AuthProviderInterface
+{
+    // 校验凭据；成功返回身份数组，失败/凭据错误返回 null
+    public function login(array $c): ?array
+    {
+        $user = Db::table('my_users')->where('username', $c['username'] ?? '')->first();
+        if (!$user || $user->password !== ($c['password'] ?? '')) { // 换成你的校验逻辑
+            return null;
+        }
+        if ((int)($user->status ?? 1) !== 1) {
+            return null; // 禁用 → 由包统一报 403
+        }
+        return [
+            'id'       => $user->id,            // 会被写入 admin_tokens.admin_user_id
+            'username' => $user->username,
+            'name'     => $user->name,
+            'status'   => (int)$user->status,
+            'avatar'   => $user->avatar ?? '',
+            'roles'    => ['editor'],           // 自定义角色（前端/业务自定义消费）
+            'permissions' => [],                 // 由包/权限开关决定，无需在此造权限
+        ];
+    }
+
+    // 按 user id 重新取完整身份（/api/auth/me 用）
+    public function identity($id): ?array
+    {
+        $user = Db::table('my_users')->where('id', $id)->first();
+        return $user ? [/* 同 login 形状 */ 'id'=>$user->id,'username'=>$user->username,
+            'name'=>$user->name,'status'=>(int)$user->status,'avatar'=>$user->avatar ?? '',
+            'roles'=>['editor'],'permissions'=>[]] : null;
+    }
+
+    // 按 user id 还原用户对象，供 AuthCheck 填充 $request->user（须含 id/username/name/status/avatar）
+    public function resolveUser($id): ?object
+    {
+        return Db::table('my_users')->where('id', $id)->first();
+    }
+
+    public function logout(Request $request): void {} // 可在此清理外部会话
+}
+```
+
+```php
+// config/curd.php（宿主根）
+return [
+    // ...
+    'auth_provider' => \app\auth\MyAuthProvider::class,
+];
+```
+
+> 不设 `auth_provider` 时自动回退内置 `DefaultAuthProvider`（即原 `admin_users` 行为），**向后兼容**。
+
+### 权限总开关（一键关掉 RBAC）
+
+> 关闭/开启行为、安装器联动、与 `admin_require_permission` 的关系、端到端验证见 **[`docs/可插拔认证与权限开关.md`](docs/可插拔认证与权限开关.md)**。
+
+`config/curd.php` 加一行即可关闭整条权限校验链路，同时**不再产生、也不再下发任何权限**：
+
+```php
+// config/curd.php（宿主根）
+return [
+    // ...
+    'permission_enabled' => false, // false = 所有人放行（仅登录即可），不写/true = 走 RBAC
+];
+```
+
+关闭后行为：
+
+- `PermissionCheck` 中间件直接放行（`403 没有权限操作` 不再出现）
+- 登录 / `/api/auth/me` 返回的 `permissions` 为空数组，并附带 `permission_enabled: false` 字段供前端判断
+- 安装器不再写入 `casbin_rule`（不生成权限数据）
+
+> 开关关闭后登录认证**仍然生效**（必须登录），只是不做权限分级。需要重新开启 RBAC 时把值改回 `true` 即可。
 
 ## 路由「宿主优先」机制
 

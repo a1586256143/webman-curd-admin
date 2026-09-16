@@ -173,6 +173,12 @@ return [
     // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
     'admin_require_permission' => false,
 
+    // 登录提供方（可插拔，实现 AuthProviderInterface）：不设=内置 admin_users 登录
+    // 'auth_provider' => plugin\curd\app\auth\DefaultAuthProvider::class,
+
+    // 权限总开关：false=关闭 RBAC 校验且不生成/下发权限（所有人放行）
+    // 'permission_enabled' => true,
+
     // 连接名（config/database.php connections 键；单库下两者指向同一 DB_NAME）：
     // 'admin_connection'    => 'mysql',            // 认证库连接名
     // 'business_connection' => 'mysql_business',   // 业务模型默认连接名

@@ -55,6 +55,24 @@ $defaults = [
     // 其余角色需在「角色管理」勾选对应权限后才可访问。
     'admin_require_permission' => false,
 
+    // 登录提供方（可插拔）：实现 AuthProviderInterface 的类名。
+    //   不设 = 内置 DefaultAuthProvider（admin_users 表 + password_verify 校验，原行为）。
+    //   设为自定义类即可换登录表 / 换校验逻辑 / 对接外部账号体系：
+    //   class MyAuth implements \plugin\curd\app\auth\AuthProviderInterface {
+    //       public function login(array $c): ?array { /* 校验后返回身份数组 */ }
+    //       public function identity($id): ?array { /* 重新取完整身份 */ }
+    //       public function resolveUser($id): ?object { /* 还原 $request->user */ }
+    //       public function logout(\support\Request $r): void {}
+    //   }
+    //   控制器只认返回的「身份数组」，token 签发/存储由包统一处理。
+    'auth_provider' => \plugin\curd\app\auth\DefaultAuthProvider::class,
+
+    // 权限总开关：
+    //   true  （默认）= 走 RBAC 校验、登录/me 下发权限；
+    //   false           = 关闭权限校验（所有人放行），且不生成/不下发任何权限。
+    //   关闭后 PermissionCheck 直接放行，Install 不再写 casbin_rule。
+    'permission_enabled' => true,
+
     // 插件内置前端（dist 放 plugin/curd/public/，见 install.sql 同目录 README）
     // page_base：页面与静态资源的 URL 前缀（无尾斜杠），前端构建时 VITE_BASE_PATH 需一致
     'page_base'  => '/app/curd',

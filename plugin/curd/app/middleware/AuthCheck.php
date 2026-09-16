@@ -5,6 +5,7 @@ use Webman\MiddlewareInterface;
 use Webman\Http\Response;
 use Webman\Http\Request;
 use plugin\curd\app\CurdDb;
+use plugin\curd\app\auth\AuthProviderAware;
 use support\Redis;
 
 /**
@@ -17,6 +18,8 @@ use support\Redis;
  */
 class AuthCheck implements MiddlewareInterface
 {
+    use AuthProviderAware;
+
     /**
      * token 查询缓存 TTL（秒）。与 updated_at 节流刷新间隔一致。
      */
@@ -54,9 +57,7 @@ class AuthCheck implements MiddlewareInterface
             return json(['code' => 401, 'msg' => '登录已过期，请重新登录']);
         }
 
-        $user = CurdDb::adminTable('admin_users')
-            ->where('id', $tokenRow->admin_user_id)
-            ->first();
+        $user = $this->authProvider()->resolveUser($tokenRow->admin_user_id);
 
         if (!$user) {
             return json(['code' => 401, 'msg' => '用户不存在']);

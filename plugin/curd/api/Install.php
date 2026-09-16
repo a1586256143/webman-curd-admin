@@ -2,6 +2,7 @@
 namespace plugin\curd\api;
 
 use support\Db;
+use plugin\curd\app\auth\AuthProviderAware;
 
 /**
  * CURD 插件安装器
@@ -34,6 +35,8 @@ use support\Db;
  */
 class Install
 {
+    use AuthProviderAware;
+
     /**
      * webman 官方 composer 基础插件识别常量（zip/市场安装器扫描用）
      */
@@ -408,21 +411,24 @@ class Install
                 }
 
                 // casbin：用户 g 角色 + 角色 p 全权限
-                $gExists = $db->table('casbin_rule')
-                    ->where('ptype', 'g')->where('v0', (string)$userId)->where('v1', 'admin')->count();
-                if (!$gExists) {
-                    $db->table('casbin_rule')->insert([
-                        'ptype' => 'g', 'v0' => (string)$userId, 'v1' => 'admin',
-                        'v2' => '', 'v3' => '', 'v4' => '', 'v5' => '',
-                    ]);
-                }
-                $pExists = $db->table('casbin_rule')
-                    ->where('ptype', 'p')->where('v0', 'admin')->where('v1', '*')->count();
-                if (!$pExists) {
-                    $db->table('casbin_rule')->insert([
-                        'ptype' => 'p', 'v0' => 'admin', 'v1' => '*', 'v2' => '*',
-                        'v3' => '', 'v4' => '', 'v5' => '',
-                    ]);
+                // 权限总开关关闭时不产生任何权限（g/admin、p,admin,*,* 均跳过）
+                if ($this->permissionEnabled()) {
+                    $gExists = $db->table('casbin_rule')
+                        ->where('ptype', 'g')->where('v0', (string)$userId)->where('v1', 'admin')->count();
+                    if (!$gExists) {
+                        $db->table('casbin_rule')->insert([
+                            'ptype' => 'g', 'v0' => (string)$userId, 'v1' => 'admin',
+                            'v2' => '', 'v3' => '', 'v4' => '', 'v5' => '',
+                        ]);
+                    }
+                    $pExists = $db->table('casbin_rule')
+                        ->where('ptype', 'p')->where('v0', 'admin')->where('v1', '*')->count();
+                    if (!$pExists) {
+                        $db->table('casbin_rule')->insert([
+                            'ptype' => 'p', 'v0' => 'admin', 'v1' => '*', 'v2' => '*',
+                            'v3' => '', 'v4' => '', 'v5' => '',
+                        ]);
+                    }
                 }
             } else {
                 static::report(true, 'admin_users 已有账号，跳过初始账号创建');

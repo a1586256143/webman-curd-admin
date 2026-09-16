@@ -5,6 +5,7 @@ use Webman\MiddlewareInterface;
 use Webman\Http\Response;
 use Webman\Http\Request;
 use plugin\curd\app\CurdDb;
+use plugin\curd\app\auth\AuthProviderAware;
 use plugin\curd\app\rbac\Rbac;
 
 /**
@@ -32,6 +33,8 @@ use plugin\curd\app\rbac\Rbac;
  */
 class PermissionCheck implements MiddlewareInterface
 {
+    use AuthProviderAware;
+
     /**
      * 免权限校验路径前缀(仅登录)
      * 注意：表结构探测（tables/schema/generate）与配置写入（save-config）
@@ -48,6 +51,11 @@ class PermissionCheck implements MiddlewareInterface
 
     public function process(Request $request, callable $handler): Response
     {
+        // 权限总开关关闭：仅登录即可，不做任何 RBAC 校验（也不依赖 casbin 产生的权限）
+        if (!$this->permissionEnabled()) {
+            return $handler($request);
+        }
+
         // 未登录(理论不会发生,AuthCheck 已拦)直接放行给 AuthCheck 报 401
         if (empty($request->user)) {
             return $handler($request);
