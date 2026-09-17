@@ -32,12 +32,33 @@ trait CurdActionsTrait
         if ($action && method_exists($action, 'handle')) {
             // 自动注入当前行模型实例：handle 里可直接用 $this->model()（等价 $model::find($id)）
             $action->setModel($this->resolveActionModel($request, $action));
+            // 自动解析 excel 字段（$form->excel()）：multipart 上传的二进制 → 解析好的数据行
+            $formFields = method_exists($action, 'getFormFields') ? (array)$action->getFormFields() : [];
+            $excelData = $this->resolveActionExcelData($request, $formFields);
+            if (method_exists($action, 'setExcelData')) {
+                $action->setExcelData($excelData);
+            }
             return $action->handle($request);
         }
 
         $method = 'action' . str_replace(' ', '', ucwords(str_replace(['-', '_'], ' ', $name)));
         if (!method_exists($this, $method)) {
             return json(['code' => 404, 'msg' => "操作 {$name} 未实现：请在 " . static::class . " 中定义 {$method}(Request \$request) 或在 Action 类中实现 handle(Request \$request)"]);
+        }
+        // 数组式 / 链式 action：同样自动解析 excel 字段，控制器内 $this->excelRows('prop') 取解析结果
+        $formFields = [];
+        if ($action && method_exists($action, 'getFormFields')) {
+            $formFields = (array)$action->getFormFields();
+        } elseif (method_exists($this, 'actions')) {
+            foreach ((array)$this->actions() as $a) {
+                if (is_array($a) && ($a['name'] ?? '') === $name && !empty($a['formFields'])) {
+                    $formFields = (array)$a['formFields'];
+                    break;
+                }
+            }
+        }
+        if ($formFields) {
+            $this->excelActionData = $this->resolveActionExcelData($request, $formFields);
         }
         return $this->$method($request);
     }
@@ -65,18 +86,187 @@ trait CurdActionsTrait
     }
 
     /**
-     * 校验提交数据
+     * 解析 action form 中的 excel 字段（$form->excel()）：multipart 直传的文件二进制
+     * → 按字段 options（maxRows/sheet）解析为首行表头的关联数组行集
+     *
+     * @param Request $request
+     * @param array   $formFields action 的 formFields（DSL Action 或数组式均可）
+     * @return array ['prop' => ['rows' => [...], 'count' => n, 'file_name' => ..., 'sheets' => ?int], ...]
      */
-    protected function validateData(array $data, bool $partial = false): array
+    protected function resolveActionExcelData(Request $request, array $formFields): array
+    {
+        $data = [];
+        foreach ($formFields as $field) {
+            if (!is_array($field) || ($field['type'] ?? '') !== 'excel' || empty($field['prop'])) {
+                continue;
+            }
+            $prop = $field['prop'];
+            $upload = $request->file($prop);
+            if ($upload === null || !$upload->isValid()) {
+                continue; // 未上传：交由 handle 内自行判断/报错
+            }
+            $data[$prop] = \plugin\curd\app\support\ExcelParser::parse(
+                $upload->getRealPath(),
+                // webman UploadFile 无 getOriginalName()：优先 getUploadName()（客户端原始文件名），再退 SplFileInfo 文件名
+                method_exists($upload, 'getUploadName') ? (string)$upload->getUploadName() : (string)$upload->getFilename(),
+                [
+                    'maxRows' => (int)($field['maxRows'] ?? 5000),
+                    'sheet' => (int)($field['sheet'] ?? 1),
+                ]
+            );
+        }
+        return $data;
+    }
+
+    /**
+     * 数组式 action 的 excel 解析结果（Action 类走 setExcelData 注入，数组式走本属性）
+     * @var array
+     */
+    protected array $excelActionData = [];
+
+    /**
+     * 取 excel 字段解析出的数据行（数组式 action 控制器内使用）
+     *   $rows = $this->excelRows('import_file');  // [['手机号' => '138...', '金额' => '10'], ...]
+     */
+    public function excelRows(string $prop): array
+    {
+        return isset($this->excelActionData[$prop]['rows']) ? $this->excelActionData[$prop]['rows'] : [];
+    }
+
+    /**
+     * 取 excel 字段解析元信息（数组式 action 控制器内使用）
+     * @return array ['count' => n, 'file_name' => 'xx.xlsx', 'sheets' => ?int]
+     */
+    public function excelInfo(string $prop): array
+    {
+        $d = isset($this->excelActionData[$prop]) ? $this->excelActionData[$prop] : [];
+        unset($d['rows']);
+        return $d;
+    }
+
+    /**
+     * 校验提交数据
+     *
+     * @param array  $data    提交数据
+     * @param bool   $partial 部分校验（只校验提交了的字段，编辑用）
+     * @param string|null $mode 场景 'add'|'edit'：传入时校验规则先按场景白名单收敛
+     *                             （该场景不展示/禁用的字段不参与校验）
+     */
+    protected function validateData(array $data, bool $partial = false, ?string $mode = null): array
     {
         $rules = $this->resolveRules();
         if (empty($rules)) {
             return [];
         }
+        if ($mode !== null) {
+            $writable = $this->writableFields($mode);
+            if ($writable !== null) {
+                $rules = array_intersect_key($rules, $writable);
+            }
+        }
         if ($partial) {
             $rules = array_intersect_key($rules, $data);
         }
         return Validator::validate($data, $rules);
+    }
+
+    /**
+     * 场景可写字段白名单（'add'|'edit'）：来自 Grid DSL 表单配置
+     *
+     * 规则（与前端 resolveFieldForMode/sanitizeFormData 行为对齐）：
+     *  - hiddens.{mode|common}=true / modeOnly 不匹配 → 剔除（该场景不展示不提交）
+     *  - sceneShow（isCreate/isEdit）对应场景为 false → 剔除
+     *  - disableds.{mode|common}=true → 剔除（禁用字段不提交）
+     *  - Form::hidden() 声明字段（顶层 hidden=true）→ 始终可写（隐藏提交字段语义）
+     *  - 条件字段（visibleWhen）→ 放行（可见性由父字段值在前端控制）
+     *
+     * @return array<string,true> prop 白名单；无 grid/无表单配置时返回 null（不过滤，保持旧行为）
+     */
+    protected function writableFields(string $mode): ?array
+    {
+        $grid = $this->resolveGrid();
+        if (!$grid) {
+            return null;
+        }
+        // extra（addForm/editForm）覆盖同名字段，与前端 override 逻辑一致
+        $fields = $grid->formFields();
+        $extra = $mode === 'add' ? $grid->addFields() : $grid->editFields();
+        $map = [];
+        foreach ($fields as $f) {
+            $map[$f['prop'] ?? ''] = $f;
+        }
+        foreach ($extra as $f) {
+            $map[$f['prop'] ?? ''] = $f;
+        }
+        unset($map['']);
+
+        // Form::isCreate()/isEdit() 场景白名单：该场景仅保留清单内字段（hidden 提交字段始终保留）
+        $sceneShow = $grid->formSceneShow();
+        $whitelist = $sceneShow[$mode === 'add' ? 'create' : 'edit'] ?? null;
+        if (is_array($whitelist)) {
+            $allowed = array_flip($whitelist);
+            foreach ($map as $prop => $f) {
+                if (empty($f['hidden']) && !isset($allowed[$prop])) {
+                    unset($map[$prop]);
+                }
+            }
+        }
+
+        $writable = [];
+        foreach ($map as $prop => $f) {
+            if (!empty($f['visibleWhen'])) {
+                $writable[$prop] = true;
+                continue;
+            }
+            if ($this->fieldWritableInMode($f, $mode)) {
+                $writable[$prop] = true;
+            }
+        }
+        return $writable;
+    }
+
+    /**
+     * 单字段在指定场景是否可写（展示并提交）
+     */
+    protected function fieldWritableInMode(array $field, string $mode): bool
+    {
+        // Form::hidden() 声明的隐藏提交字段：始终可写
+        if (!empty($field['hidden'])) {
+            return true;
+        }
+        // modeOnly：仅 add / 仅 edit
+        if (!empty($field['modeOnly']) && $field['modeOnly'] !== $mode) {
+            return false;
+        }
+        // hiddens.{add|edit|common}
+        if (isset($field['hiddens']) && is_array($field['hiddens'])) {
+            $h = $field['hiddens'];
+            if (!empty($h[$mode] ?? $h['common'] ?? false)) {
+                return false;
+            }
+        }
+        // disableds.{add|edit|common}：禁用字段不提交
+        if (isset($field['disableds']) && is_array($field['disableds'])) {
+            $d = $field['disableds'];
+            if (!empty($d[$mode] ?? $d['common'] ?? false)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 按场景白名单过滤提交数据（后台兜底：即使前端多提交了字段，也会被剔除）
+     * 无表单配置（动态 CURD 等）时原样返回。
+     */
+    protected function filterWritableFields(array $data, string $mode): array
+    {
+        $writable = $this->writableFields($mode);
+        if ($writable === null) {
+            return $data;
+        }
+        // 主键与前端时间戳标记始终保留（update 自身也 unset 过）
+        return array_intersect_key($data, $writable + ['id' => true, '_t' => true]);
     }
 
     /**
@@ -137,8 +327,14 @@ trait CurdActionsTrait
             return json(['code' => 400, 'msg' => '数据不能为空']);
         }
 
-        // 表单验证
-        $errors = $this->validateData($data);
+        // 场景字段过滤：只保留创建场景展示（isCreate/未隐藏）且未禁用的字段，多余字段剔除
+        $data = $this->filterWritableFields($data, 'add');
+        if (empty($data)) {
+            return json(['code' => 400, 'msg' => '没有可写入的字段']);
+        }
+
+        // 表单验证（规则同步按场景白名单收敛）
+        $errors = $this->validateData($data, false, 'add');
         if ($errors) {
             return json(['code' => 400, 'msg' => json_encode(['errors' => $errors], JSON_UNESCAPED_UNICODE)]);
         }
@@ -181,8 +377,11 @@ trait CurdActionsTrait
 
         unset($data['id'], $data['_t']);
 
-        // 表单验证（部分校验：只校验提交的字段）
-        $errors = $this->validateData($data, true);
+        // 场景字段过滤：只保留编辑场景展示（isEdit/未隐藏）且未禁用的字段，多余字段剔除
+        $data = $this->filterWritableFields($data, 'edit');
+
+        // 表单验证（部分校验：只校验提交的字段；规则同步按场景白名单收敛）
+        $errors = $this->validateData($data, true, 'edit');
         if ($errors) {
             return json(['code' => 400, 'msg' => json_encode(['errors' => $errors], JSON_UNESCAPED_UNICODE)]);
         }

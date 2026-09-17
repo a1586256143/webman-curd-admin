@@ -65,6 +65,81 @@ class Form extends BaseDsl
         return $this;
     }
 
+    /**
+     * 场景字段白名单（isCreate / isEdit 判断）：
+     *  - 'create'：创建场景展示并提交的字段清单（null = 未限制，全部展示）
+     *  - 'edit'  ：编辑场景展示并提交的字段清单
+     * 支持回调（服务端配置输出时求值一次，如 fn($ctx) => ['name','remark']）
+     */
+    protected array $sceneFields = [
+        'create' => null,
+        'edit' => null,
+    ];
+
+    /**
+     * 创建（新增）场景判断：只展示并提交列出的字段（其余字段创建时不存在）
+     *
+     *   $form->isCreate('name');                    // 创建时仅 name
+     *   $form->isCreate('name', 'remark');          // 可变参数
+     *   $form->isCreate(['name', 'remark']);        // 数组
+     *   $form->isCreate(fn($ctx) => ['name']);      // 回调动态控制（$ctx=['mode'=>'create']）
+     *
+     * 严格提交：前端不渲染、不初始化、不提交白名单外字段；
+     * 后端 add() 同步按白名单过滤（恶意提交白名单外字段会被剔除），校验规则同步收敛。
+     * $form->hidden() 声明的隐藏提交字段不受白名单限制，始终随场景提交。
+     */
+    public function isCreate(...$fields): self
+    {
+        return $this->setSceneFields('create', $fields);
+    }
+
+    /**
+     * 编辑场景判断：只展示并提交列出的字段（其余字段编辑时不存在）
+     *
+     *   $form->isEdit('name', 'audit_by');          // 用法同 isCreate()
+     */
+    public function isEdit(...$fields): self
+    {
+        return $this->setSceneFields('edit', $fields);
+    }
+
+    protected function setSceneFields(string $scene, array $fields): self
+    {
+        // 展开一层嵌套数组：('a', ['b','c']) → ['a','b','c']
+        $flat = [];
+        foreach ($fields as $f) {
+            if ($f instanceof \Closure) {
+                $this->sceneFields[$scene] = $f;
+                return $this;
+            }
+            if (is_array($f)) {
+                $flat = array_merge($flat, $f);
+            } elseif (is_string($f) && $f !== '') {
+                $flat[] = $f;
+            }
+        }
+        $this->sceneFields[$scene] = array_values(array_unique($flat));
+        return $this;
+    }
+
+    /**
+     * 场景白名单求值（供 toArray/后端过滤用）：['create' => string[]|null, 'edit' => string[]|null]
+     * 回调在求值时执行一次，返回字段数组
+     */
+    public function sceneShowConfig(): array
+    {
+        $out = [];
+        foreach (['create', 'edit'] as $scene) {
+            $v = $this->sceneFields[$scene];
+            if ($v instanceof \Closure) {
+                $v = array_values(array_unique((array)$v(['mode' => $scene])));
+            }
+            // 空清单视为未限制（isCreate() 不传字段时保持默认行为）
+            $out[$scene] = (is_array($v) && empty($v)) ? null : $v;
+        }
+        return $out;
+    }
+
     /*
      * 表单布局配置：
      *  - columns：每行默认列数（1 = 单列整行，2 = 一行两列，3 = 一行三列），默认 1
@@ -224,6 +299,34 @@ class Form extends BaseDsl
     public function hidden(string $prop, string $label = '', array $options = []): Field
     {
         return $this->add('input', $prop, $label, array_merge(['hidden' => true, 'disabled' => true], $options));
+    }
+
+    /**
+     * Excel 导入字段（action form 弹窗用）：本地选择文件后**不走独立上传**，
+     * 确认提交时文件二进制随表单 multipart 直传，服务端 Action::handle() 内直接取解析好的数据
+     *
+     *   $form->excel('import_file', '选择文件');
+     *   $form->excel('import_file', '选择文件', ['maxRows' => 10000]);
+     *
+     * options：
+     *  - maxRows  最大解析行数（不含表头，默认 5000，超出抛异常）
+     *  - sheet    解析第几个工作表（默认 1）
+     *  - required 是否必选（默认 true，前端 el-upload 校验）
+     *
+     * handle 中取数据：
+     *   $rows = $this->excelRows('import_file');   // [[ '手机号' => '138...', '金额' => '10' ], ...]（首行作表头）
+     *   $info = $this->excelInfo('import_file');   // ['count' => n, 'file_name' => 'xx.xlsx', ...]
+     *
+     * 支持 .xlsx / .csv；日期单元格读出为 Excel 序列数字，需业务自行换算。
+     */
+    public function excel(string $prop, string $label, array $options = []): Field
+    {
+        return $this->add('excel', $prop, $label, array_merge([
+            'required' => true,
+            'maxRows' => 5000,
+            'sheet' => 1,
+            'accept' => '.xlsx,.csv',
+        ], $options));
     }
 
     /**

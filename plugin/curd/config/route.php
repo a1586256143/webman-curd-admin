@@ -269,6 +269,10 @@ curd_route('POST', '/api/curd/model/{model}/action/{name}', [
     \plugin\curd\app\controller\CurdController::class,
     'action',
 ], $curdAuthMiddleware);
+curd_route('GET', '/api/curd/model/{model}/cascade/{method}', [
+    \plugin\curd\app\controller\CurdController::class,
+    'cascade',
+], $curdAuthMiddleware);
 curd_route('GET', '/api/curd/model/{model}', [
     \plugin\curd\app\controller\CurdController::class,
     'list',

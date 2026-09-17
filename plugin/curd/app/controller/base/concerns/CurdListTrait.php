@@ -51,6 +51,15 @@ trait CurdListTrait
                 'formTabs' => $grid->getFormTabs(),
                 'formSteps' => $grid->getFormSteps(),
             ];
+            // 场景字段白名单（Form::isCreate()/isEdit()）：任一场景声明了清单才输出
+            $sceneShow = $grid->formSceneShow();
+            if ($sceneShow['create'] !== null || $sceneShow['edit'] !== null) {
+                $config['sceneShow'] = $sceneShow;
+            }
+            // 级联下拉：cascadeHandler 解析为通用级联端点 URL
+            $config['formFields'] = $this->resolveCascadeUrls((array)($config['formFields'] ?? []));
+            $config['addFields'] = $this->resolveCascadeUrls((array)($config['addFields'] ?? []));
+            $config['editFields'] = $this->resolveCascadeUrls((array)($config['editFields'] ?? []));
         // 行级样式和类名回调改为服务端执行（结果挂行数据 _rowStyle/_rowClass，前端统一读取），
         // 闭包不能进 JSON（json_encode 会输出 {}），此前塞进 config 导致样式完全不生效
         $rowStyleCallback = $grid->getRowStyleCallback();
@@ -98,6 +107,26 @@ trait CurdListTrait
         ];
         // 注意：旧写法暂不支持 rowStyle/rowClass
         return $config;
+    }
+
+    /**
+     * 级联下拉：把字段的 cascadeHandler 解析为通用级联端点 URL
+     * （cascadeUrl 已显式设置的跳过；handler 只允许字母数字下划线，杜绝路径注入）
+     */
+    protected function resolveCascadeUrls(array $fields): array
+    {
+        foreach ($fields as &$field) {
+            if (!is_array($field) || empty($field['cascadeHandler']) || !empty($field['cascadeUrl'])) {
+                continue;
+            }
+            $handler = preg_replace('/[^a-zA-Z0-9_]/', '', (string)$field['cascadeHandler']);
+            if ($handler === '' || $handler === null) {
+                continue;
+            }
+            $field['cascadeUrl'] = '/api/curd/model/' . $this->modelName() . '/cascade/' . $handler;
+        }
+        unset($field);
+        return $fields;
     }
 
     /**

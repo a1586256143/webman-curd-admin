@@ -666,6 +666,19 @@ class CurdController
     }
 
     /**
+     * 通用级联下拉数据源（GET /api/curd/model/{model}/cascade/{method}）
+     * 转发给业务控制器，实际分发见 BaseCurdController::cascadeOptions（cascade* 前缀白名单）
+     */
+    public function cascade($model, $method, Request $request)
+    {
+        $curd = $this->resolveCurd($model);
+        if ($curd === null) {
+            return json(['code' => 404, 'msg' => "模型 {$model} 未注册"]);
+        }
+        return $curd->cascadeOptions((string)$method, $request);
+    }
+
+    /**
      * 通用批量删除（业务库，支持软删除）
      */
     public function batchDelete($model, Request $request)

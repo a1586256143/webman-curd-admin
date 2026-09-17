@@ -3,6 +3,7 @@
 namespace app\controller\admin\api;
 
 use plugin\curd\app\controller\base\BaseCurdController;
+use support\Request;
 
 /**
  * 后台「测试管理」示例控制器（开箱演示：你的第一个 CURD 后台页面）
@@ -97,5 +98,129 @@ class MyTestController extends BaseCurdController
         return [
             'name' => 'required|max:100',
         ];
+    }
+
+    /**
+     * 自定义操作（行级按钮）：confirm 二次确认 / form 弹窗表单 两种类型示例
+     * inline(true) 直接显示在行内；不设则收进「更多」下拉
+     */
+    protected function actions(): array
+    {
+        return [
+            [
+                'name' => 'toggle',
+                'label' => '启用/禁用',
+                'icon' => 'Switch',
+                'type' => 'warning',
+                'actionType' => 'confirm',          // 二次确认后调接口
+                'field' => 'id',
+                'inline' => true,
+                'confirm' => '确认切换该记录的启用状态吗？',
+                'confirmType' => 'warning',
+                'api' => '/api/curd/model/MyTest/action/toggle',
+                'successMsg' => '状态已切换',
+            ],
+            [
+                'name' => 'remark',
+                'label' => '快捷备注',
+                'icon' => 'EditPen',
+                'type' => 'primary',
+                'actionType' => 'form',             // 弹窗表单，确认后提交
+                'field' => 'id',
+                'inline' => true,
+                'api' => '/api/curd/model/MyTest/action/remark',
+                'dialogTitle' => '快捷备注',
+                'dialogWidth' => '480px',
+                'successMsg' => '备注已保存',
+                'formFields' => [
+                    ['prop' => 'remark', 'label' => '备注', 'type' => 'textarea', 'required' => true, 'span' => 24],
+                ],
+            ],
+            [
+                'name' => 'import',
+                'label' => '导入',
+                'icon' => 'Upload',
+                'type' => 'success',
+                'actionType' => 'form',             // excel 字段：本地选文件 → multipart 直传 → 服务端解析
+                'global' => true,                   // 工具栏全局按钮
+                'api' => '/api/curd/model/MyTest/action/import',
+                'dialogTitle' => '导入数据',
+                'dialogWidth' => '520px',
+                'successMsg' => '导入完成',
+                'formFields' => [
+                    ['prop' => 'import_file', 'label' => '选择文件', 'type' => 'excel', 'required' => true, 'span' => 24],
+                    ['prop' => 'skip_exists', 'label' => '跳过已存在', 'type' => 'switch', 'span' => 24],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * 行级 confirm 操作：切换启用状态（POST /api/curd/model/MyTest/action/toggle）
+     */
+    public function actionToggle(Request $request)
+    {
+        $row = \app\model\MyTest::find($request->post('id'));
+        if (!$row) {
+            return json(['code' => 404, 'msg' => '记录不存在']);
+        }
+        $row->status = $row->status == 1 ? 0 : 1;
+        $row->save();
+        return json(['code' => 200, 'msg' => 'success']);
+    }
+
+    /**
+     * 行级 form 操作：保存快捷备注（POST /api/curd/model/MyTest/action/remark）
+     */
+    public function actionRemark(Request $request)
+    {
+        $remark = trim((string)$request->post('remark', ''));
+        if ($remark === '') {
+            return json(['code' => 400, 'msg' => '备注不能为空']);
+        }
+        $row = \app\model\MyTest::find($request->post('id'));
+        if (!$row) {
+            return json(['code' => 404, 'msg' => '记录不存在']);
+        }
+        $row->remark = $remark;
+        $row->save();
+        return json(['code' => 200, 'msg' => 'success']);
+    }
+
+    /**
+     * 全局 form 操作：导入 Excel（POST /api/curd/model/MyTest/action/import）
+     *
+     * excel 字段由框架自动解析（multipart 直传，不走 /api/upload）：
+     *   $this->excelRows('import_file')  → 首行表头的关联数组行集
+     *   $this->excelInfo('import_file')  → ['count' => n, 'file_name' => 'xx.xlsx', ...]
+     * （若用 Action 类写法，则 handle 内 $this->excelRows(...) 同名方法取用）
+     */
+    public function actionImport(Request $request)
+    {
+        $skipExists = (bool)$request->post('skip_exists');
+        $rows = $this->excelRows('import_file');
+        if (empty($rows)) {
+            return json(['code' => 400, 'msg' => '请选择并上传有效的 xlsx/csv 文件（首行为表头）']);
+        }
+
+        $count = 0;
+        foreach ($rows as $row) {
+            $name = trim((string)($row['名称'] ?? ''));
+            if ($name === '') {
+                continue; // 名称必填，空行跳过
+            }
+            if ($skipExists && \app\model\MyTest::where('name', $name)->exists()) {
+                continue;
+            }
+            $m = new \app\model\MyTest();
+            $m->name = $name;
+            $m->remark = trim((string)($row['备注'] ?? ''));
+            $m->status = 1;
+            $m->save();
+            $count++;
+        }
+
+        $info = $this->excelInfo('import_file');
+        return json(['code' => 200, 'msg' => '导入完成：解析 ' . $info['count'] . ' 行，入库 ' . $count . ' 条']);
     }
 }

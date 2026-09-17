@@ -101,6 +101,9 @@ class Action extends BaseDsl
     /** @var object|null 当前行对应的模型实例（框架调用 handle() 前自动注入，未命中为 null） */
     protected $model = null;
 
+    /** @var array excel 字段解析结果：[prop => ['rows' => [...], 'count' => n, 'file_name' => ...]]（框架调 handle 前自动注入） */
+    protected $excelData = [];
+
     /**
      * @param string $name  操作标识（handler 路由、行级显隐都用它）
      * @param string $label 按钮标题
@@ -397,6 +400,42 @@ class Action extends BaseDsl
     public function getPermissionAction()
     {
         return $this->permissionAction;
+    }
+
+    // ===== Excel 导入（$form->excel() 字段，框架调 handle() 前自动解析注入） =====
+
+    /**
+     * 取 excel 字段解析出的数据行（首行作表头的关联数组）
+     *   $rows = $this->excelRows('import_file');  // [['手机号' => '138...', '金额' => '10'], ...]
+     */
+    public function excelRows(string $prop): array
+    {
+        return isset($this->excelData[$prop]['rows']) ? $this->excelData[$prop]['rows'] : [];
+    }
+
+    /**
+     * 取 excel 字段解析元信息：['count' => n, 'file_name' => 'xx.xlsx', 'sheets' => ?int]
+     */
+    public function excelInfo(string $prop): array
+    {
+        $d = isset($this->excelData[$prop]) ? $this->excelData[$prop] : [];
+        unset($d['rows']);
+        return $d;
+    }
+
+    /**
+     * 注入 excel 解析结果（框架在调 handle() 前调用，业务无需手动调用）
+     */
+    public function setExcelData(array $data)
+    {
+        $this->excelData = $data;
+        return $this;
+    }
+
+    /** 当前 action 的 formFields（框架解析 excel 字段时读取） */
+    public function getFormFields(): array
+    {
+        return $this->formFields;
     }
 
     // ===== 行数据访问（列表接口按行求值时注入） =====

@@ -267,7 +267,36 @@ $grid->form(function (Form $form) {
 
 字段通用链式能力（`Field`）：`required / placeholder / help / default / addDefault / editDefault / disabled / addDisabled / editDisabled / hidden / addHidden / addOnly / editOnly / options(map) / multiple / filterable / span / full / row / rules / min / max / step / config(extra)`，支持**动态显隐**：`->when(父值, cb)` / `->addVisibleWhen([...])`。
 
-表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。
+表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`、`isCreate(...)` / `isEdit(...)`（场景字段白名单，见 3.5.1）；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。
+
+#### 3.5.1 场景字段控制：`$form->isCreate(...)` / `$form->isEdit(...)` 与提交规则
+
+创建/编辑各自展示（并提交）哪些字段，在 **Form 级**用 `isCreate(...)` / `isEdit(...)` 声明白名单，支持可变参数、数组、回调动态控制：
+
+```php
+$grid->form(function (Form $form) {
+    $form->text('mobile', '手机号');
+    $form->text('price', '价格');
+    $form->hidden('uid', 'UID');
+
+    $form->isCreate('mobile');                 // 创建时：仅展示/提交 mobile（price 不存在）
+    $form->isEdit('mobile', 'price');          // 编辑时：展示/提交 mobile + price
+    // $form->isCreate(['mobile']);            // 数组写法等价
+    // $form->isCreate(fn($ctx) => ['mobile']);// 回调动态控制，$ctx = ['mode' => 'create'|'edit']
+});
+```
+
+未声明的场景不限制（全部字段可用）；`isCreate()` 不传字段视为未限制。
+
+**严格提交（前端 + 后端双端生效）：**
+
+1. **白名单即提交范围**：某场景白名单外的字段不渲染、不初始化、不提交；即使恶意客户端多提交了这些字段，后端 `add()/update()` 保存前也会按同一份配置剔除，校验规则同步剔除（不会因被剔除的 required 字段而报错）。
+2. **disabled 不提交**：`->disabled()` / `->addDisabled()` / `->editDisabled()` 生效的场景中，该字段 UI 禁用且**不参与提交**（前端 `sanitizeFormData` 剔除 + 后端白名单剔除）。只读展示需求照常满足，且杜绝"前端禁用、抓包改值"绕过。
+3. **例外**：`$form->hidden('prop', ...)` 声明的隐藏提交字段（顶层 `hidden=true`）不受白名单/禁用影响，始终随表单提交。
+4. 条件字段（`->when()`）如需在受限场景使用，应把字段名写进白名单；其可见性仍由父字段值在前端实时控制。
+5. 数组写法的继承式控制器（`actions()` 同级的 `formFields()` 数组）可在返回的 config 里自带 `sceneShow: {create: [...], edit: [...]}` 键，前端同样生效。
+
+前端行为见 `GenericCurd/index.vue` 的 `allFormFields`（白名单过滤）/ `sanitizeFormData`；后端见 `CurdActionsTrait` 的 `writableFields / filterWritableFields`。
 
 ### 3.6 自定义操作 Action（行级/批量/全局/弹窗）
 
@@ -315,6 +344,92 @@ public function handle(Request $request)
 ```
 
 要点：`$this->model()` 是框架按请求 id 注入的**当前行**模型（未命中为 null），行级用；批量用 `$request->post('ids')`；`$this->row('字段')` 只在 `init()` 的闭包（show 等）里取当前渲染行数据；基类 `handle()` 未覆盖时会回退到控制器上的 `action{Name}(Request $request)`。
+
+#### 3.6.1 全局/批量按钮 + 表单弹窗（`global()/batch()` × `form()`）
+
+行级、批量、全局按钮都支持 `->form(fn($form){...})` 弹窗表单：点击按钮 → 弹出任意 Form DSL 字段的弹窗 → 用户填写/选文件 → 点确认 → 请求进 `handle(Request $request)`，表单值在 `$request->post()` 里。典型场景：列表工具栏「导入」按钮，点开弹窗选 Excel 文件，确认后处理。
+
+```php
+// ① 全局导入按钮（工具栏，与新增/导出同级）
+$grid->addAction(new ImportOrdersAction());
+
+class ImportOrdersAction extends Action
+{
+    protected function init()
+    {
+        $this->name('import')->label('导入订单')->icon('Upload')->type('primary')
+            ->global(true)                                   // 工具栏全局按钮；批量按钮则用 ->batch(true)
+            ->dialogTitle('导入订单')
+            ->dialogWidth('520px')
+            ->form(function ($form) {                        // 弹窗内任意 Form DSL 字段
+                $form->file('import_file', '选择文件')
+                    ->rules('required');                     // 必填校验复用表单规则
+                $form->switch('skip_exists', '跳过已存在');
+            });
+    }
+
+    public function handle(Request $request)
+    {
+        $file = $request->post('import_file');   // 已通过 /api/upload 上传后的文件相对路径
+        $skipExists = (bool)$request->post('skip_exists');
+        // 全局按钮附带当前搜索条件：$request->post('query', [])
+        // 批量按钮附带勾选主键：$request->post('ids', [])
+        // …… 解析文件、逐行入库 ……
+        return $this->ok('导入成功，共处理 ' . $count . ' 条');
+    }
+}
+```
+
+行为说明：
+- 表单字段支持全部 Form DSL 能力（file/image/remote/when/isCreate 等）；文件类字段先走 `/api/upload` 上传拿到路径，`handle` 里拿到的就是路径字符串。
+- `global(true)` 提交时自动附带 `{ query: 当前搜索条件 }`；`batch(true)` 自动附带 `{ ids: 勾选主键 }`；行级自动附带 `{ id: 当前行主键 }`（`->field()` 可改字段名）。
+- 无 `->api()` 时自动路由到 `/api/curd/model/{model}/action/{name}`；弹窗提交失败（接口返回错误）时弹窗保持打开，便于修改后重试。
+
+#### 3.6.2 Excel 导入字段 `$form->excel()`（multipart 直传 + 自动解析）
+
+Excel 导入推荐用专用 `excel` 字段：**不走 `/api/upload`**，本地选文件后以 multipart 表单把二进制直接提交到 action 接口，服务端自动解析，`handle` 里直接拿解析好的数据行：
+
+```php
+$grid->addAction(new ImportOrdersAction());
+
+class ImportOrdersAction extends Action
+{
+    protected function init()
+    {
+        $this->name('import')->label('导入订单')->global(true)
+            ->form(fn($form) => $form->excel('import_file', '选择文件')      // 默认 accept .xlsx/.csv，必选
+                                     ->options(['maxRows' => 10000, 'sheet' => 1])
+            );
+    }
+
+    public function handle(Request $request)
+    {
+        $rows = $this->excelRows('import_file');  // 首行作表头：[['手机号' => '138...', '金额' => '10'], ...]
+        $info = $this->excelInfo('import_file');  // ['count' => 2, 'file_name' => 'xx.xlsx', 'sheets' => 1]
+        // …… 逐行业务处理 ……
+        return $this->ok('导入成功，共解析 ' . $info['count'] . ' 行');
+    }
+}
+```
+
+`excel($prop, $label, $options)` 的 `$options`：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `required` | `true` | 前端必选校验 |
+| `accept` | `.xlsx,.csv` | 可选文件格式 |
+| `maxRows` | `5000` | 最大解析行数（不含表头，超出抛异常） |
+| `sheet` | `1` | 解析第几个工作表 |
+
+**解析规则**（内置轻量解析器 `ExcelParser`，零 composer 依赖，需 PHP `zip` + `SimpleXML` 扩展）：
+- `.xlsx`：Office Open XML，覆盖 sharedStrings / inlineStr / 数字 / 公式结果字符串；`.csv`：自动识别 UTF-8 BOM 与 GBK 编码
+- 首行为表头（空表头自动用 A/B/C 兜底），每行输出为 `['表头' => 值]` 关联数组，整行为空自动跳过
+- 日期单元格读出的是 Excel 序列数字（如 `45210.5`），需要日期请用文本格式存储或业务侧自行换算
+
+**取用方式（双写法同一 API）**：
+- Action 类写法：`handle()` 内 `$this->excelRows('prop')` / `$this->excelInfo('prop')`
+- 数组式继承控制器（`actions(): array` 里写 `'type' => 'excel'` 字段）：`actionXxx()` 内同样 `$this->excelRows('prop')` / `$this->excelInfo('prop')`（trait 提供）
+- 未上传文件时 `excelRows()` 返回空数组，业务自行判断报错
 
 ### 3.7 列表头汇总条 `grid()->summary(callable)`
 

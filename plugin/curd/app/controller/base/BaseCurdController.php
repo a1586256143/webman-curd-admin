@@ -5,6 +5,7 @@ use plugin\curd\app\controller\base\concerns\CurdActionsTrait;
 use plugin\curd\app\controller\base\concerns\CurdConfigTrait;
 use plugin\curd\app\controller\base\concerns\CurdListTrait;
 use plugin\curd\app\controller\base\concerns\CurdQueryTrait;
+use support\Request;
 
 /**
  * 通用 CURD 控制器基类
@@ -65,5 +66,29 @@ abstract class BaseCurdController
     {
         $grid = $this->resolveGrid();
         return $grid ? $grid->getModelInstance() : null;
+    }
+
+    /**
+     * 级联下拉通用分发（GET /api/curd/model/{model}/cascade/{method}）
+     *
+     * 由 CurdController::cascade 转发至此。按命名约定白名单：只允许调用
+     * 业务控制器上 cascade{Xxx} 前缀的公开方法（如 cascadeMoneys），
+     * 杜绝借道调用 add/delete 等其它方法。
+     *
+     * 业务控制器示例：
+     *   public function cascadeMoneys(Request $request)
+     *   {
+     *       $platformId = (int)$request->input('platform', 0);
+     *       // …… 查询选项 ……
+     *       return json(['code' => 200, 'data' => [['value' => 10, 'label' => '10元'], ...]]);
+     *   }
+     */
+    public function cascadeOptions(string $method, Request $request)
+    {
+        $real = 'cascade' . str_replace(' ', '', ucwords(str_replace(['-', '_'], ' ', $method)));
+        if (!preg_match('/^cascade[A-Z]/', $real) || !method_exists($this, $real)) {
+            return json(['code' => 404, 'msg' => "级联数据源 {$method} 未实现：请在 " . static::class . " 中定义 {$real}(Request \$request)"]);
+        }
+        return $this->$real($request);
     }
 }

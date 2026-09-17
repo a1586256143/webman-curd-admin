@@ -55,6 +55,12 @@ class Grid extends BaseDsl
      */
     protected array $formConfirm = [];
 
+    /**
+     * 场景字段白名单（来自 Form::isCreate()/isEdit()）：
+     * ['create' => string[]|null, 'edit' => string[]|null]，null = 未限制
+     */
+    protected array $formSceneShow = ['create' => null, 'edit' => null];
+
     public function __construct(Model $model, ?string $title = null)
     {
         $this->model = $model;
@@ -170,6 +176,7 @@ class Grid extends BaseDsl
         $this->formFields = $form->toArray();
         $this->formLayout = $form->layout();
         $this->formConfirm = $form->confirmConfig();
+        $this->formSceneShow = $form->sceneShowConfig();
         // 表单字段里的 rules 字符串同步到验证规则
         foreach ($this->formFields as $field) {
             if (!empty($field['required'])) {
@@ -577,5 +584,14 @@ class Grid extends BaseDsl
     public function formConfirm(): array
     {
         return $this->formConfirm;
+    }
+
+    /**
+     * 场景字段白名单（['create' => string[]|null, 'edit' => string[]|null]）
+     * 来自 Form::isCreate()/isEdit()；null = 该场景未限制（全部字段可用）
+     */
+    public function formSceneShow(): array
+    {
+        return $this->formSceneShow;
     }
 }

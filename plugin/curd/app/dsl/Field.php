@@ -320,6 +320,45 @@ class Field extends BaseDsl
     }
 
     /**
+     * 级联下拉：本字段的选项由其它字段的值决定（如 选择平台 → 加载该平台的金额档位）
+     *
+     * @param string ...$props 依赖的字段名（可多个，任一变化都会重新拉取选项）
+     *
+     * 行为：
+     *  - 任一依赖字段变化 → 带上所有依赖字段的当前值请求 cascadeUrl，回填本字段选项
+     *  - 任一依赖字段为空 → 本字段禁用 + 清空已选值
+     *  - 依赖字段取值自动归一化：文本/数字取标量、布尔取 1/0、数组（多选/日期范围）逗号连接
+     *  - 编辑回显：先按回显的依赖值拉取选项，选项到位后本字段正常显示 label
+     */
+    public function cascadeFrom(string ...$props): self
+    {
+        $this->config['cascadeFrom'] = array_values($props);
+        return $this;
+    }
+
+    /**
+     * 级联数据源 URL（完整地址，GET，依赖字段值自动作为 query 参数）
+     * 与 cascadeHandler 二选一；同时设置时 cascadeUrl 优先
+     */
+    public function cascadeUrl(string $url): self
+    {
+        $this->config['cascadeUrl'] = $url;
+        return $this;
+    }
+
+    /**
+     * 级联数据源处理器：指向当前控制器上的 cascade{Xxx}(Request $request) 方法
+     * 自动解析为 /api/curd/model/{模型名}/cascade/{handler}（配置输出时替换为 cascadeUrl）
+     *
+     * 例：->cascadeHandler('moneys') → 控制器定义 public function cascadeMoneys(Request $request)
+     */
+    public function cascadeHandler(string $handler): self
+    {
+        $this->config['cascadeHandler'] = $handler;
+        return $this;
+    }
+
+    /**
      * 自定义配置（兜底）
      */
     public function config(array $extra): self
