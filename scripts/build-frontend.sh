@@ -40,9 +40,27 @@ echo "==> 构建前端: $FRONTEND_DIR (base=$PAGE_BASE)"
 )
 
 echo "==> 回灌产物到 $PUBLIC_DIR"
+# installer/ 是插件自带的 Web 安装向导页（InstallerController::PAGE_FILE =
+# /installer/index.html，路由 GET /app/curd-installer），**不属于前端构建产物**。
+# 清空 public 前先备份，回灌后放回；否则向导页会 404（且该文件会被 git 记为删除）。
+INSTALLER_BAK=""
+if [ -d "$PUBLIC_DIR/installer" ]; then
+  INSTALLER_BAK="$(mktemp -d)"
+  cp -R "$PUBLIC_DIR/installer" "$INSTALLER_BAK/installer"
+fi
+
 rm -rf "$PUBLIC_DIR"
 mkdir -p "$PUBLIC_DIR"
 cp -R "$FRONTEND_DIR/dist/." "$PUBLIC_DIR/"
+
+if [ -n "$INSTALLER_BAK" ]; then
+  cp -R "$INSTALLER_BAK/installer" "$PUBLIC_DIR/installer"
+  rm -rf "$INSTALLER_BAK"
+  echo "    已保留 installer/（Web 安装向导页）"
+else
+  echo "    警告: 未找到 installer/，Web 安装向导页会 404"
+  echo "          缺失时用 git 恢复: git checkout -- plugin/curd/public/installer/index.html"
+fi
 
 find "$PUBLIC_DIR" -name '.DS_Store' -delete 2>/dev/null || true
 

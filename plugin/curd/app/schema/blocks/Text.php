@@ -10,9 +10,15 @@ use plugin\curd\app\schema\SchemaNode;
  */
 class Text extends SchemaNode
 {
-    public function __construct()
+    /**
+     * @param string $value 文本内容（可选，等价于构造后调用 value()）
+     */
+    public function __construct(string $value = '')
     {
         $this->type = 'text';
+        if ($value !== '') {
+            $this->value($value);
+        }
     }
 
     /** 文本内容（支持 {{key.path}} 占位符） */

@@ -599,13 +599,28 @@ trait CurdActionsTrait
             }
         }
 
-        $rowsQuery = clone $query;
         $page = (int)$request->input('page', 0);
         $size = (int)$request->input('size', 0);
+
+        // 单次导出行数上限（config/admin.php 的 export_max_rows，见 exportMaxRows()）
+        // 超限直接报错，不做静默截断——静默截断会让用户以为"导全了"，比报错更危险
+        $maxRows = $this->exportMaxRows();
+        $total = (int)(clone $query)->count();
+        $willExport = ($page > 0 && $size > 0 && $ids === '') ? min($total, $size) : $total;
+        if ($maxRows > 0 && $willExport > $maxRows) {
+            return json([
+                'code' => 400,
+                'msg'  => "本次将导出 {$willExport} 条，超过单次导出上限 {$maxRows} 条，请缩小筛选范围或分批导出",
+            ]);
+        }
+
+        // 硬上限兜底（上面的校验已保证不会真的截断，这里只防意外）
+        $cap = $maxRows > 0 ? $maxRows : 100000;
+        $rowsQuery = clone $query;
         if ($page > 0 && $size > 0 && $ids === '') {
-            $rowsQuery->forPage($page, min(100000, $size));
+            $rowsQuery->forPage($page, min($cap, $size));
         } else {
-            $rowsQuery->limit(100000);
+            $rowsQuery->limit($cap);
         }
 
         // 保留为 Model（不 toArray），以便设置 display_{prop} 属性
@@ -614,11 +629,16 @@ trait CurdActionsTrait
         $rows = $this->applyDisplayHandlers($rows);
 
         // 收集导出列（按 grid 定义顺序）；子类可重写 exportColumns() 返回 prop 子集
-        $columns = $this->collectExportColumns();
+        // 前端「列配置」勾选结果随请求带上（_columns=prop1,prop2），用于把导出列收敛到当前可见列
+        $only = $this->requestedExportColumns($request);
+        $columns = $this->collectExportColumns($only);
         if (empty($columns)) {
-            // 无 grid 配置（动态 CURD）：回退到表字段
+            // 无 grid 配置（动态 CURD）：回退到表字段（同样受前端勾选约束，否则该口径在该类页面失效）
             $first = $rows->first();
             $fallbackFields = $first ? array_keys($first->getAttributes()) : array_keys($columnMap);
+            if (!empty($only)) {
+                $fallbackFields = array_values(array_intersect($fallbackFields, $only));
+            }
             $columns = array_map(fn($f) => ['prop' => $f, 'label' => $f, 'map' => null, 'type' => null], $fallbackFields);
         }
 
@@ -634,20 +654,166 @@ trait CurdActionsTrait
             $csv .= implode(',', $line) . "\n";
         }
 
-        $filename = $this->table() . '_' . date('YmdHis') . '.csv';
+        // 文件名用「页面标题」（与 /api/curd/config 的 data.title 同源），不再是裸表名
+        $filename = $this->exportFilename();
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Disposition' => 'attachment; filename="' . $this->exportAsciiFilename($filename)
+                . '"; filename*=UTF-8\'\'' . rawurlencode($filename),
             'Cache-Control' => 'no-store',
         ]);
     }
 
     /**
-     * 收集导出列配置：[{prop, label, map, type}, ...]
-     * 子类可重写 exportColumns() 返回 prop 数组自定义子集；返回 null 时按 grid 全列导出（含 hidden）。
+     * 单次导出行数上限（<=0 表示不限制）
+     *
+     * 读取优先级：
+     *   ① 宿主 config/admin.php 的 export_max_rows（与 upload_path / site 同一个宿主配置文件）
+     *   ② 插件 config/curd.php 的 export_max_rows（宿主 config/curd.php 顶层同名键可覆盖）
+     *   ③ 兜底 100000
      */
-    protected function collectExportColumns(): array
+    protected function exportMaxRows(): int
+    {
+        $value = config('admin.export_max_rows');
+        if ($value === null || $value === '') {
+            $value = config('plugin.curd.curd.export_max_rows', 100000);
+        }
+        return (int)$value;
+    }
+
+    /**
+     * 导出文件名：{页面标题}_{YmdHis}.csv
+     *
+     * 标题与 /api/curd/config 返回的 data.title 同源：
+     *   控制器 $title（title()）→ 落库配置 curd_configs.title（动态 CURD 页 title() 会退化成表名时再查一次）
+     *   → 表名兜底。
+     * 前端 blob 下载名同样取页面标题（dynamicCurd/index.vue 的 export），两边保持一致。
+     */
+    protected function exportFilename(): string
+    {
+        $name = $this->exportTitle();
+        // 文件名安全：去掉路径分隔符 / 控制字符，避免 Content-Disposition 注入与路径穿越
+        $name = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', '_', $name) ?? '';
+        $name = trim($name, " ._");
+        if ($name === '') {
+            $name = 'export';
+        }
+        return $name . '_' . date('YmdHis') . '.csv';
+    }
+
+    /**
+     * 导出用的页面标题（拿不到时回退表名）
+     */
+    protected function exportTitle(): string
+    {
+        $title = '';
+        $table = '';
+        try {
+            $table = trim((string)$this->table());
+        } catch (\Throwable $e) {
+            // 控制器未实现 model()/table()：保持空，走兜底
+        }
+        try {
+            $title = trim((string)$this->title());
+        } catch (\Throwable $e) {
+            // 无标题（title() 内部也可能因 table() 抛错）：忽略，稍后用表名兜底
+        }
+
+        // 动态 CURD 控制器没有显式标题，title() 会退化成表名 → 再取一次落库配置的标题
+        if ($title === '' || $title === $table) {
+            try {
+                $row = \plugin\curd\app\model\CurdConfigs::firstByTableName($table);
+                if ($row && !empty($row->title)) {
+                    $title = trim((string)$row->title);
+                }
+            } catch (\Throwable $e) {
+                // 配置表不可用（未安装 / 未迁移）时忽略，继续用表名
+            }
+        }
+
+        return $title !== '' ? $title : $table;
+    }
+
+    /**
+     * ASCII 兜底文件名（老客户端不认 filename* 时使用）
+     *
+     * 中文标题剥掉非 ASCII 后会变成空 / 一串下划线（下载下来完全看不出是什么），
+     * 这种情况下退回**表名**（如 HfAccoountWater），至少是可读的英文标识。
+     */
+    protected function exportAsciiFilename(string $filename): string
+    {
+        // 只看标题主干：去掉 _YmdHis.csv 尾巴，避免时间戳里的数字骗过「有没有 ASCII 字符」的判断
+        $suffix = '';
+        if (preg_match('/(_\d{14}\.csv)$/', $filename, $m)) {
+            $suffix = $m[1];   // 复用同一时间戳，两个头里的文件名不会差 1 秒
+        }
+        if ($suffix === '') {
+            $suffix = '_' . date('YmdHis') . '.csv';
+        }
+
+        $stem = substr($filename, 0, strlen($filename) - strlen($suffix));
+        $ascii = preg_replace('/[^\x20-\x7E]/', '', $stem) ?? '';
+        $ascii = str_replace(['"', '\\'], '_', $ascii);
+        $ascii = trim($ascii, " ._");
+
+        if ($ascii === '' || !preg_match('/[A-Za-z0-9]/', $ascii)) {
+            $fallback = '';
+            try {
+                $fallback = trim((string)$this->table());
+            } catch (\Throwable $e) {
+                // 无表名：保持空，走 export
+            }
+            $ascii = $fallback !== '' ? $fallback : 'export';
+        }
+
+        return $ascii . $suffix;
+    }
+
+    /**
+     * 解析前端「列配置」传参：_columns=prop1,prop2（逗号分隔）
+     *
+     * 该参数只用于**收窄**导出列，不会扩大范围：最终列始终是「grid 定义列 ∩ 允许导出的列 ∩ 勾选列」。
+     * 缺省 / 空串 / 解析后为空 → 返回 null，即沿用原有口径（全列），保证老调用方与直连接口的兼容。
+     *
+     * @return string[]|null
+     */
+    protected function requestedExportColumns(Request $request): ?array
+    {
+        $raw = $request->input('_columns', null);
+        // 兼容数组形式（_columns[]=a&_columns[]=b）
+        if (is_array($raw)) {
+            $list = $raw;
+        } elseif (is_string($raw) && $raw !== '') {
+            $list = explode(',', $raw);
+        } else {
+            return null;
+        }
+
+        $out = [];
+        foreach ($list as $prop) {
+            if (!is_string($prop)) continue;
+            $prop = trim($prop);
+            if ($prop !== '' && !in_array($prop, $out, true)) {
+                $out[] = $prop;
+            }
+        }
+
+        return empty($out) ? null : $out;
+    }
+
+    /**
+     * 收集导出列配置：[{prop, label, map, type}, ...]
+     *
+     * 优先级（只收窄、不放宽）：
+     *  1. 子类重写 exportColumns() 返回的 prop 白名单（开发者口径，最高优先）
+     *  2. $only 前端「列配置」勾选列（跟随前端列设置）
+     *  3. 都没有 → grid 全列（含 hidden），保持历史行为
+     * 两种来源同时存在时取交集；未知 prop 一律忽略，顺序始终按 grid 定义。
+     *
+     * @param string[]|null $only 前端勾选的 prop（null = 不限制）
+     */
+    protected function collectExportColumns(?array $only = null): array
     {
         $custom = null;
         if (method_exists($this, 'exportColumns')) {
@@ -656,14 +822,26 @@ trait CurdActionsTrait
         $grid = $this->resolveGrid();
         $all = $grid ? $grid->columns() : [];
         $byProp = array_column($all, null, 'prop');
-        if ($custom !== null) {
-            $out = [];
-            foreach ($custom as $prop) {
-                if (isset($byProp[$prop])) $out[] = $byProp[$prop];
+
+        // 待导出的 prop 清单：白名单 → 再与前端勾选求交
+        $picked = $custom;
+        if (!empty($only)) {
+            // 用 grid 的 prop 顺序做基准，天然去重 + 按定义顺序输出
+            $picked = array_values(array_intersect(array_keys($byProp), $only));
+            if ($custom !== null) {
+                $picked = array_values(array_intersect($picked, $custom));
             }
-            return $out;
         }
-        return $all;
+
+        if ($picked === null) {
+            return $all;
+        }
+
+        $out = [];
+        foreach ($picked as $prop) {
+            if (isset($byProp[$prop])) $out[] = $byProp[$prop];
+        }
+        return $out;
     }
 
     /**

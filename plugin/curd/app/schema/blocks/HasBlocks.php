@@ -151,4 +151,22 @@ trait HasBlocks
         $this->push($n);
         return $n;
     }
+
+    /**
+     * 可复制文本（等宽展示 + 一键复制按钮）
+     * 用于 api_key / 密钥 / 回调地址等长串：
+     *   $card->copyText('{{info.api_key}}', 'Api Key');
+     */
+    public function copyText(string $value = '', ?string $label = null): CopyText
+    {
+        $n = new CopyText();
+        if ($value !== '') {
+            $n->value($value);
+        }
+        if ($label !== null) {
+            $n->label($label);
+        }
+        $this->push($n);
+        return $n;
+    }
 }

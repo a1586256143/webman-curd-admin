@@ -69,7 +69,7 @@ class Descriptions extends SchemaNode
         $n = new DescriptionsItem();
         $n->label($label);
         if (is_string($content) && $content !== '') {
-            $n->push(new Text($content));
+            $n->push((new Text())->value($content));
         }
         if ($cb) {
             $cb($n);

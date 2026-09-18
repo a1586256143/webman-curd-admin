@@ -48,6 +48,34 @@ $defaults = [
     // 权限推导不出 obj 的路径处理（同宿主 config/app.php permission.allow_unresolved）
     'allow_unresolved' => true,
 
+    // 单次导出的最大行数（<=0 = 不限制）。
+    // 读取优先级：宿主 config/admin.php 的 export_max_rows（推荐改这个）→ 本键 → 兜底 100000。
+    // 超限时导出接口返回 {"code":400,"msg":"本次将导出 N 条，超过单次导出上限 M 条..."}，
+    // 前端会把它当错误提示而不是下载文件（见 dynamicCurd/index.vue 的 export）。
+    'export_max_rows' => 100000,
+
+    // 默认落地页（前端路由路径）：登录成功后、以及直接访问后台根路径 / 刷新时打开它。
+    // 用「相对路径」写，不带 /app/curd 前缀（部署前缀由前端 VITE_BASE_PATH 决定）：
+    //   '/custom-page/home'  → 自定义页面（app/custom/pages/home.vue 或 PageRegistry::register('home', ...)）
+    //   '/dashboard'         → 内置首页（默认值，不配置即保持旧行为）
+    //   也可以写完整 URL（http://...），前端会整页跳转过去。
+    // 优先级：宿主 config/admin.php 的 home_page → config/admin.php site.home_page → 本键 → /dashboard
+    // 注意：这里只决定「打开哪个页面」，不校验用户有没有该页面的菜单/权限。
+    'home_page' => '/dashboard',
+
+    // ===== 登录图形验证码（webman/captcha）=====
+    // 登录页是否显示验证码；校验发生在 AuthController::login 的最前面（含自定义 login_handler 之前）。
+    //   读取优先级：宿主 config/admin.php 的 captcha_enabled → 本键 → true
+    //   关掉即登录页完全不显示验证码（也用于 Redis 异常时的应急开关：验证码明文存 Redis，
+    //   Redis 挂了就没人能登录，此时把它设为 false 并重启即可放行）
+    'captcha_enabled' => true,
+
+    // 验证码有效期（秒）：超时提示「验证码已过期，请点击图片重新获取」
+    'captcha_ttl' => 300,
+
+    // 验证码位数（3~6，越界回落 4）；字符集已剔除易混的 i/l/o/0/1（见 app/auth/Captcha.php）
+    'captcha_length' => 4,
+
     // /api/admin/*（用户/角色/个人中心）是否强制 RBAC 校验
     //   false（默认）= 仅登录即可（与宿主历史行为一致，兼容存量项目）
     //   true          = 走 casbin 校验，obj 由路径推导（/api/admin/users → obj=admin act=users）
@@ -66,6 +94,18 @@ $defaults = [
     //   }
     //   控制器只认返回的「身份数组」，token 签发/存储由包统一处理。
     'auth_provider' => \plugin\curd\app\auth\DefaultAuthProvider::class,
+
+    // 自定义登录入口（可选）：整个 /api/auth/login 交给这个类处理。
+    // 与 auth_provider 的区别：
+    //   auth_provider  只换「凭据校验 + 身份来源」，token 签发与响应结构仍由包负责（推荐先试这个）
+    //   login_handler  连响应结构一起接管，适合要加验证码 / 风控 / 外部单点登录 / 额外返回字段的场景
+    // 用法（宿主 config/curd.php）：
+    //   'login_handler' => \app\admin\MyLogin::class,
+    // 类约定：public function login(\support\Request $request): \Webman\Http\Response
+    //   校验通过后调 \plugin\curd\app\auth\LoginIssuer::issue($identity) 拿到标准响应即可：
+    //   return json(LoginIssuer::issue(['id' => 1, 'username' => 'x', 'name' => 'X', 'status' => 1]));
+    // 留空 = 用内置登录逻辑。
+    'login_handler' => '',
 
     // 权限总开关：
     //   true  （默认）= 走 RBAC 校验、登录/me 下发权限；

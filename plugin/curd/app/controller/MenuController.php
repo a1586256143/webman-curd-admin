@@ -2,10 +2,25 @@
 namespace plugin\curd\app\controller;
 
 use plugin\curd\app\CurdDb;
+use plugin\curd\app\model\CurdConfigs;
+use plugin\curd\app\ModelRegistry;
+use plugin\curd\app\RouteControllerRegistry;
 use support\Request;
 
 class MenuController
 {
+    /**
+     * 标准 CURD 操作 → 权限节点（与宿主 make:menu-node 命令保持同一套约定）：
+     * 容器节点 slug = curd.{Model}，操作节点 slug = curd.{Model}.{op}
+     */
+    protected const CURD_OPS = [
+        'list'         => '列表',
+        'add'          => '新增',
+        'update'       => '编辑',
+        'delete'       => '删除',
+        'batch-delete' => '批量删除',
+        'export'       => '导出',
+    ];
     /**
      * 获取菜单列表（树形结构，仅可见，按用户权限过滤）
      *
@@ -149,6 +164,14 @@ class MenuController
 
     /**
      * 添加菜单
+     *
+     * 除表单字段外还支持：
+     *   gen_permissions = 1            勾选「一键生成权限」：在该菜单下自动生成操作权限节点（type=3）
+     *   permission_ops  = list,add,... 要生成哪些操作（不传 = 全部标准操作）
+     * 权限前缀（slug base）取值顺序：
+     *   ① 表单里的「权限标识」
+     *   ② 按路由路径自动推导 curd.{Model}（宿主注册的 CURD 控制器 / 配置生成器存的页面）
+     * 推导不出来时不生成，并在响应里给出 warning（提示手填权限标识）。
      */
     public function add(Request $request)
     {
@@ -156,12 +179,26 @@ class MenuController
         $now  = date('Y-m-d H:i:s');
 
         $type = (int)($data['type'] ?? 1);
+        $path = $type === 3 ? '' : ($data['path'] ?? '');
+
+        $gen = filter_var($data['gen_permissions'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $base = trim((string)($data['permission'] ?? ''));
+        $warning = '';
+
+        // 勾了生成但没填权限标识 → 按路由自动推导（同时回填到菜单自身，与生成器/命令约定一致）
+        if ($gen && $base === '') {
+            $base = $this->suggestPermissionBase($path);
+            if ($base === '') {
+                $warning = '未能从路径识别到 CURD 模型，未生成权限节点；请手填「权限标识」后重试';
+            }
+        }
+
         $id = CurdDb::adminTable('menus')->insertGetId([
             'parent_id' => $data['parent_id'] ?? 0,
             'title'      => $data['title']      ?? '',
             'icon'       => $data['icon']       ?? '',
-            'path'       => $type === 3 ? '' : ($data['path'] ?? ''),
-            'permission' => $data['permission'] ?? '',
+            'path'       => $path,
+            'permission' => $base,
             'sort'       => $data['sort']       ?? 0,
             'type'       => $type,
             'visible'    => $data['visible']    ?? 1,
@@ -169,11 +206,330 @@ class MenuController
             'updated_at' => $now,
         ]);
 
-        return json(['code' => 200, 'msg' => '添加成功', 'data' => ['id' => $id]]);
+        $created = [];
+        if ($gen && $base !== '' && $type !== 3) {
+            $created = $this->generatePermissionNodes((int)$id, $base, $this->normalizeOps($data['permission_ops'] ?? []));
+        }
+
+        return json([
+            'code' => 200,
+            'msg'  => $warning === '' ? '添加成功' : '添加成功（' . $warning . '）',
+            'data' => ['id' => $id, 'permission' => $base, 'permissions' => $created, 'warning' => $warning],
+        ]);
+    }
+
+    /**
+     * 权限前缀推导建议（新建菜单勾选「一键生成权限」/ 行内「快速创建权限」时前端即时预览）
+     *
+     *   GET /api/menu/permission/suggest?path=/hf-goods
+     *   GET /api/menu/permission/suggest?parent_id=7      ← 与 permissionQuick 同一套规则
+     *
+     * 传 parent_id 时按该菜单节点推导（permissionBaseOf），保证「预览 = 实际写入」；
+     * 否则按路由路径推导（suggestPermissionBase）。
+     *
+     * @return \support\Response { base: 'curd.HfGoods', ops: [{op,title,permission}] }
+     */
+    public function permissionSuggest(Request $request)
+    {
+        $parentId = (int)$request->get('parent_id', 0);
+
+        if ($parentId > 0) {
+            $parent = CurdDb::adminTable('menus')->where('id', $parentId)->first();
+            $base   = $parent ? $this->permissionBaseOf($parent) : '';
+        } else {
+            $base = $this->suggestPermissionBase((string)$request->get('path', ''));
+        }
+
+        return json(['code' => 200, 'msg' => 'ok', 'data' => [
+            'base' => $base,
+            'ops'  => $this->opsPreview($base),
+        ]]);
+    }
+
+    /**
+     * 快速创建权限节点（菜单管理行内按钮，只需要输入权限名）
+     * POST /api/menu/permission/quick
+     *   parent_id 所属菜单 id（必填）
+     *   name      权限名（必填，如「审核」「audit」）；同时作为节点标题
+     *   slug      权限标识后缀（可选，留空按权限名生成：ASCII 转小写-连字符，中文原样）
+     *
+     * 生成规则：permission = {父级权限前缀}.{slug}
+     *   父级前缀优先取父菜单自身的 permission（如 curd.HfGoods），
+     *   其次取父菜单已有子权限节点的公共前缀，最后按父菜单路径推导。
+     */
+    public function permissionQuick(Request $request)
+    {
+        $parentId = (int)$request->post('parent_id', 0);
+        $name     = trim((string)$request->post('name', ''));
+        $slugIn   = trim((string)$request->post('slug', ''));
+
+        if ($parentId <= 0) {
+            return json(['code' => 400, 'msg' => '请先选择所属菜单']);
+        }
+        if ($name === '') {
+            return json(['code' => 400, 'msg' => '请输入权限名']);
+        }
+
+        $parent = CurdDb::adminTable('menus')->where('id', $parentId)->first();
+        if (!$parent) {
+            return json(['code' => 400, 'msg' => '所属菜单不存在']);
+        }
+        if ((int)$parent->type === 3) {
+            return json(['code' => 400, 'msg' => '不能在权限节点下再建权限，请选择菜单或容器']);
+        }
+
+        $base = $this->permissionBaseOf($parent);
+        $slug = $slugIn !== '' ? $this->normalizeSlug($slugIn) : $this->normalizeSlug($name);
+
+        $permission = $base === '' ? $slug : $base . '.' . $slug;
+
+        if (CurdDb::adminTable('menus')->where('permission', $permission)->exists()) {
+            return json(['code' => 400, 'msg' => '权限标识已存在：' . $permission]);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $id  = CurdDb::adminTable('menus')->insertGetId([
+            'parent_id'  => $parentId,
+            'title'      => $name,
+            'icon'       => '',
+            'path'       => '',
+            'permission' => $permission,
+            'sort'       => 0,
+            'type'       => 3,
+            'visible'    => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return json(['code' => 200, 'msg' => '权限已创建：' . $permission, 'data' => [
+            'id'         => $id,
+            'title'      => $name,
+            'permission' => $permission,
+        ]]);
+    }
+
+    /**
+     * 批量生成操作权限节点；已存在的 slug 跳过
+     *
+     * @param array $ops 需要生成的操作 key（空数组 = 全部标准操作）
+     * @return array 实际新增的节点列表
+     */
+    protected function generatePermissionNodes(int $parentId, string $base, array $ops): array
+    {
+        $now     = date('Y-m-d H:i:s');
+        $created = [];
+
+        foreach (self::CURD_OPS as $op => $title) {
+            if ($ops && !in_array($op, $ops, true)) {
+                continue;
+            }
+            $permission = $base . '.' . $op;
+            if (CurdDb::adminTable('menus')->where('permission', $permission)->exists()) {
+                continue;
+            }
+            $id = CurdDb::adminTable('menus')->insertGetId([
+                'parent_id'  => $parentId,
+                'title'      => $title,
+                'icon'       => '',
+                'path'       => '',
+                'permission' => $permission,
+                'sort'       => 0,
+                'type'       => 3,   // 按钮/操作权限，不出现在侧边栏
+                'visible'    => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $created[] = ['id' => $id, 'title' => $title, 'permission' => $permission];
+        }
+
+        return $created;
+    }
+
+    /**
+     * 操作项预览（前端展示「将生成这些权限」）
+     */
+    protected function opsPreview(string $base): array
+    {
+        $out = [];
+        foreach (self::CURD_OPS as $op => $title) {
+            $out[] = [
+                'op'         => $op,
+                'title'      => $title,
+                'permission' => $base === '' ? $op : $base . '.' . $op,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * 归一化前端传来的操作清单：'list,add' / ['list','add'] / '' → 数组（空 = 全部）
+     */
+    protected function normalizeOps($raw): array
+    {
+        if (is_string($raw)) {
+            $raw = array_filter(array_map('trim', explode(',', $raw)));
+        }
+        if (!is_array($raw) || !$raw) {
+            return [];
+        }
+        $allow = array_keys(self::CURD_OPS);
+        return array_values(array_intersect(array_map('strval', $raw), $allow));
+    }
+
+    /**
+     * 从路由路径推导权限前缀：curd.{Model}
+     *
+     *   ① 宿主注册的 CURD 控制器（RouteControllerRegistry：route_path → 控制器 → model() → 模型短名）
+     *   ② 配置生成器存库的页面（curd_configs.route_path → table_name → 模型短名）
+     * 两条都取不到返回 ''（由调用方提示手填权限标识）。
+     */
+    protected function suggestPermissionBase(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            return '';
+        }
+        $path = '/' . ltrim(explode('?', $path)[0], '/');
+
+        // ① 控制器注册表
+        try {
+            $controller = RouteControllerRegistry::get($path);
+            if ($controller && class_exists($controller)) {
+                $model = $this->modelShortName($controller);
+                if ($model !== '') {
+                    return 'curd.' . $model;
+                }
+            }
+        } catch (\Throwable $e) {
+            // 忽略，继续兜底
+        }
+
+        // ② 配置生成器写入 curd_configs 的页面
+        try {
+            $row = CurdConfigs::firstByRoutePath($path);
+            if ($row) {
+                $table = (string)($row->table_name ?? '');
+                if ($table !== '') {
+                    $model = ModelRegistry::modelByTable($table) ?: ModelRegistry::tableNameToModelName($table);
+                    if ($model !== '') {
+                        return 'curd.' . $model;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // 忽略
+        }
+
+        return '';
+    }
+
+    /**
+     * 已有菜单节点的权限前缀：自身 permission → 子权限节点公共前缀 → 按路径推导
+     */
+    protected function permissionBaseOf($menu): string
+    {
+        $self = trim((string)($menu->permission ?? ''));
+        if ($self !== '') {
+            return $self;
+        }
+
+        // 子节点里已经有 curd.X.list 这类粒度权限 → 取公共前缀（兼容历史数据）
+        $children = CurdDb::adminTable('menus')->where('parent_id', $menu->id)->pluck('permission')->toArray();
+        $dotted = array_values(array_filter(array_map(
+            fn($p) => (string)$p,
+            $children
+        ), fn($p) => str_contains($p, '.')));
+        if ($dotted) {
+            $first = explode('.', $dotted[0]);
+            array_pop($first);
+            if ($first) {
+                return implode('.', $first);
+            }
+        }
+
+        return $this->suggestPermissionBase((string)($menu->path ?? ''));
+    }
+
+    /**
+     * 权限标识后缀归一化：ASCII 转小写 + 空格/下划线转连字符；中文等非 ASCII 原样保留
+     */
+    protected function normalizeSlug(string $raw): string
+    {
+        $s = trim($raw);
+        if ($s === '') {
+            return '';
+        }
+        $s = preg_replace('/[\s_]+/u', '-', $s);
+        $s = preg_replace('/[^\p{L}\p{N}.\-]/u', '', (string)$s);
+        // 纯 ASCII 部分统一小写（中文不受影响）
+        return preg_replace_callback('/[A-Za-z0-9.\-]+/', fn($m) => strtolower($m[0]), (string)$s);
+    }
+
+    /**
+     * 反射控制器取模型短名（与宿主 make:menu-node 的 resolveModelShort 同思路，但更耐操）
+     *
+     * 取值顺序（前两步都不实例化控制器、不执行任何业务代码）：
+     *   ① ModelRegistry 启动期扫描登记的「模型 ↔ 控制器」映射
+     *   ② 控制器声明的 protected string $modelClass = Xxx::class（宿主普遍用这种写法）
+     *   ③ 控制器 model() 返回的模型类
+     *   ④ Grid 里的模型实例（兜底，会执行 grid()，可能有查询）
+     */
+    protected function modelShortName(string $controllerClass): string
+    {
+        // ① 注册表反查（scanControllers 已在启动期登记）
+        try {
+            foreach (ModelRegistry::all() as $name => $class) {
+                if (ModelRegistry::controller($name) === $controllerClass) {
+                    return (string)$name;
+                }
+            }
+        } catch (\Throwable $e) {
+            // 忽略
+        }
+
+        try {
+            $ref = new \ReflectionClass($controllerClass);
+
+            // ② 声明式 $modelClass
+            $defaults = $ref->getDefaultProperties();
+            $declared = $defaults['modelClass'] ?? '';
+            if (is_string($declared) && $declared !== '' && class_exists($declared)) {
+                return basename(str_replace('\\', '/', $declared));
+            }
+
+            // ③ model() 返回模型类名
+            if ($ref->hasMethod('model')) {
+                $method = $ref->getMethod('model');
+                $method->setAccessible(true);
+                $model = $method->invoke($ref->newInstanceWithoutConstructor());
+                if (is_object($model)) {
+                    return (new \ReflectionClass($model))->getShortName();
+                }
+                if (is_string($model) && $model !== '') {
+                    return basename(str_replace('\\', '/', $model));
+                }
+            }
+
+            // ④ Grid 模型实例
+            if ($ref->hasMethod('getGridModel')) {
+                $instance = $ref->newInstanceWithoutConstructor();
+                $gridModel = $instance->getGridModel();
+                if (is_object($gridModel)) {
+                    return (new \ReflectionClass($gridModel))->getShortName();
+                }
+            }
+        } catch (\Throwable $e) {
+            // 忽略，返回空由调用方提示手填
+        }
+
+        return '';
     }
 
     /**
      * 更新菜单
+     *
+     * 与 add() 一致，也支持 gen_permissions（对已建好的菜单补生成操作权限节点）：
+     * 勾选后再存一次即可，已存在的权限会自动跳过（幂等）。
      */
     public function update(Request $request)
     {
@@ -184,20 +540,57 @@ class MenuController
             return json(['code' => 400, 'msg' => 'ID不能为空']);
         }
 
+        $row = CurdDb::adminTable('menus')->where('id', $id)->first();
+        if (!$row) {
+            return json(['code' => 400, 'msg' => '菜单不存在']);
+        }
+
         $update = [];
         foreach (['parent_id', 'title', 'icon', 'path', 'permission', 'sort', 'type', 'visible'] as $field) {
             if (array_key_exists($field, $data)) {
                 $update[$field] = $data[$field];
             }
         }
-        if ((int)($update['type'] ?? CurdDb::adminTable('menus')->where('id', $id)->value('type')) === 3) {
+        $type = (int)($update['type'] ?? $row->type);
+        if ($type === 3) {
             $update['path'] = '';
         }
+
+        // 一键生成权限：权限标识为空时先按路径推导并回填，再补生成缺失的操作节点
+        $gen     = filter_var($data['gen_permissions'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $created = [];
+        $warning = '';
+        if ($gen && $type !== 3) {
+            $base = trim((string)($update['permission'] ?? $row->permission ?? ''));
+            if ($base === '') {
+                $base = $this->suggestPermissionBase((string)($update['path'] ?? $row->path ?? ''));
+                if ($base !== '') {
+                    $update['permission'] = $base;
+                }
+            }
+            if ($base === '') {
+                $warning = '未能从路径识别到 CURD 模型，未生成权限节点；请手填「权限标识」后重试';
+            } else {
+                $created = $this->generatePermissionNodes(
+                    (int)$id,
+                    $base,
+                    $this->normalizeOps($data['permission_ops'] ?? [])
+                );
+            }
+        }
+
         $update['updated_at'] = date('Y-m-d H:i:s');
 
         CurdDb::adminTable('menus')->where('id', $id)->update($update);
 
-        return json(['code' => 200, 'msg' => '更新成功']);
+        $msg = '更新成功';
+        if ($warning !== '') {
+            $msg .= '（' . $warning . '）';
+        } elseif ($created) {
+            $msg .= '，已生成 ' . count($created) . ' 个权限节点';
+        }
+
+        return json(['code' => 200, 'msg' => $msg, 'data' => ['permissions' => $created, 'warning' => $warning]]);
     }
 
     /**

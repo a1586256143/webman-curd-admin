@@ -1,6 +1,7 @@
 <?php
 namespace plugin\curd\app\controller;
 
+use plugin\curd\app\auth\Captcha;
 use plugin\curd\app\CurdDb;
 use plugin\curd\app\rbac\Rbac;
 use support\Request;
@@ -65,12 +66,26 @@ class AdminController
      *
      * 配置来源：config('plugin.curd.curd.site') 优先；为空时回退 config('admin.site')，
      * 保证已按旧约定配置站点的宿主项目行为不变。
+     *
+     * 同时下发 home_page（默认落地页），前端登录后 / 刷新根路径时打开它：
+     *   宿主 config/admin.php 的 home_page → config/admin.php site.home_page
+     *   → 插件 config/curd.php 的 home_page → '/dashboard'
+     *
+     * 并下发 captcha_enabled（登录页是否显示验证码，布尔值）：
+     *   前端登录页据此决定「渲染验证码输入框 + 拉取验证码图片」，关掉即完全隐藏。
      */
     public function siteConfig(Request $request)
     {
         $site = config('plugin.curd.curd.site', []);
         $site = is_array($site) && $site ? $site : config('admin.site', []);
         $site = is_array($site) ? $site : [];
+
+        // 默认落地页（前端路由路径，如 /custom-page/home）；空值一律兜底 /dashboard
+        $homePage = config('admin.home_page');
+        if (!is_string($homePage) || trim($homePage) === '') {
+            $homePage = $site['home_page'] ?? config('plugin.curd.curd.home_page', '/dashboard');
+        }
+
         return json([
             'code' => 200,
             'msg' => 'success',
@@ -80,8 +95,39 @@ class AdminController
                 'logo_type' => 'icon',
                 'copyright' => '',
                 'favicon'   => '',
-            ], $site),
+            ], $site, [
+                'home_page'       => $this->normalizeHomePage($homePage),
+                'captcha_enabled' => Captcha::enabled(),
+            ]),
         ]);
+    }
+
+    /**
+     * 规范化默认落地页路径：
+     *   - 支持 'custom-page/home' / '/custom-page/home' 两种写法，统一补前导斜杠
+     *   - 折叠重复斜杠、去掉空白与首尾引号
+     *   - 解析后为空 → '/dashboard'（保证前端永远有一个能打开的路径）
+     */
+    protected function normalizeHomePage($value): string
+    {
+        if (!is_string($value)) {
+            return '/dashboard';
+        }
+
+        $path = trim($value, " \t\n\r\0\x0B\"'");
+        if ($path === '') {
+            return '/dashboard';
+        }
+
+        // 允许写成完整 URL（多域名/多后台时可能指向别处），原样返回
+        if (preg_match('~^https?://~i', $path)) {
+            return $path;
+        }
+
+        $path = '/' . ltrim($path, '/');
+        $path = preg_replace('~/+~', '/', $path) ?? $path;
+
+        return $path === '/' ? '/dashboard' : $path;
     }
 
     /**

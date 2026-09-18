@@ -19,7 +19,8 @@
 | PHP | ≥ 8.1 |
 | 框架 | webman（`workerman/webman-framework` ^2.1，官方骨架即可） |
 | 数据库 | MySQL（单库架构：认证库与业务库**同一库**，无分库配置项） |
-| 其它 | composer require 会自动拉齐 `webman/database` `webman/redis` `casbin/casbin` `vlucas/phpdotenv`，无需手动装 |
+| 其它 | composer require 会自动拉齐 `webman/database` `webman/redis` `casbin/casbin` `vlucas/phpdotenv` `webman/captcha`，无需手动装 |
+| PHP 扩展 | 登录图形验证码需要 `ext-gd` + `ext-mbstring`（缺失时 `/api/auth/captcha` 报「验证码生成失败」）；不需要验证码可在 `config/admin.php` 里 `'captcha_enabled' => false` |
 
 宿主 `composer.json` 需含 webman 官方插件的三个 scripts（官方骨架自带，缺失则补）：
 

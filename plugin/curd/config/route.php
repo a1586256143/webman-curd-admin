@@ -86,6 +86,15 @@ curd_route('GET', $curdPageBase . '/{path:.+}', [
     'index',
 ]);
 
+// 登录验证码图片（免鉴权：还没登录就要能拿到图）
+//   响应 {"code":200,"data":{"key":"...","image":"data:image/jpeg;base64,..."}}
+//   登录时把 key 与用户输入一起回传（见 AuthController::login / app/auth/Captcha.php）
+//   宿主已在 config/route.php 注册同名路由时以宿主为准（curd_route 的冲突检测）
+curd_route('GET', '/api/auth/captcha', [
+    \plugin\curd\app\controller\AuthController::class,
+    'captcha',
+], $curdCorsOnly);
+
 // 登录接口（不需要鉴权，但必须保证响应带 CORS 头）
 curd_route('POST', '/api/auth/login', [
     \plugin\curd\app\controller\AuthController::class,
@@ -226,6 +235,16 @@ curd_route('POST', '/api/menu/update', [
 curd_route('POST', '/api/menu/delete', [
     \plugin\curd\app\controller\MenuController::class,
     'delete',
+], $curdAuthMiddleware);
+// 权限节点辅助：按路由推导权限前缀（新建菜单「一键生成权限」预览用）
+curd_route('GET', '/api/menu/permission/suggest', [
+    \plugin\curd\app\controller\MenuController::class,
+    'permissionSuggest',
+], $curdAuthMiddleware);
+// 快速创建权限节点（菜单行按钮：只输入权限名）
+curd_route('POST', '/api/menu/permission/quick', [
+    \plugin\curd\app\controller\MenuController::class,
+    'permissionQuick',
 ], $curdAuthMiddleware);
 
 // 通用远程下拉数据源

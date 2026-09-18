@@ -30,6 +30,11 @@ use plugin\curd\app\rbac\Rbac;
  *
  * 未命中任何规则的路径: 仅要求登录(AuthCheck 已保证), 不强制权限
  * 这保证引入 RBAC 后系统默认可用, 需要收紧的接口再补策略即可
+ *
+ * 拒绝时的输出（安全）：
+ *   客户端只收到「没有权限操作，请联系管理员（编号 xxxxxxxx）」，
+ *   不回显 obj/act/路径/权限节点名（避免暴露权限结构）；
+ *   完整上下文写 runtime/logs/webman.log，可用编号关联排查。见 deny()。
  */
 class PermissionCheck implements MiddlewareInterface
 {
@@ -93,7 +98,7 @@ class PermissionCheck implements MiddlewareInterface
             if ($allow) {
                 return $handler($request);
             }
-            return json(['code' => 403, 'msg' => '没有权限操作: ' . $path]);
+            return $this->deny($request, 'unresolved-permission', '', '', $path);
         }
 
         $userId = (string)$request->user->id;
@@ -111,10 +116,43 @@ class PermissionCheck implements MiddlewareInterface
         }
 
         if (!$allowed) {
-            return json(['code' => 403, 'msg' => "没有权限操作: {$obj}:{$act}"]);
+            return $this->deny($request, 'rbac-denied', $obj, $act, $path);
         }
 
         return $handler($request);
+    }
+
+    /**
+     * 权限拒绝响应（对外不暴露权限结构）+ 服务端日志
+     *
+     * 安全约定：客户端只拿到一句通用文案 + 一个编号，
+     * 不返回 obj / act / 路径 / 权限节点名 —— 否则普通用户可以从报错里
+     * 反推出后台的权限体系（有哪些模型、哪些操作位）。
+     * 细节（谁、什么请求、需要什么权限）写进 runtime/logs/webman.log，
+     * 用同一个编号关联，排查时 grep 编号即可。
+     *
+     * @param string $reason 拒绝原因（仅进日志）：rbac-denied / unresolved-permission
+     */
+    protected function deny(Request $request, string $reason, string $obj, string $act, string $path): Response
+    {
+        $trace = substr(bin2hex(random_bytes(4)), 0, 8);
+
+        try {
+            \support\Log::warning('[curd] 权限校验未通过', [
+                'trace'      => $trace,
+                'reason'     => $reason,
+                'user_id'    => $request->user->id ?? null,
+                'username'   => $request->user->username ?? null,
+                'method'     => strtoupper((string)$request->method()),
+                'path'       => $path,
+                'need_perm'  => $obj === '' ? '' : $obj . ':' . $act,
+                'ip'         => method_exists($request, 'getRealIp') ? $request->getRealIp() : '',
+            ]);
+        } catch (\Throwable $e) {
+            // 日志不可用不影响拒绝逻辑
+        }
+
+        return json(['code' => 403, 'msg' => '没有权限操作，请联系管理员（编号 ' . $trace . '）']);
     }
 
     /**

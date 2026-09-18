@@ -128,7 +128,8 @@ cd webman-clean-demo
 
 # ───────── Step 2：接入本包源 + 引包 ─────────
 # composer require 自动完成：① 拉齐依赖 webman/database + webman/redis + casbin/casbin
-#   + vlucas/phpdotenv；② webman 官方插件机制自动拷贝 plugin/curd 到宿主；
+#   + vlucas/phpdotenv + webman/captcha（登录验证码，需 ext-gd + ext-mbstring）；
+#   ② webman 官方插件机制自动拷贝 plugin/curd 到宿主；
 #   ③ 宿主缺 config/database.php 自动生成；④ 宿主缺 config/curd.php 自动生成集中配置入口。
 #
 # 【开发期 · 推荐】本地 path 源：改包源码即时生效，配合包内 scripts/release.sh 回灌改动
