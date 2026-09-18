@@ -230,13 +230,14 @@ trait CurdActionsTrait
      */
     protected function fieldWritableInMode(array $field, string $mode): bool
     {
+        // modeOnly：仅 add / 仅 edit（场景块内声明的字段会被自动打上这个标记）
+        // 放在 hidden 短路之前：场景专属字段即便声明成 Form::hidden() 隐藏提交字段，也不跨场景提交
+        if (!empty($field['modeOnly']) && $field['modeOnly'] !== $mode) {
+            return false;
+        }
         // Form::hidden() 声明的隐藏提交字段：始终可写
         if (!empty($field['hidden'])) {
             return true;
-        }
-        // modeOnly：仅 add / 仅 edit
-        if (!empty($field['modeOnly']) && $field['modeOnly'] !== $mode) {
-            return false;
         }
         // hiddens.{add|edit|common}
         if (isset($field['hiddens']) && is_array($field['hiddens'])) {

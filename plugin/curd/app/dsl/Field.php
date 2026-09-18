@@ -22,6 +22,14 @@ class Field extends BaseDsl
     }
 
     /**
+     * 字段名（prop）
+     */
+    public function prop(): string
+    {
+        return (string)($this->config['prop'] ?? '');
+    }
+
+    /**
      * 根据当前字段值动态显示/替换后续字段。
      * 回调中新增的字段会继承当前条件；同名字段可定义多个条件版本。
      */

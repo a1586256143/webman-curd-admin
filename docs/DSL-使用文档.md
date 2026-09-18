@@ -266,12 +266,42 @@ $grid->form(function (Form $form) {
 ```
 
 字段通用链式能力（`Field`）：`required / placeholder / help / default / addDefault / editDefault / disabled / addDisabled / editDisabled / hidden / addHidden / addOnly / editOnly / options(map) / multiple / filterable / span / full / row / rules / min / max / step / config(extra)`，支持**动态显隐**：`->when(父值, cb)` / `->addVisibleWhen([...])`。
+其中 `addOnly()` = 仅新增场景展示并提交、`editOnly()` = 仅编辑场景（也可以用 `if ($form->isCreate())` 包裹字段，见 3.5.1，效果等价且更好读）。
 
-表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`、`isCreate(...)` / `isEdit(...)`（场景字段白名单，见 3.5.1）；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。
+表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`、`isCreate()` / `isEdit()`（**场景判断，写在 `if` 里**，见 3.5.1）；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。
 
-#### 3.5.1 场景字段控制：`$form->isCreate(...)` / `$form->isEdit(...)` 与提交规则
+#### 3.5.1 场景字段控制：`if ($form->isCreate())` / `if ($form->isEdit())`
 
-创建/编辑各自展示（并提交）哪些字段，在 **Form 级**用 `isCreate(...)` / `isEdit(...)` 声明白名单，支持可变参数、数组、回调动态控制：
+**推荐写法**：把字段注册包在 `if` 里，按场景条件注册。**场景块内声明的字段自动变成「仅该场景」**（等价于在字段上挂 `->addOnly()` / `->editOnly()`）：
+
+```php
+$grid->form(function (Form $form) {
+    $form->text('account', '账户')->required();   // 块外：两个场景都有
+    $form->text('name', '名称')->required();
+
+    if ($form->isCreate()) {
+        $form->text('password', '密码')->required(); // 仅新增弹窗
+    }
+    if ($form->isEdit()) {
+        $form->text('amount', '金额')->required();   // 仅编辑弹窗
+    }
+});
+```
+
+效果：
+
+| 弹窗 | 渲染 / 提交的字段 |
+|---|---|
+| 新增 | account、name、password |
+| 编辑 | account、name、amount |
+
+- 块外字段两个场景共用，**不需要任何白名单**：以后新增字段也不会"漏字段"（这正是白名单写法最容易踩的坑）。
+- 前端不渲染、不回显、不提交；后端 `add()/update()` 按同一份配置剔除，校验规则同步收敛 —— 抓包往 `update` 强塞 `password=xxx` 也写不进库。
+- `if / else` 同样支持（`else` 块里的字段自动成为另一个场景专属）。
+- 未指定场景时（如 `Action::form()` 的行级弹窗只有一份表单）两个判断都返回 `true`，两段都注册。
+- 回调里**没用**场景判断时只执行一次回调，行为与开销和以前完全一致（用到时才会按另一个场景多执行一次再合并）。
+
+**兼容旧写法（场景白名单）**：`isCreate(...)` / `isEdit(...)` 传字段名时仍是白名单语义 —— 该场景**只**保留列出的字段，支持可变参数、数组、回调动态控制：
 
 ```php
 $grid->form(function (Form $form) {
@@ -286,17 +316,29 @@ $grid->form(function (Form $form) {
 });
 ```
 
-未声明的场景不限制（全部字段可用）；`isCreate()` 不传字段视为未限制。
+未声明的场景不限制（全部字段可用）；不传字段时按 `if` 判断语义（返回 `true/false`）。
 
 **严格提交（前端 + 后端双端生效）：**
 
-1. **白名单即提交范围**：某场景白名单外的字段不渲染、不初始化、不提交；即使恶意客户端多提交了这些字段，后端 `add()/update()` 保存前也会按同一份配置剔除，校验规则同步剔除（不会因被剔除的 required 字段而报错）。
+1. **场景专属字段 + 白名单外字段即提交范围**：不渲染、不初始化、不提交；即使恶意客户端多提交，后端 `add()/update()` 保存前也会按同一份配置剔除，校验规则同步剔除（不会因被剔除的 required 字段而报错）。
 2. **disabled 不提交**：`->disabled()` / `->addDisabled()` / `->editDisabled()` 生效的场景中，该字段 UI 禁用且**不参与提交**（前端 `sanitizeFormData` 剔除 + 后端白名单剔除）。只读展示需求照常满足，且杜绝"前端禁用、抓包改值"绕过。
-3. **例外**：`$form->hidden('prop', ...)` 声明的隐藏提交字段（顶层 `hidden=true`）不受白名单/禁用影响，始终随表单提交。
-4. 条件字段（`->when()`）如需在受限场景使用，应把字段名写进白名单；其可见性仍由父字段值在前端实时控制。
+3. **例外**：`$form->hidden('prop', ...)` 声明的隐藏提交字段（顶层 `hidden=true`）不受白名单/禁用影响，始终随表单提交；但它若声明在场景块内，仍只在所属场景提交。
+4. 条件字段（`->when()`）如需在受限场景使用，应把字段名写进白名单（或用 `if` 写法包裹）；其可见性仍由父字段值在前端实时控制。
 5. 数组写法的继承式控制器（`actions()` 同级的 `formFields()` 数组）可在返回的 config 里自带 `sceneShow: {create: [...], edit: [...]}` 键，前端同样生效。
 
-前端行为见 `GenericCurd/index.vue` 的 `allFormFields`（白名单过滤）/ `sanitizeFormData`；后端见 `CurdActionsTrait` 的 `writableFields / filterWritableFields`。
+> ⚠️ **三种写法的区别，别搞混**：
+>
+> | 需求 | 正确写法 | 说明 |
+> |---|---|---|
+> | 按场景条件注册字段（**推荐**） | `if ($form->isCreate()) { $form->text('password', '密码')->required(); }` | **Form 级判断**：块内字段自动「仅该场景」，块外字段共用 |
+> | 某场景**只**要这几个字段 | `$form->isCreate('a', 'b')` | **Form 级白名单**：列出的才展示/提交，没列的一律不展示不提交（**列多了反而漏字段**） |
+> | **某一个字段**只在新增 / 只在编辑出现 | `$form->text('password', '密码')->addOnly()` | **字段级**：`addOnly()` = 仅新增，`editOnly()` = 仅编辑（与 `if` 写法等价，适合不想改结构的场景） |
+>
+> 常见误写：`$form->text('password', '密码')->isCreate()` —— `isCreate()/isEdit()` 只存在于 **Form** 上，
+> 挂在 Field 上会抛 `Call to undefined method plugin\curd\app\dsl\Field::isCreate()`。
+> 另外白名单语义下「编辑时不含 password」不能写 `$form->isEdit('password')`（那等于编辑只剩 password）。
+
+前端行为见 `GenericCurd/index.vue` 的 `resolveFieldForMode`（场景专属字段靠 `modeOnly`）/ `allFormFields`（白名单过滤 `sceneShow`）/ `sanitizeFormData`；后端见 `CurdActionsTrait` 的 `fieldWritableInMode / writableFields / filterWritableFields`。
 
 ### 3.6 自定义操作 Action（行级/批量/全局/弹窗）
 

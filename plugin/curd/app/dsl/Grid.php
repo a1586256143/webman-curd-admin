@@ -168,11 +168,13 @@ class Grid extends BaseDsl
 
     /**
      * 设置表单（共用：add/edit 都会用到）
+     *
+     * 支持按场景条件注册字段（Form::isCreate()/isEdit() 无参形式写在 if 里）：
+     * 用到场景判断时回调会按 create/edit 各执行一次并合并，场景块内的字段自动变成「仅该场景」。
      */
     public function form(callable $callback): self
     {
-        $form = new Form();
-        $callback($form);
+        $form = $this->buildSceneAwareForm($callback);
         $this->formFields = $form->toArray();
         $this->formLayout = $form->layout();
         $this->formConfirm = $form->confirmConfig();
@@ -190,6 +192,26 @@ class Grid extends BaseDsl
     }
 
     /**
+     * 场景感知执行表单回调（Form::isCreate()/isEdit() 的 if 写法）
+     *
+     *  1) 先按「新增」场景执行一次；
+     *  2) 若回调里用到了场景判断，再按「编辑」场景执行一次并合并 →
+     *     仅某场景声明的字段自动标记「仅该场景」，前端不渲染、后端不接收；
+     *  3) 没用到场景判断时只执行一次，行为与开销和以前完全一致。
+     */
+    protected function buildSceneAwareForm(callable $callback): Form
+    {
+        $form = new Form('create');
+        $callback($form);
+        if ($form->sceneGuardUsed()) {
+            $editForm = new Form('edit');
+            $callback($editForm);
+            $form->mergeScene($editForm);
+        }
+        return $form;
+    }
+
+    /**
      * 仅在「新增」弹窗里追加的字段
      * 用法：
      *   $grid->addForm(function ($form) {
@@ -200,7 +222,8 @@ class Grid extends BaseDsl
      */
     public function addForm(callable $callback): self
     {
-        $form = new Form();
+        // 新增场景：$form->isCreate() 为 true（这里的字段本来也只在新增弹窗出现）
+        $form = new Form('create');
         $callback($form);
         $this->addFields = $form->toArray();
         return $this;
@@ -212,7 +235,8 @@ class Grid extends BaseDsl
      */
     public function editForm(callable $callback): self
     {
-        $form = new Form();
+        // 编辑场景：$form->isEdit() 为 true（这里的字段本来也只在编辑弹窗出现）
+        $form = new Form('edit');
         $callback($form);
         $this->editFields = $form->toArray();
         return $this;

@@ -19,6 +19,23 @@ class Form extends BaseDsl
     protected array $fields = [];
 
     /**
+     * 当前构建场景：'create'（新增弹窗）| 'edit'（编辑弹窗）| null（未指定，如 Action 行级弹窗表单）
+     * 由 Grid::form() 场景感知构建时传入，供 isCreate()/isEdit() 判断。
+     */
+    protected ?string $scene = null;
+
+    /**
+     * 回调中是否调用了无参形式的 isCreate()/isEdit()（场景判断）
+     * Grid::form() 据此决定是否需要按另一个场景再执行一次回调（只有用到才多跑一遍，保持原开销）
+     */
+    protected bool $sceneGuardUsed = false;
+
+    public function __construct(?string $scene = null)
+    {
+        $this->scene = $scene;
+    }
+
+    /**
      * 提交二次确认配置：[mode => message]
      *  - create：新增提交前确认
      *  - edit：编辑提交前确认
@@ -66,10 +83,12 @@ class Form extends BaseDsl
     }
 
     /**
-     * 场景字段白名单（isCreate / isEdit 判断）：
+     * 场景字段白名单（isCreate('a','b') / isEdit('a','b') 传参形式，兼容保留）：
      *  - 'create'：创建场景展示并提交的字段清单（null = 未限制，全部展示）
      *  - 'edit'  ：编辑场景展示并提交的字段清单
      * 支持回调（服务端配置输出时求值一次，如 fn($ctx) => ['name','remark']）
+     *
+     * 无参形式 isCreate()/isEdit() 是场景判断（用 if 条件注册字段），走 modeOnly 机制，两者互不影响。
      */
     protected array $sceneFields = [
         'create' => null,
@@ -77,30 +96,117 @@ class Form extends BaseDsl
     ];
 
     /**
-     * 创建（新增）场景判断：只展示并提交列出的字段（其余字段创建时不存在）
+     * 当前是否「新增」场景（可直接写在 if 里，按场景条件注册字段）
      *
-     *   $form->isCreate('name');                    // 创建时仅 name
-     *   $form->isCreate('name', 'remark');          // 可变参数
-     *   $form->isCreate(['name', 'remark']);        // 数组
-     *   $form->isCreate(fn($ctx) => ['name']);      // 回调动态控制（$ctx=['mode'=>'create']）
+     *   if ($form->isCreate()) {
+     *       $form->password('password', '密码')->required();   // 只在新增弹窗出现
+     *   }
+     *   if ($form->isEdit()) {
+     *       $form->text('amount', '金额')->required();          // 只在编辑弹窗出现
+     *   }
      *
-     * 严格提交：前端不渲染、不初始化、不提交白名单外字段；
-     * 后端 add() 同步按白名单过滤（恶意提交白名单外字段会被剔除），校验规则同步收敛。
-     * $form->hidden() 声明的隐藏提交字段不受白名单限制，始终随场景提交。
+     * 场景块内声明的字段会被**自动**标记为「仅该场景」（等价于在字段上挂 ->addOnly() / ->editOnly()）：
+     *  - 前端：另一场景的弹窗不渲染、不回显、不提交该字段
+     *  - 后端：add()/update() 按场景剔除该字段，校验规则同步收敛（抓包强塞也写不进去）
+     * 场景块外声明的字段两个场景都有，不需要任何白名单。
+     *
+     * 未指定场景时（如 Action::form() 行级弹窗表单只有一份）两个判断都返回 true，两段都会注册。
+     *
+     * 兼容旧写法：传字段名时仍按「场景白名单」处理（$form->isCreate('name', 'remark') = 新增只留这些字段），
+     * 白名单语义下"列多了反而漏字段"，通常不如上面的 if 写法直观。
+     *
+     * @param string|array ...$fields 旧写法：该场景仅保留的字段清单
+     * @return bool|static
      */
-    public function isCreate(...$fields): self
+    public function isCreate(...$fields)
     {
-        return $this->setSceneFields('create', $fields);
+        if (!empty($fields)) {
+            return $this->setSceneFields('create', $fields);
+        }
+        $this->sceneGuardUsed = true;
+        return $this->scene === null || $this->scene === 'create';
     }
 
     /**
-     * 编辑场景判断：只展示并提交列出的字段（其余字段编辑时不存在）
+     * 当前是否「编辑」场景（用法同 isCreate()）
      *
-     *   $form->isEdit('name', 'audit_by');          // 用法同 isCreate()
+     *   if ($form->isEdit()) { $form->text('amount', '金额')->required(); }
+     *
+     * 兼容旧写法：$form->isEdit('name', 'audit_by') 仍按编辑场景白名单处理。
+     *
+     * @param string|array ...$fields 旧写法：该场景仅保留的字段清单
+     * @return bool|static
      */
-    public function isEdit(...$fields): self
+    public function isEdit(...$fields)
     {
-        return $this->setSceneFields('edit', $fields);
+        if (!empty($fields)) {
+            return $this->setSceneFields('edit', $fields);
+        }
+        $this->sceneGuardUsed = true;
+        return $this->scene === null || $this->scene === 'edit';
+    }
+
+    /**
+     * 当前构建场景：'create' | 'edit' | null
+     */
+    public function scene(): ?string
+    {
+        return $this->scene;
+    }
+
+    /**
+     * 回调是否用过场景判断（isCreate()/isEdit() 无参形式）
+     */
+    public function sceneGuardUsed(): bool
+    {
+        return $this->sceneGuardUsed;
+    }
+
+    /**
+     * 合并另一个场景的执行结果（Grid::form() 场景感知构建用）
+     *
+     * 以本次执行为「当前场景」：
+     *  - 只在本场景出现的字段 → 自动标记「仅本场景」（modeOnly）
+     *  - 只有另一场景才有的字段 → 追加进字段列表并标记为「仅另一场景」
+     *  - 两个场景都有的字段（写在场景块外）→ 保持原样，两场景共用
+     */
+    public function mergeScene(self $other): void
+    {
+        if ($this->scene === null || $other->scene === null || $this->scene === $other->scene) {
+            return;
+        }
+        $mine = $this->scene === 'create' ? 'add' : 'edit';
+        $theirs = $other->scene === 'create' ? 'add' : 'edit';
+
+        // 本场景独有 → 仅本场景
+        $otherProps = $other->fieldProps();
+        foreach ($this->fields as $field) {
+            if (!in_array($field->prop(), $otherProps, true)) {
+                $field->config(['modeOnly' => $mine]);
+            }
+        }
+        // 另一场景独有 → 追加并标记
+        $myProps = $this->fieldProps();
+        foreach ($other->getFields() as $field) {
+            if (in_array($field->prop(), $myProps, true)) {
+                continue;
+            }
+            $field->config(['modeOnly' => $theirs]);
+            $field->setForm($this);
+            $this->fields[] = $field;
+        }
+    }
+
+    /**
+     * 当前已注册字段的 prop 列表
+     */
+    protected function fieldProps(): array
+    {
+        $props = [];
+        foreach ($this->fields as $field) {
+            $props[] = $field->prop();
+        }
+        return $props;
     }
 
     protected function setSceneFields(string $scene, array $fields): self
