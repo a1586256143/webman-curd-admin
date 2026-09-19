@@ -20,7 +20,7 @@ use Webman\Captcha\PhraseBuilder;
  *   - key 里带随机段，同一浏览器可多标签页各拿一张图，互不覆盖
  *   - **一次性**：verify() 无论对错都销毁 key，杜绝「同一张图反复试探」
  *
- * 配置（宿主 config/admin.php 优先，同 export_max_rows / home_page 的约定）：
+ * 配置（宿主 config/curd-admin.php 优先，同 export_max_rows / home_page 的约定）：
  *   'captcha_enabled' => true,   // 关掉 = 登录页不再要验证码（也用于 Redis 不可用时的应急开关）
  *   'captcha_ttl'     => 300,    // 验证码有效期（秒）
  *   'captcha_length'  => 4,      // 位数（3~6）
@@ -110,7 +110,7 @@ final class Captcha
             Redis::del($cacheKey);   // 一次性：防止同一张图被反复试探
         } catch (\Throwable $e) {
             // Redis 不可用时无法校验 → 明确报错，不做「静默放行」
-            // （运维应急：宿主 config/admin.php 里 captcha_enabled => false 后重启）
+            // （运维应急：宿主 config/curd-admin.php 里 captcha_enabled => false 后重启）
             return '验证码服务暂不可用，请联系管理员';
         }
 
@@ -124,7 +124,7 @@ final class Captcha
     }
 
     /**
-     * 读配置：宿主 config/admin.php 顶层键 → 插件 config/curd.php → 传入的默认值
+     * 读配置：宿主 config/curd-admin.php 顶层键 → 插件 config/curd.php → 传入的默认值
      * （与 CurdActionsTrait::exportMaxRows() / AdminController::siteConfig() 同一套优先级）
      *
      * @param string $key  'captcha_enabled' | 'captcha_ttl' | 'captcha_length'
@@ -133,7 +133,7 @@ final class Captcha
      */
     protected static function config(string $key, $default)
     {
-        $value = config('admin.' . $key);
+        $value = config('curd-admin.' . $key);
         if ($value === null || $value === '') {
             $value = config('plugin.curd.curd.' . $key, $default);
         }

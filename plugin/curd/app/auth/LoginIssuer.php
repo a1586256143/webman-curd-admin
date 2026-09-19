@@ -35,7 +35,7 @@ use plugin\curd\app\CurdDb;
  *   $token = LoginIssuer::issueToken($identity);
  *   return json(['code' => 200, 'msg' => 'success', 'data' => ['token' => $token, 'extra' => ...]]);
  *
- * 用法三：配置委派（不用改路由文件）——宿主 config/curd.php：
+ * 用法三：配置委派（不用改路由文件）——宿主 config/curd-admin.php：
  *
  *   'login_handler' => \app\admin\MyLogin::class,   // 类需有 login(Request): Response
  */

@@ -6,7 +6,7 @@ use support\Request;
 /**
  * 可插拔登录提供方接口
  * ------------------------------------------------------------------
- * 实现本接口并把类名配置到 config/curd.php 的 `auth_provider`，
+ * 实现本接口并把类名配置到 config/curd-admin.php 的 `auth_provider`，
  * 即可替换包内置的 admin_users 登录逻辑（换表 / 换校验方式 / 对接外部账号体系）。
  *
  * 约定：

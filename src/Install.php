@@ -123,9 +123,10 @@ class Install
     }
 
     /**
-     * 确保宿主存在 config/curd.php（本插件的插件调参入口）：
-     *   - 缺失 → 生成默认模板（仅插件调参，不含数据库）；
-     *   - 已存在 → 绝不覆盖（可能已被用户/其他工具写入）。
+     * 确保宿主存在 config/curd-admin.php（本插件**唯一**的宿主配置入口）：
+     *   - 缺失 → 生成默认模板（插件调参 + 宿主管家键注释，不含数据库）；
+     *   - 已存在 → 绝不覆盖（可能已被用户/其他工具写入）；
+     *   - 同时检测遗留的 config/curd.php / config/admin.php → 打印迁移提示（不自动改动）。
      *
      * 数据库连接不在这里：由 .env 的 DB_* 键承载（config/database.php 用 env() 读取）。
      * 该文件的顶层同名键覆盖 plugin/curd/config/curd.php 的内置默认值。
@@ -133,38 +134,56 @@ class Install
     protected static function ensureCurdConfig(string $root): void
     {
         $configDir = $root . '/config';
-        $file = $configDir . '/curd.php';
         if (!is_dir($configDir)) {
             return;
         }
+        $file = $configDir . '/curd-admin.php';
+
+        // 遗留旧名检测：插件已不再读取这两个文件名，配置留在里面会"看起来没生效"
+        $legacy = [];
+        foreach (['/curd.php' => 'curd', '/admin.php' => 'admin'] as $name => $label) {
+            if (is_file($configDir . $name)) {
+                $legacy[] = 'config' . $name;
+            }
+        }
+        if ($legacy && !is_file($file)) {
+            echo "  [webman-curd-admin] ⚠️ 检测到旧配置 " . implode('、', $legacy)
+                . "，但缺少 config/curd-admin.php：\n";
+            echo "      插件已**不再读取**这两个旧文件名，请把内容合并到 config/curd-admin.php（或删掉旧的让本包重新生成模板）后 restart。\n";
+        }
+
         if (is_file($file)) {
             return; // 已有配置，不覆盖
         }
         file_put_contents($file, self::curdConfigTemplate());
-        echo "  [webman-curd-admin] 已生成集中配置 config/curd.php（插件调参入口；数据库连接走 .env 的 DB_* 键）\n";
+        echo "  [webman-curd-admin] 已生成集中配置 config/curd-admin.php（唯一宿主配置入口；数据库连接走 .env 的 DB_* 键）\n";
     }
 
     /**
-     * 宿主 config/curd.php 默认模板
+     * 宿主 config/curd-admin.php 默认模板
      *
-     * 只承载【插件调参】；数据库信息不放这里（安装向导写入宿主 .env 的 DB_*，
-     * config/database.php 用 env() 读取）。认证库与业务库【同一库】。
+     * 承载【插件调参】+【宿主管家键】注释；数据库信息不放这里（安装向导写入宿主 .env 的
+     * DB_*，config/database.php 用 env() 读取）。认证库与业务库【同一库】。
      */
     protected static function curdConfigTemplate(): string
     {
         return <<<'PHP'
 <?php
 /**
- * webman-curd-admin 插件集中配置（首次 composer require 时由 amcolin/webman-curd-admin 自动生成；
- * 已存在则不会覆盖，可自由修改）。
+ * webman-curd-admin 插件宿主配置（**唯一入口**；首次 composer require 时由
+ * amcolin/webman-curd-admin 自动生成；已存在则不会覆盖，可自由修改）。
  *
  * 职责边界：
- *   - 本文件只做【插件调参】。数据库连接信息（DB_HOST / DB_PORT / DB_NAME /
- *     DB_USER / DB_PASSWORD）写入宿主 .env，由 config/database.php 用 env() 读取
- *     （Web 安装向导会自动写 .env；手动部署可参考 plugin/curd/env.example）。
+ *   - 本文件承载【插件调参】与【宿主管家键】（site / home_page / upload_* /
+ *     image_server / export_max_rows / captcha_*）。数据库连接信息
+ *     （DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD）写入宿主 .env，
+ *     由 config/database.php 用 env() 读取（Web 安装向导会自动写 .env；
+ *     手动部署可参考 plugin/curd/env.example）。
  *   - 认证库与业务库【始终同一库】（单库架构），已无 DB_BUSINESS_NAME / 分库选项。
  *   - 顶层键与 plugin/curd/config/curd.php 内置默认值同名时覆盖生效；
- *     不写的键沿用内置默认。
+ *     不写的键沿用内置默认。改完需 restart。
+ *   - ⚠️ 不再有 config/curd.php、config/admin.php —— 这两个旧文件名插件**不读取**，
+ *     配置写在那里不会生效（2026-09-19 起合并为本文件）。
  */
 return [
     // 前端挂载前缀（改了需同步重建前端：VITE_BASE_PATH）
@@ -178,6 +197,28 @@ return [
 
     // 权限总开关：false=关闭 RBAC 校验且不生成/下发权限（所有人放行）
     // 'permission_enabled' => true,
+
+    // ---- 宿主管家键（按需打开；插件直接读 config('curd-admin.*')）----
+    // 站点信息：前端 /api/config/site 读取（侧边栏 logo、登录页、浏览器标签标题）
+    // 'site' => [
+    //     'title'     => 'Webman Admin',
+    //     'logo'      => 'Monitor',   // el-icon 组件名（logo_type=icon）或图片 URL（logo_type=image）
+    //     'logo_type' => 'icon',
+    //     'copyright' => '',
+    //     'favicon'   => '',
+    // ],
+    // 默认落地页（前台路由路径，登录后/刷新根路径打开；默认 '/dashboard'）
+    // 'home_page' => '/custom-page/home',
+    // 上传与静态资源
+    // 'upload_path'   => 'uploads',                 // 相对 public 目录
+    // 'upload_driver' => 'local',                   // local | oss
+    // 'image_server'  => 'http://your-static.com/', // 图片/静态资源前缀
+    // 导出上限（0 = 不限制）
+    // 'export_max_rows' => 100000,
+    // 登录图形验证码（Redis 不可用时应急设为 false 并重启）
+    // 'captcha_enabled' => true,
+    // 'captcha_ttl'     => 300,
+    // 'captcha_length'  => 4,
 
     // 连接名（config/database.php connections 键；单库下两者指向同一 DB_NAME）：
     // 'admin_connection'    => 'mysql',            // 认证库连接名

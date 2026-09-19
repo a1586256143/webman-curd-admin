@@ -602,7 +602,7 @@ trait CurdActionsTrait
         $page = (int)$request->input('page', 0);
         $size = (int)$request->input('size', 0);
 
-        // 单次导出行数上限（config/admin.php 的 export_max_rows，见 exportMaxRows()）
+        // 单次导出行数上限（config/curd-admin.php 的 export_max_rows，见 exportMaxRows()）
         // 超限直接报错，不做静默截断——静默截断会让用户以为"导全了"，比报错更危险
         $maxRows = $this->exportMaxRows();
         $total = (int)(clone $query)->count();
@@ -669,13 +669,13 @@ trait CurdActionsTrait
      * 单次导出行数上限（<=0 表示不限制）
      *
      * 读取优先级：
-     *   ① 宿主 config/admin.php 的 export_max_rows（与 upload_path / site 同一个宿主配置文件）
-     *   ② 插件 config/curd.php 的 export_max_rows（宿主 config/curd.php 顶层同名键可覆盖）
+     *   ① 宿主 config/curd-admin.php 的 export_max_rows（与 upload_path / site 同一个宿主配置文件）
+     *   ② 插件 config/curd.php 的 export_max_rows（宿主 config/curd-admin.php 顶层同名键可覆盖）
      *   ③ 兜底 100000
      */
     protected function exportMaxRows(): int
     {
-        $value = config('admin.export_max_rows');
+        $value = config('curd-admin.export_max_rows');
         if ($value === null || $value === '') {
             $value = config('plugin.curd.curd.export_max_rows', 100000);
         }

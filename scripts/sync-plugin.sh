@@ -47,4 +47,4 @@ rm -rf "${DST}/node_modules" "${DST}/.git" "${DST}/.idea"
 
 echo "[OK] 已从 vendor 同步最新 plugin/curd 到 ${DST}"
 echo "     本地改动如需找回，见备份目录 ${BAK}（确认无误后可删除）"
-echo "     数据库配置：若之前已生成 config/curd.php，升级不会覆盖它（src/Install.php 跳过已存在文件）"
+echo "     数据库配置：若之前已生成 config/curd-admin.php，升级不会覆盖它（src/Install.php 跳过已存在文件）"

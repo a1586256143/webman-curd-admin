@@ -13,8 +13,8 @@ use Webman\Http\UploadFile;
  *   POST /api/upload         通用文件上传（字段名 file，存 uploads/files）
  *   POST /api/upload/image   图片上传（字段名 file，校验图片类型，存 uploads/images）
  *
- * 存储驱动由 config('admin.upload_driver') 控制：local | oss
- * 上传目录由 config('admin.upload_path') 控制，相对 public 目录，如 uploads
+ * 存储驱动由 config('curd-admin.upload_driver') 控制：local | oss
+ * 上传目录由 config('curd-admin.upload_path') 控制，相对 public 目录，如 uploads
  * 成功返回：{ code:200, msg:'上传成功', data:{ url:'uploads/files/xxx.png' } }（不带域名）
  */
 class UploadController
@@ -64,7 +64,7 @@ class UploadController
             }
         }
 
-        $driver = (string)config('admin.upload_driver', 'local');
+        $driver = (string)config('curd-admin.upload_driver', 'local');
         if ($driver === 'oss') {
             return $this->storeOss($file, $subDir);
         }
@@ -77,7 +77,7 @@ class UploadController
      */
     protected function storeLocal(UploadFile $file, string $subDir): \support\Response
     {
-        $uploadPath = trim((string)config('admin.upload_path', 'uploads'), '/');
+        $uploadPath = trim((string)config('curd-admin.upload_path', 'uploads'), '/');
         $relDir = $uploadPath !== '' ? $uploadPath . '/' . $subDir : $subDir;
         $name = $this->buildFilename($file);
         $relPath = $relDir . '/' . $name;
@@ -105,7 +105,7 @@ class UploadController
             return json(['code' => 500, 'msg' => 'OSS 未配置（.env 缺少 OSS_*）']);
         }
 
-        $uploadPath = trim((string)config('admin.upload_path', 'uploads'), '/');
+        $uploadPath = trim((string)config('curd-admin.upload_path', 'uploads'), '/');
         $prefix = trim((string)getenv('OSS_PREFIX'), '/');
         $relDir = trim(($uploadPath !== '' ? $uploadPath . '/' : '') . $subDir, '/');
         $name = $this->buildFilename($file);

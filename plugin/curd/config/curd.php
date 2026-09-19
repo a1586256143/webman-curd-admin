@@ -2,14 +2,20 @@
 /**
  * CURD 插件宿主接入配置（插件内置默认，随 composer require 拷贝到宿主）
  *
+ * 宿主配置入口只有一个：**宿主根 config/curd-admin.php**
+ * （顶层同名键覆盖本文件默认值；首次 composer require / Web 安装向导自动生成）。
  * 配置读取优先级（高 → 低）：
- *   1. 宿主 config/curd.php（推荐入口，顶层同名键覆盖本文件默认值；
- *      首次 composer require 时由 src/Install.php 自动生成）
+ *   1. 宿主 config/curd-admin.php
  *   2. 本文件默认值
+ *
+ * ⚠️ 旧文件名 config/curd.php 与 config/admin.php **已不再读取**（2026-09-19 合并为一个文件）：
+ *   这两个文件里的键即使存在也不会生效，排查「配置改了没反应」时先看这一条。
+ *   宿主管家键（site / home_page / upload_* / image_server / export_max_rows / captcha_*）
+ *   与插件调参键同在这一个宿主文件里，插件侧直接读 config('curd-admin.*')。
  *
  * 注：数据库连接不在插件配置里——由 .env 的 DB_* 键承载，config/database.php 用
  * env() 读取；认证库与业务库【同一库】（单库架构）。旧 CURD_* 环境变量用法已移除，
- * 插件调参统一收敛到宿主 config/curd.php。
+ * 插件调参统一收敛到宿主 config/curd-admin.php。
  *
  * 本文件声明「与宿主约定」的可调点：
  *  - 库连接名：认证/菜单/RBAC 策略库（admin_connection）与业务模型库（business_connection）
@@ -49,7 +55,8 @@ $defaults = [
     'allow_unresolved' => true,
 
     // 单次导出的最大行数（<=0 = 不限制）。
-    // 读取优先级：宿主 config/admin.php 的 export_max_rows（推荐改这个）→ 本键 → 兜底 100000。
+    // 读取优先级：宿主 config/curd-admin.php 的 export_max_rows → 本键 → 兜底 100000。
+    // （两者其实是同一个宿主文件：前者直接读 config("curd-admin.*")，后者是本文件被宿主同名键覆盖后的值）
     // 超限时导出接口返回 {"code":400,"msg":"本次将导出 N 条，超过单次导出上限 M 条..."}，
     // 前端会把它当错误提示而不是下载文件（见 dynamicCurd/index.vue 的 export）。
     'export_max_rows' => 100000,
@@ -59,13 +66,13 @@ $defaults = [
     //   '/custom-page/home'  → 自定义页面（app/custom/pages/home.vue 或 PageRegistry::register('home', ...)）
     //   '/dashboard'         → 内置首页（默认值，不配置即保持旧行为）
     //   也可以写完整 URL（http://...），前端会整页跳转过去。
-    // 优先级：宿主 config/admin.php 的 home_page → config/admin.php site.home_page → 本键 → /dashboard
+    // 优先级：宿主 config/curd-admin.php 的 home_page → 同文件 site.home_page → 本键 → /dashboard
     // 注意：这里只决定「打开哪个页面」，不校验用户有没有该页面的菜单/权限。
     'home_page' => '/dashboard',
 
     // ===== 登录图形验证码（webman/captcha）=====
     // 登录页是否显示验证码；校验发生在 AuthController::login 的最前面（含自定义 login_handler 之前）。
-    //   读取优先级：宿主 config/admin.php 的 captcha_enabled → 本键 → true
+    //   读取优先级：宿主 config/curd-admin.php 的 captcha_enabled → 本键 → true（同一个宿主文件）
     //   关掉即登录页完全不显示验证码（也用于 Redis 异常时的应急开关：验证码明文存 Redis，
     //   Redis 挂了就没人能登录，此时把它设为 false 并重启即可放行）
     'captcha_enabled' => true,
@@ -95,11 +102,31 @@ $defaults = [
     //   控制器只认返回的「身份数组」，token 签发/存储由包统一处理。
     'auth_provider' => \plugin\curd\app\auth\DefaultAuthProvider::class,
 
+    // 附加账号状态校验（可选）：实现 AuthStateGuardInterface 的类名。
+    //   在账号自身 status 之外，叠加宿主侧的业务判定，典型场景：
+    //     关联的业务账户被关闭、合同到期、部门撤销、白名单限制……
+    //   与「自己实现 auth_provider 覆盖三个方法」的区别：
+    //     auth_provider 的三个入口数据形状不一致（login/identity 给身份数组，
+    //     resolveUser 给用户对象），判定要写两份且漏改不报错；
+    //     本钩子由 DefaultAuthProvider 统一收口，判定只写一处。
+    //   用法（宿主 config/curd-admin.php）：
+    //     class MyGuard implements \plugin\curd\app\auth\AuthStateGuardInterface {
+    //         // $account 固定含 id / username / name / status 四个属性
+    //         public function allowed(object $account): ?bool
+    //         {
+    //             return 业务判定 ? true : false;   // false = 按「已禁用」处理
+    //         }
+    //     }
+    //     'auth_state_guard' => \app\auth\MyGuard::class,
+    //   返回 false 的账号：登录报 403「账号已被禁用」，已登录会话下一次请求同样 403。
+    //   仅对 auth_provider 返回身份数组的链路生效；留空 = 不启用（原行为）。
+    'auth_state_guard' => '',
+
     // 自定义登录入口（可选）：整个 /api/auth/login 交给这个类处理。
     // 与 auth_provider 的区别：
     //   auth_provider  只换「凭据校验 + 身份来源」，token 签发与响应结构仍由包负责（推荐先试这个）
     //   login_handler  连响应结构一起接管，适合要加验证码 / 风控 / 外部单点登录 / 额外返回字段的场景
-    // 用法（宿主 config/curd.php）：
+    // 用法（宿主 config/curd-admin.php）：
     //   'login_handler' => \app\admin\MyLogin::class,
     // 类约定：public function login(\support\Request $request): \Webman\Http\Response
     //   校验通过后调 \plugin\curd\app\auth\LoginIssuer::issue($identity) 拿到标准响应即可：
@@ -119,11 +146,13 @@ $defaults = [
     'public_dir' => dirname(__DIR__) . '/public',
 ];
 
-// 宿主 config/curd.php 顶层同名键覆盖默认值（无同名键的项保持默认）。
-// 插件调参统一写在该文件（宿主根 config/curd.php），由 src/Install.php 首次
+// 宿主 config/curd-admin.php 顶层同名键覆盖默认值（无同名键的项保持默认）。
+// 插件调参统一写在该文件（宿主根 config/curd-admin.php），由 src/Install.php 首次
 // composer require 时自动生成。
+//
+// 只读这一个文件名：旧的 config/curd.php / config/admin.php 已废弃（合并进 curd-admin.php）。
 if (function_exists('base_path')) {
-    $hostCurdFile = base_path() . '/config/curd.php';
+    $hostCurdFile = base_path() . '/config/curd-admin.php';
     if (is_file($hostCurdFile)) {
         $hostCurd = require $hostCurdFile;
         if (is_array($hostCurd)) {

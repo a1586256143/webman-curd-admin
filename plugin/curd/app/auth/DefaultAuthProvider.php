@@ -10,6 +10,10 @@ use support\Request;
  * ------------------------------------------------------------------
  * 既作为缺省实现（config 未配置 auth_provider 时生效），
  * 也作为自定义提供方的参考样例：换表 / 换校验只需重写 login()+identity()+resolveUser()。
+ *
+ * 想在账号自身 status 之外叠加一层业务判定（如关联平台账户被关闭），
+ * 不必继承本类覆盖三个方法：实现 AuthStateGuardInterface 配到
+ * config/curd-admin.php 的 auth_state_guard 即可，三个入口由本类统一收口。
  */
 class DefaultAuthProvider implements AuthProviderInterface
 {
@@ -29,18 +33,71 @@ class DefaultAuthProvider implements AuthProviderInterface
             return null; // 禁用：返回 null，由 AuthController 统一报 403
         }
 
-        return $this->buildIdentity($user);
+        return $this->applyStateGuard($this->buildIdentity($user));
     }
 
     public function identity($id): ?array
     {
         $user = CurdDb::adminDb()->table('admin_users')->where('id', $id)->first();
-        return $user ? $this->buildIdentity($user) : null;
+        return $user ? $this->applyStateGuard($this->buildIdentity($user)) : null;
     }
 
     public function resolveUser($id): ?object
     {
-        return CurdDb::adminDb()->table('admin_users')->where('id', $id)->first();
+        $user = CurdDb::adminDb()->table('admin_users')->where('id', $id)->first();
+        if ($user && $this->stateGuard()?->allowed($this->guardSubject($user)) === false) {
+            $user->status = 0; // AuthCheck 中间件：status ≠ 1 → 403「账号已被禁用」
+        }
+        return $user;
+    }
+
+    /**
+     * 解析附加状态校验器（配置驱动，未配置或类不存在时返回 null = 不启用）。
+     * 配置项：config('plugin.curd.curd.auth_state_guard')
+     */
+    protected function stateGuard(): ?AuthStateGuardInterface
+    {
+        $cls = config('plugin.curd.curd.auth_state_guard', '');
+        if (!is_string($cls) || $cls === '' || !class_exists($cls)) {
+            return null;
+        }
+        $inst = new $cls();
+        return $inst instanceof AuthStateGuardInterface ? $inst : null;
+    }
+
+    /**
+     * 把「身份数组」与「admin_users 行对象」规范成校验器约定的同一形状
+     * （id / username / name / status），让宿主侧只面对一种数据结构。
+     *
+     * @param array|object $source
+     */
+    protected function guardSubject($source): object
+    {
+        $get = static function (string $key, $default = '') use ($source) {
+            if (is_array($source)) {
+                return $source[$key] ?? $default;
+            }
+            return $source->{$key} ?? $default;
+        };
+
+        return (object) [
+            'id'       => $get('id'),
+            'username' => (string)$get('username'),
+            'name'     => (string)$get('name'),
+            'status'   => (int)$get('status', 1),
+        ];
+    }
+
+    /**
+     * 身份数组统一收口：校验器判定为不可用则把 status 压成 0，
+     * 由 AuthController::login() / AuthCheck 统一报 403（不改变对外错误语义）。
+     */
+    protected function applyStateGuard(array $identity): array
+    {
+        if ($this->stateGuard()?->allowed($this->guardSubject($identity)) === false) {
+            $identity['status'] = 0;
+        }
+        return $identity;
     }
 
     public function logout(Request $request): void

@@ -1,10 +1,11 @@
 # webman-huafei-platform 后台 DSL 使用文档
 
-> 适用版本：2026-09-18（Schema 页面引擎已迁入 plugin/curd 插件；插件自带「测试管理」后台示例
+> 适用版本：2026-09-19（Schema 页面引擎已迁入 plugin/curd 插件；插件自带「测试管理」后台示例
 > my_test / MyTestController——安装器把示例代码落位到宿主根 `app/controller/admin/api/MyTestController.php`
 > + `app/model/MyTest.php`（源在包 `examples/`），安装时自动建表 + 幂等补菜单，可作为新控制器最小参考）
 >
-> 本次新增：§2.11 `.vue` 自定义页面（`custom/pages` 怎么放、怎么访问、运行时白名单）、
+> 本次新增：**§2.6 仪表盘组件 `box`（指标卡片）+ `line-chart-stat`（折线图统计卡，echarts 按需加载）**、
+> §2.11 `.vue` 自定义页面（`custom/pages` 怎么放、怎么访问、运行时白名单）、
 > §4.1 权限被拒不泄露内部结构 + 服务端日志、§4.2 自定义登录覆盖（`login_handler` / `LoginIssuer`）、
 > §4.3 新建菜单一键生成权限、§4.4 菜单行内快速创建权限。
 >
@@ -110,7 +111,7 @@ php webman make:permission --name 概览看板 --slug dash-page --type 1 --path 
 | `new PageSchema(?string $title)` | 页面根节点（type=`page`，不参与渲染，只承载 title/dataApi/body） |
 | `->title(string)` | 页面标题 |
 | `->api(string $key, string $url, string $method = 'get', array $params = [])` | 声明数据接口。渲染前前端并发请求，结果放进 `pageData[$key]`，供 `{{key.xxx}}` 注入 |
-| `->row/col/card/collapse/timeline/descriptions/divider/alert/statistic/image/text/copyText/node` | 顶层挂载（来自 `HasBlocks` trait，下面节点通用） |
+| `->row/col/card/collapse/timeline/descriptions/divider/alert/statistic/image/text/copyText/box/lineChartStat/node` | 顶层挂载（来自 `HasBlocks` trait，下面节点通用） |
 | `->toArray()` | 输出 `{ title, dataApi, body }`，由 CustomPageController 下发 |
 
 ### 2.4 布局块（可任意嵌套，大布局套小布局）
@@ -143,9 +144,47 @@ php webman make:permission --name 概览看板 --slug dash-page --type 1 --path 
 |---|---|---|---|
 | `alert` | `Alert` | `->title(str)` `->description(str)` `->type('success'\|'info'\|'warning'\|'error')` `->closable(bool)` `->showIcon(bool)` `->center(bool)` `->effect('light'\|'dark')` | 提示条 |
 | `statistic` | `Statistic` | `->title(str)` `->value($v)` `->prefix(str)` `->suffix(str)` `->precision(int)` `->groupSeparator(str)` `->valueStyle(array)` | 数值卡；value 整串 `{{}}` 且为数字时自动转 number |
+| `box` | `Box` | `->title(str)` `->value($v)` `->sub(str, $v=null)` `->subTitle(str)` `->subValue($v)` `->icon(str)` `->color(str)` `->tag(str)` `->height(int=108)` `->group(bool=false)` | **指标卡片**：图标 + 大数字 + 副标题 + 右上角周期标记，仪表盘顶部并排四个的经典形态。`icon` 取 EP 图标名（`View`/`Money`/`User`/`Tickets`…，见前端 `utils/icons`）；`color` 取 `blue`/`green`/`red`/`orange`/`purple`/`cyan`，同时决定图标底色与标记配色 |
+| `line-chart-stat` | `LineChartStat` | `->title(str)` `->subTitle(str)` `->data(array\|str)` `->categories(array\|str)` `->seriesName(str='业绩')` `->color(str='#36cfc9')` `->height(int=350)` `->smooth(bool=true)` `->showMax(bool=true)` `->showAverage(bool=true)` `->areaGradient(bool=true)` `->unit(str)` | **折线图统计卡**：卡片标题 + 子标题 + 渐变面积折线图（峰值气泡 + 平均值虚线）。`data` 走 echarts 按需注册（不引入全量），**取不到数据时显示「暂无数据」空态**而非空图 |
 | `image` | `Image` | `->src(str)` `->fit('fill'\|'contain'\|'cover'\|'none'\|'scale-down')` `->alt(str)` `->lazy(bool)` `->previewSrcList(array)` `->previewTeleported(bool)` | 点击预览大图等 |
 | `copy-text` | `CopyText` | `->value(str)` `->label(str)` `->mono(bool=true)` `->mask(bool=false)` `->maskHead(int=4)` `->maskTail(int=4)` | **可复制文本**：等宽展示 + 一键复制按钮，用于 api_key / 密钥 / 回调地址等长串；`->mask(true)` 默认打码，配眼睛按钮切换明文 |
 | `text` | `Text` | `->value(str)`（也可 `new Text('内容')`） | 纯文本（渲染 span，非 EP 组件），说明文字用 |
+
+**仪表盘组合示例**（`box` 一排四个 + `line-chart-stat` 整行，即典型后台首页首屏）：
+
+```php
+// 第一行：四个指标卡片
+$page->row(function (Row $row) {
+    $row->gutter(16);
+    $row->col(6, function (Col $col) {
+        $col->box('今日订单', '{{stats.today_count}}')
+            ->sub('今日成功', '{{stats.today_success_count}}')
+            ->icon('Tickets')->color('blue')->tag('日');
+    });
+    $row->col(6, function (Col $col) {
+        $col->box('本月金额', '{{stats.month_amount}}')
+            ->sub('本月成功单金额')
+            ->icon('Money')->color('green')->tag('月');
+    });
+    // … 另两个同理（red / orange）
+});
+
+// 第二行：折线图统计卡（data / categories 均可直接传数组或占位符）
+$page->row(function (Row $row) {
+    $row->gutter(16);
+    $row->col(24, function (Col $col) {
+        $col->lineChartStat('订单趋势')
+            ->subTitle('近 30 天成功单走势')
+            ->data('{{stats.trend_counts}}')      // 数据接口返回数组 → 整串注入
+            ->categories('{{stats.trend_days}}')
+            ->seriesName('成功单')
+            ->color('#36cfc9');
+    });
+});
+```
+
+> `data` 的两种写法：① `->data('{{stats.trend_counts}}')` 由 dataApi 注入（推荐）；
+> ② `->data([20, 25, 30, …])` 直接写静态数组（适合演示或常量数据）。`categories` 省略时自动用 `1..n`。
 
 ### 2.7 数据绑定：`{{key.path}}` 注入
 
@@ -191,12 +230,17 @@ $node->node($anyNode);                               // 挂载任意已构造好
 1. **后端** `plugin/curd/app/schema/blocks/Button.php`：`class Button extends SchemaNode { __construct(){ $this->type='button'; } public function text($v){ return $this->set('text',$v); } }`（并可在 `HasBlocks::button()` 加便捷入口）；
 2. **前端** `componentRegistry.js` 登记一行：`button: { component: ElButton, props: ['text','type','link', ...COMMON] }`。
 
-渲染器零改动。当前已注册 type 全表 = 第 2.4~2.6 节列出的 18 个。
+渲染器零改动。当前已注册 type 全表 = 第 2.4~2.6 节列出的 20 个。
 
-**component 也可以指向自定义 Vue 组件**（不限于 EP 组件）：`copy-text` 就是先例 ——
+**component 也可以指向自定义 Vue 组件**（不限于 EP 组件）：`copy-text`、`box`、`line-chart-stat` 都是先例 ——
 `componentRegistry.js` 里 `'copy-text': { component: CopyTextNode, props: [...] }`，
 `CopyTextNode.vue` 自己负责渲染与交互（渲染器仍然只按 `h(component, props, slots)` 调用，
 props 依旧走白名单）。复制这类交互因此可以纯前端实现，后端 block 只负责摆位置与传值。
+
+其中 `line-chart-stat` 还证明了**图表也能内建**：echarts 在节点组件内按需注册
+（`echarts/core` + LineChart/Grid/MarkPoint/MarkLine/Canvas，与 `views/dashboard` 共用同一份模块），
+所以加一个图表块不会引入全量 echarts（产物里 echarts 独立成 chunk，约 460 KB / gzip 155 KB）。
+真正需要「图表联动、多图 k 线、下钻筛选」这类交互时，仍建议走 `.vue` 页面。
 
 ### 2.11 `.vue` 自定义页面（`app/custom/pages/`）—— 怎么用、怎么访问
 
@@ -678,8 +722,8 @@ Content-Disposition: attachment; filename="hf_accoount_waters_20260918205603.csv
 
 | 位置 | 键 | 说明 |
 |---|---|---|
-| 宿主 `config/admin.php`（推荐） | `'export_max_rows' => 100000` | 与 `upload_path` / `site` 同一个宿主配置文件，运维改这一个即可 |
-| 插件 `config/curd.php` | `'export_max_rows' => 100000` | 宿主 `config/curd.php` 顶层同名键可覆盖；宿主未配 `config/admin.php` 时走这里 |
+| 宿主 `config/curd-admin.php`（推荐） | `'export_max_rows' => 100000` | 与 `upload_path` / `site` 同一个宿主配置文件，运维改这一个即可 |
+| 插件 `config/curd.php`（本文件内置默认） | `'export_max_rows' => 100000` | 兜底值；宿主 `config/curd-admin.php` 的同名顶层键会覆盖它 |
 
 - `<= 0` = 不限制。
 - 校验按**实际命中条数**：导出当前页按 `min(总数, size)`，导出选中按选中条数，导出全部按筛选后总数。
@@ -727,6 +771,7 @@ Content-Disposition: attachment; filename="hf_accoount_waters_20260918205603.csv
 | ① 只换凭据校验 | `auth_provider` | 校验逻辑（换表 / 换算法 / 对接外部账号） | 仍是「用户名密码 → 内置响应结构」 |
 | ② 连响应一起接管 | `login_handler` | 整个 `POST /api/auth/login` | 要加风控 / 单点登录 / 额外返回字段（**验证码插件已内置**，见 §4.7，无需自己写；且校验发生在委派之前，自定义类不必再实现） |
 | ③ 自己注册路由 | 宿主 `config/route.php` 注册 `POST /api/auth/login` | 路由 + 逻辑 | 登录协议与内置完全不同（插件检测到路由已被注册即跳过自带那条） |
+| ④ 叠加状态判定 | `auth_state_guard` | 不改登录流程，只加一层「账号还能不能用」的业务判定 | 关联业务账户被关闭 / 合同到期 / 白名单（**正交，可与 ①②③ 同时用**，见下） |
 
 ②最常用，写法（token 体系仍与插件一致）：
 
@@ -764,6 +809,44 @@ class MyLogin
 - `login_handler` 默认 `''` → 走内置逻辑；**类名写错/类不存在时也自动回退内置**（排查先看类名是否真的被加载，注意 webman 常驻内存要 `restart`）；
 - `LoginIssuer::issue($identity, $ttl = 604800)` 负责写 `admin_tokens` 表并返回 `{code,msg,data:{token,...}}`，**与内置登录完全同构** → `AuthCheck`、`/api/auth/me`、前端拦截器都不用改；
 - 只要 token 字符串（自己拼响应）用 `LoginIssuer::issueToken($identity, $ttl)`。
+
+#### 叠加额外状态判定：`auth_state_guard`
+
+只想在账号**自身 `status` 之外**再加一条业务判定（关联的业务账户被关闭、合同到期、部门撤销、白名单…）时，
+**不要**用 ① 自己实现 `auth_provider` 去覆盖三个方法，原因是：
+
+- 认证链路上有三个入口都会产出「账号可用性」——`login()` / `identity()` / `resolveUser()`；
+- 三者给的数据形状还不一样（前两个是**身份数组**，`resolveUser()` 是**用户对象**），判定逻辑被迫写两份；
+- **漏改任一入口都不会报错**，只会造成「接口能访问、但 `/api/auth/me` 状态不对」这类静默不一致。
+
+`auth_state_guard` 把判定收敛到一处，三个入口由插件统一收口：
+
+```php
+// 宿主 config/curd-admin.php
+'auth_state_guard' => \app\auth\MyGuard::class,
+```
+
+```php
+namespace app\auth;
+
+use plugin\curd\app\auth\AuthStateGuardInterface;
+
+class MyGuard implements AuthStateGuardInterface
+{
+    /** $account 是规范化后的对象，固定含 id / username / name / status 四个属性 */
+    public function allowed(object $account): ?bool
+    {
+        // false = 按「已禁用」处理；true / null = 放行
+        return myBusinessCheck($account->username) ? true : false;
+    }
+}
+```
+
+- 返回 `false` 的账号：登录报 **403「账号已被禁用」**（不会含糊地报成"密码错误"）；已登录会话的**下一次请求**同样 403——`AuthCheck` 每个请求都会调进来，无缓存延迟；
+- 与 `auth_provider` **不冲突**：前者换的是「账号从哪来」，本钩子加的是「这个账号还能不能用」。自定义 `auth_provider` 只要返回身份数组，钩子照样生效；
+- 未配置 = 不启用，行为与原来完全一致（纯 opt-in）；
+- **请把业务查询包在 `try/catch` 里做 fail-open**（异常时放行 + 记日志）：否则业务库抖动会让所有人都登不进后台。
+  反过来若希望严格（业务库不可用即拒绝），去掉 catch 里的放行即可，但要想清楚这个后果。
 
 ### 4.3 新建菜单「一键生成权限」
 
@@ -822,13 +905,13 @@ class MyLogin
 后台根路径（`/app/curd/`、`/app/curd/?...`）以及**每次登录成功**，打开的页面都由宿主配置唯一决定（`?redirect=` 不参与，见下方口径表）：
 
 ```php
-// config/admin.php
+// config/curd-admin.php
 'home_page' => '/custom-page/home',   // 相对路径，不带 /app/curd 前缀
 ```
 
 | 项 | 说明 |
 |---|---|
-| 取值来源（优先级） | 宿主 `config/admin.php` 的 `home_page` → 同文件 `site.home_page` → 插件 `config/curd.php` 的 `home_page` → `/dashboard` |
+| 取值来源（优先级） | 宿主 `config/curd-admin.php` 的 `home_page` → 同文件 `site.home_page` → 插件 `config/curd.php` 的 `home_page` → `/dashboard` |
 | 写法 | `/custom-page/home`、`custom-page/home` 都行（自动补前导斜杠、折叠重复斜杠）；也支持写完整 `http(s)://...`，此时前端整页跳转 |
 | 生效方式 | 前端每次启动拉 `/api/config/site`（含 `home_page`），**改配置 + `restart` 即可，无需重新构建前端** |
 | 页面不存在时 | 不阻断：该路径由通配路由交给 `CustomPageHost`，页面缺失时显示「页面加载失败」而不是白屏；配置项本身也不会回退成别的页 |
@@ -838,7 +921,7 @@ class MyLogin
 也会影响这些地方（都用同一个 `getHomePath()`）：已登录访问 `/login`、标签栏「关闭所有 / 关闭最后一个标签」时的兜底跳转。
 
 > 顺带修掉一个老问题：前端 `utils/site.js` 原先按**同名键**拷贝后端字段，而后端是 `logo_type`、前端是 `logoType`，
-> 导致 `config/admin.php` 里配 `logo_type` 一直不生效（永远按默认 icon 渲染）。现在加了 snake→camel 映射（`logo_type → logoType`、`home_page → homePage`）。
+> 导致 `config/curd-admin.php` 里配 `logo_type` 一直不生效（永远按默认 icon 渲染）。现在加了 snake→camel 映射（`logo_type → logoType`、`home_page → homePage`）。
 
 **唯一口径（v1.12.0 起）：登录成功一律打开 `home_page`，`?redirect=` 彻底不参与。**
 
@@ -871,7 +954,7 @@ composer require webman/captcha      # 宿主安装一次即可（ext-gd / ext-m
 ```
 
 ```php
-// 宿主 config/admin.php（推荐；没有 config/admin.php 的宿主写 config/curd.php 同名顶层键）
+// 宿主 config/curd-admin.php（唯一配置文件，写同名顶层键即可）
 'captcha_enabled' => true,   // false = 登录页完全不显示验证码，登录接口也不再校验
 'captcha_ttl'     => 300,    // 有效期（秒）
 'captcha_length'  => 4,      // 位数（3~6，越界回落 4）
@@ -917,9 +1000,13 @@ composer require webman/captcha      # 宿主安装一次即可（ext-gd / ext-m
 | collapse 不展开/展开错乱 | 展开态渲染器托管：用 `->active([...])` 设初始 name，item 需有 `->name()` 才能精确命中 |
 | `*-item` 没显示 | 条目必须直接挂在对应容器 children，不能夹在中间组件里 |
 | statistic 显示 NaN/空 | 整串占位取不到值时保留原文；确认数据接口返回数字、key 路径写对（`{{stats.amount}}` 是 `data.amount`） |
+| `box` 图标不显示（空白方块） | `->icon('xxx')` 的名字必须是 EP 图标名（`View`/`Money`/`User`…）；写错时 `getIconComponent` 回退为 `Monitor`，若连图标位都空则检查 `utils/icons` |
+| `line-chart-stat` 显示「暂无数据」 | `data` 取不到值（占位符未被替换、JSON 解析失败、或数组里全是非数字）→ 走空态。查 dataApi 是否返回**数组**、key 路径是否写对；占位符取不到时会**保留原文**（`'{{stats.trend}}'` 不是数组 → 空态） |
+| `line-chart-stat` 折线贴底/全 0 | 数据本身全 0（如订单表为空）—— 不是 bug，30 个 0 会画成 y≈0 的平线；用 `->data([...])` 静态数组可快速自查渲染是否正常 |
+| 图表宽度不随侧边栏折叠变化 | 节点组件用 `ResizeObserver` 监听容器，正常会自动重绘；若嵌在 `display:none` 的 tab 里初始化，切回时会重绘一次（ResizeObserver 触发） |
 | Action 按钮不出现 | `->show(fn)` 返回 false；或 `->batch(true)` 的按钮在批量工具栏出现（需勾选行） |
 | 想改全局变量/常量后无效 | webman 常驻内存，改 PHP 需 `restart` 而非仅 reload |
-| 登录后仍进 `/dashboard`（没走配置的 `home_page`） | 按顺序查：①`config/admin.php` 的 `home_page` 改了但没 `restart`；②前端是旧产物（登录跳转在前端，需重新构建部署）；③浏览器里是**旧书签/历史**（`login?redirect=/custom-page/home` 这类旧值已被忽略，见 4.6 口径表）；④从侧边栏点了「首页」菜单（那是菜单数据，与 `home_page` 无关）；⑤`localStorage.admin_home_page` 是旧值且 `/api/config/site` 请求失败（看 Network） |
+| 登录后仍进 `/dashboard`（没走配置的 `home_page`） | 按顺序查：①`config/curd-admin.php` 的 `home_page` 改了但没 `restart`；②前端是旧产物（登录跳转在前端，需重新构建部署）；③浏览器里是**旧书签/历史**（`login?redirect=/custom-page/home` 这类旧值已被忽略，见 4.6 口径表）；④从侧边栏点了「首页」菜单（那是菜单数据，与 `home_page` 无关）；⑤`localStorage.admin_home_page` 是旧值且 `/api/config/site` 请求失败（看 Network） |
 | 登录后落点跟「上次被拦住的那一页」不一致 | v1.12.0 起刻意如此：登录一律跳 `home_page`，不再回跳原页（`?redirect=` 已彻底不参与），见 4.6 |
 | 403 只看到「编号」看不到原因 | 设计如此（不泄露权限结构）：拿编号 grep `runtime/logs/webman-*.log` 看 `reason` |
 | 403 日志里 `reason=unresolved-permission` | 不是没权限，是路径推导不出 `obj:act`：控制器没进 `RouteControllerRegistry`，或菜单 path 与注册 key 不一致 |
@@ -932,6 +1019,8 @@ composer require webman/captcha      # 宿主安装一次即可（ext-gd / ext-m
 | 验证码位置只有一行「点击获取」，没有图片 | `/api/auth/captcha` 没返回有效 key，看响应 `msg`：ext-gd 未装 / 字体缺失 / Redis 不可用；点那一行可重试 |
 | 验证码输入框整块不显示（后端却仍要验证码） | `captcha_enabled=false` 生效了，或 `/api/config/site` 请求失败（前端兜底不显示）——后端返回的错误里带 `data.captcha=true`，前端会**自动展开并拉图**，重试一次即可 |
 | 换了端口打开登录页，账号没自动回填 | `localStorage` 按源隔离（`127.0.0.1:18082` ≠ `127.0.0.1:8787`），属正常；换端口就是另一个站点的数据 |
+| 自己实现 `auth_provider` 加状态判定，结果「能访问接口但 `/me` 状态不对」 | 覆盖时漏了三个入口之一（`login` / `identity` / `resolveUser`），**漏了不报错**；改用 `auth_state_guard` 收口到一处（见 §4.2） |
+| `auth_state_guard` 配了却不生效 | ①类名写错 / 类不存在 → `stateGuard()` 返回 null 静默跳过；②没 `restart`（配置在启动期读取）；③配的是 `auth_provider` 而非 `auth_state_guard`。排查：`php -r "var_dump(class_exists('\\\\app\\\\auth\\\\MyGuard'));"` |
 
 ---
 

@@ -373,7 +373,7 @@ class Form extends BaseDsl
     {
         return $this->add('image', $prop, $label, array_merge([
             'action' => '/api/upload/image',
-            'staticHost' => config('admin.image_server', ''),
+            'staticHost' => config('curd-admin.image_server', ''),
         ], $options));
     }
 
@@ -385,7 +385,7 @@ class Form extends BaseDsl
     {
         return $this->add('file', $prop, $label, array_merge([
             'action' => '/api/upload',
-            'staticHost' => config('admin.image_server', ''),
+            'staticHost' => config('curd-admin.image_server', ''),
         ], $options));
     }
 
@@ -397,7 +397,7 @@ class Form extends BaseDsl
     {
         return $this->add('multipleFile', $prop, $label, array_merge([
             'action' => '/api/upload',
-            'staticHost' => config('admin.image_server', ''),
+            'staticHost' => config('curd-admin.image_server', ''),
             'multiple' => true,
         ], $options));
     }

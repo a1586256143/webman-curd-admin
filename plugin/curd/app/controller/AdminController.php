@@ -64,11 +64,11 @@ class AdminController
      * 站点信息（前端侧边栏/登录页/浏览器标签读取）
      * 免鉴权接口：登录页未登录时也要显示标题
      *
-     * 配置来源：config('plugin.curd.curd.site') 优先；为空时回退 config('admin.site')，
+     * 配置来源：config('plugin.curd.curd.site') 优先；为空时回退 config('curd-admin.site')，
      * 保证已按旧约定配置站点的宿主项目行为不变。
      *
      * 同时下发 home_page（默认落地页），前端登录后 / 刷新根路径时打开它：
-     *   宿主 config/admin.php 的 home_page → config/admin.php site.home_page
+     *   宿主 config/curd-admin.php 的 home_page → config/curd-admin.php site.home_page
      *   → 插件 config/curd.php 的 home_page → '/dashboard'
      *
      * 并下发 captcha_enabled（登录页是否显示验证码，布尔值）：
@@ -77,11 +77,11 @@ class AdminController
     public function siteConfig(Request $request)
     {
         $site = config('plugin.curd.curd.site', []);
-        $site = is_array($site) && $site ? $site : config('admin.site', []);
+        $site = is_array($site) && $site ? $site : config('curd-admin.site', []);
         $site = is_array($site) ? $site : [];
 
         // 默认落地页（前端路由路径，如 /custom-page/home）；空值一律兜底 /dashboard
-        $homePage = config('admin.home_page');
+        $homePage = config('curd-admin.home_page');
         if (!is_string($homePage) || trim($homePage) === '') {
             $homePage = $site['home_page'] ?? config('plugin.curd.curd.home_page', '/dashboard');
         }

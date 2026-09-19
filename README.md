@@ -119,7 +119,7 @@ composer require amcolin/webman-curd-admin:^1.0 --no-audit   # 走 tag 版本，
 >
 > 默认**单库模式**：认证库与业务库放同一数据库。安装后 config/database.php 提供
 > mysql（认证）与 mysql_business（业务）两个连接名，单库模式下二者指向同一库
-> （业务库名取值链：config/curd.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
+> （业务库名取值链：config/curd-admin.php business_db → .env DB_BUSINESS_NAME → 认证库名）。
 
 ```bash
 # ───────── Step 1：创建全新 webman 骨架（已有项目跳过） ─────────
@@ -130,7 +130,7 @@ cd webman-clean-demo
 # composer require 自动完成：① 拉齐依赖 webman/database + webman/redis + casbin/casbin
 #   + vlucas/phpdotenv + webman/captcha（登录验证码，需 ext-gd + ext-mbstring）；
 #   ② webman 官方插件机制自动拷贝 plugin/curd 到宿主；
-#   ③ 宿主缺 config/database.php 自动生成；④ 宿主缺 config/curd.php 自动生成集中配置入口。
+#   ③ 宿主缺 config/database.php 自动生成；④ 宿主缺 config/curd-admin.php 自动生成集中配置入口。
 #
 # 【开发期 · 推荐】本地 path 源：改包源码即时生效，配合包内 scripts/release.sh 回灌改动
 composer config repositories.curd path "~/Public/www/company/webman-curd-admin"   # ← 换成你本包的真实路径
@@ -140,7 +140,7 @@ composer require amcolin/webman-curd-admin:dev-main
 #   composer config repositories.curd vcs "git@github.com:a1586256143/webman-curd-admin.git"
 #   composer require amcolin/webman-curd-admin:^1.0 --no-audit
 #
-# 验证装好：ls plugin/curd config/database.php config/curd.php
+# 验证装好：ls plugin/curd config/database.php config/curd-admin.php
 # 兜底（极少见自动拷贝未触发）：
 #   composer dump-autoload && composer update amcolin/webman-curd-admin
 #   # 或用包内 wrapper：./scripts/composer.sh update amcolin/webman-curd-admin（自动 --no-audit）
@@ -160,7 +160,7 @@ php start.php start
 #    填：数据库连接（主机/端口/库名/账号/密码；库不存在自动建）
 #        管理员账号密码（初始管理员，非固定 admin/admin123）
 #    自动完成：DB 信息写入 .env（按键合并，绝不覆盖 .env 其它内容）+
-#             同步写入 config/curd.php 的 database 段（修复 worker 启动后 .env
+#             同步写入 config/curd-admin.php 的 database 段（修复 worker 启动后 .env
 #             无法刷新导致的 1045 Access denied）→ 子进程执行 install.php
 #             （自动建库/建表/种子/密钥）→ 页面实时显示执行进度
 #    ✅ 安装成功自动向 master 发 SIGUSR1 平滑 reload（webman-admin 同款）：worker
@@ -257,7 +257,7 @@ php plugin/curd/migrate.php --dry-run            # 预检
 
 ### 配置模板
 
-- **新项目（推荐）**：首次 `composer require` 自动生成宿主 `config/curd.php`
+- **新项目（推荐）**：首次 `composer require` 自动生成宿主 `config/curd-admin.php`
   （`database` 段 + 插件调参），所有配置写在此文件即可，**不动宿主 `.env`**。
 - **传统 .env 方式**：`plugin/curd/env.example` 列有全部键名与示例值（`DB_*` /
   `CURD_*` / 前端构建期变量），可整段拷进宿主 `.env`（勿整文件覆盖）。
@@ -275,10 +275,31 @@ php plugin/curd/migrate.php --dry-run            # 预检
 
 ## 接口加密（可选）
 
-- 默认关闭（内置前端 `VITE_API_ENCRYPT=false` 构建，明文直连；后端对明文请求透传）。
-- 开启：`plugin/curd/install.php` 已生成 `config/keys/` 密钥对；把 `api_rsa_public.pem`
-  内容替换进前端 `src/utils/apiCrypto.js` 的 `RSA_PUBLIC_KEY`，以 `VITE_API_ENCRYPT=true`
-  重新构建，并在 `.env` 设 `API_ENCRYPT=true`（前后端需一致）。
+- 默认关闭（内置前端以 `VITE_API_ENCRYPT=false` 构建，明文直连；后端对明文请求自动透传）。
+- **开启开关是显式的**：只有 `VITE_API_ENCRYPT=true` 才开；不配置=明文。
+  （刻意不用「非 false 即开」——那样一旦忘记传变量，就会拿内嵌的默认公钥去加密，
+  而它与任何宿主的私钥都不匹配，所有 `/api` 会 400。）
+- 开启（**推荐用构建脚本**，公钥自动从目标宿主读，不可能拿错）：
+
+  ```bash
+  cd <插件仓库>
+  VITE_API_ENCRYPT=true \
+  CURD_PUBLIC_DIR=<宿主>/plugin/curd/public \
+    bash scripts/build-frontend.sh <前端源码目录>
+  ```
+
+  开启加密时脚本读 `CURD_PUBLIC_DIR/../config/keys/api_rsa_public.pem`，
+  并在回灌前**校验产物里真的带上了这把公钥**，对不上直接报错不落盘。
+  不传 `CURD_PUBLIC_DIR` 则回灌插件自带 `public/`（对外默认产物，明文）。
+- 不想用脚本时：给构建传 `VITE_API_ENCRYPT=true` 与
+  `VITE_API_RSA_PUBLIC_KEY="<api_rsa_public.pem 内容；换行可写字面 \n>"`。
+  两者都是**构建期内联**，改完必须重新构建才生效。
+- ⚠️ **公钥是每个宿主一份的**（`install.php` 生成的 `config/keys/api_rsa_public.pem`）。
+  用别的宿主的公钥（或 `src/utils/apiCrypto.js` 里内嵌的开发默认值）→
+  后端私钥解不开信封 → 所有 `/api` 返回 400「请求解密失败」。
+- 前后端需一致：后端 `API_ENCRYPT` 默认 `true`，`.env` 设 `false` 才关。
+- 豁免（无需配置）：`OPTIONS` 预检、非 `/api` 路径、multipart 上传（`FormData`）、
+  非 JSON 响应（CSV 导出等文件流）—— 这些始终明文。
 
 ## 宿主接入调参（.env 优先）
 
@@ -326,7 +347,7 @@ CURD_ADMIN_REQUIRE_PERMISSION = true
 > 完整契约、身份数组约定、接入步骤与排错见 **[`docs/可插拔认证与权限开关.md`](docs/可插拔认证与权限开关.md)**。
 
 默认登录走 `admin_users` 表 + `password_verify`。如果你想换一张表、换校验方式（明文 / LDAP / OAuth / 外部 API），
-实现 `AuthProviderInterface` 并配置到 `config/curd.php` 的 `auth_provider` 即可，**token 签发与存储由包统一处理**，
+实现 `AuthProviderInterface` 并配置到 `config/curd-admin.php` 的 `auth_provider` 即可，**token 签发与存储由包统一处理**，
 你只需返回「身份数组」。
 
 ```php
@@ -380,7 +401,7 @@ class MyAuthProvider implements AuthProviderInterface
 ```
 
 ```php
-// config/curd.php（宿主根）
+// config/curd-admin.php（宿主根）
 return [
     // ...
     'auth_provider' => \app\auth\MyAuthProvider::class,
@@ -393,10 +414,10 @@ return [
 
 > 关闭/开启行为、安装器联动、与 `admin_require_permission` 的关系、端到端验证见 **[`docs/可插拔认证与权限开关.md`](docs/可插拔认证与权限开关.md)**。
 
-`config/curd.php` 加一行即可关闭整条权限校验链路，同时**不再产生、也不再下发任何权限**：
+`config/curd-admin.php` 加一行即可关闭整条权限校验链路，同时**不再产生、也不再下发任何权限**：
 
 ```php
-// config/curd.php（宿主根）
+// config/curd-admin.php（宿主根）
 return [
     // ...
     'permission_enabled' => false, // false = 所有人放行（仅登录即可），不写/true = 走 RBAC
@@ -454,7 +475,7 @@ git tag v1.1.0 && git push origin v1.1.0
 # 2) 确认无本地改动（或已备份）后，同步最新插件文件：
 bash <项目根>/scripts/sync-plugin.sh
 #    = 备份 plugin/curd → plugin/curd.bak-<时间戳>，再从 vendor 整体重拷
-#    宿主 config/curd.php 与 config/database.php 已存在则不会被覆盖（安装器跳过已有文件）
+#    宿主 config/curd-admin.php 与 config/database.php 已存在则不会被覆盖（安装器跳过已有文件）
 ```
 
 发现改动时，先 `git stash` / 提交 / 把改动迁回插件配置化，再升级。
@@ -507,7 +528,7 @@ bash <项目根>/scripts/sync-plugin.sh
 - [x] **前端构建发布一体化** → `scripts/build-and-release.sh`（build-frontend + release-zip）
 - [x] **业务种子模板** → `plugin/curd/install-business.example.sql`（菜单/权限自动登记示例）
 - [x] **增量 migration** → `plugin/curd/migrate.php` + `migrations/`（`_curd_migrations` 跟踪，幂等）
-- [x] **配置模板** → 宿主 `config/curd.php`（composer require 自动生成，数据库与插件调参集中入口，不覆盖 .env）；
+- [x] **配置模板** → 宿主 `config/curd-admin.php`（composer require 自动生成，数据库与插件调参集中入口，不覆盖 .env）；
       传统 .env 键名见 `plugin/curd/env.example`
 - [x] **部署与备份** → `docs/插件安装升级与生产部署.md` 第 6 节（supervisor + Nginx + 备份策略 + 回滚预案）
 - [x] **update 钩子演练** → `Install::update()` 全链路 + 幂等复跑已验证（8 表 + 种子 + 密钥，重跑全 SKIP）
@@ -546,7 +567,7 @@ source ~/.zshrc
 - **历史原因**：插件代码按「认证库 / 业务库」分离设计，`CURD_BUSINESS_CONNECTION=mysql_business` 是默认
   业务模型 CURD 用的连接名。改这一处会动大量业务代码、破坏向后兼容。
 - **单库模式**（默认）：`mysql_business.database` 回退到认证库名 → 两个连接**指向同一库**，零开销。
-- **想分库**：在 `config/curd.php` 的 `database.business_db` 填不同库名，向导重装或手动改即可生效。
+- **想分库**：在 `config/curd-admin.php` 的 `database.business_db` 填不同库名，向导重装或手动改即可生效。
 - **不要它**：在 `config/database.php` 里删掉 `'mysql_business' => [...]` 整块代码即可（业务代码里
   出现 `Db::connection('mysql_business')->...` 时改成 `mysql`，或在每个模型里 `protected $connection = 'mysql';`）。
 
@@ -567,7 +588,7 @@ Redis 不可用时 `AuthController / Rbac / AuthCheck / AdminController` 已全�
 **根因**：webman worker 启动时 `config/database.php` 已 `require` 加载（`.env` 同时 `putenv` 固化）。
 **wizard 写文件后，运行期内存里的 `env('DB_PASSWORD')` 仍是旧值**（通常空），导致心跳 `select 1` 用空密码重连失败。
 
-**修法**（v1.1 起）：向导会把 DB 信息写入 `config/curd.php` 的 `database` 段 + 宿主 `.env`，
+**修法**（v1.1 起）：向导会把 DB 信息写入 `config/curd-admin.php` 的 `database` 段 + 宿主 `.env`，
 安装成功后**自动向 master 发 SIGUSR1 平滑 reload**（新 DB_* 即刻生效），无需手动 restart；
 仅当运行在 Windows / supervisor 等**信号不可用**场景时，向导页面会回退提示手动执行：
 
@@ -575,4 +596,4 @@ Redis 不可用时 `AuthController / Rbac / AuthCheck / AdminController` 已全�
 php start.php restart
 ```
 
-之后心跳连接用 `config/curd.php` 里的真密码，`1045` 消失。
+之后心跳连接用 `config/curd-admin.php` 里的真密码，`1045` 消失。

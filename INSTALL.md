@@ -20,7 +20,7 @@
 | 框架 | webman（`workerman/webman-framework` ^2.1，官方骨架即可） |
 | 数据库 | MySQL（单库架构：认证库与业务库**同一库**，无分库配置项） |
 | 其它 | composer require 会自动拉齐 `webman/database` `webman/redis` `casbin/casbin` `vlucas/phpdotenv` `webman/captcha`，无需手动装 |
-| PHP 扩展 | 登录图形验证码需要 `ext-gd` + `ext-mbstring`（缺失时 `/api/auth/captcha` 报「验证码生成失败」）；不需要验证码可在 `config/admin.php` 里 `'captcha_enabled' => false` |
+| PHP 扩展 | 登录图形验证码需要 `ext-gd` + `ext-mbstring`（缺失时 `/api/auth/captcha` 报「验证码生成失败」）；不需要验证码可在 `config/curd-admin.php` 里 `'captcha_enabled' => false` |
 
 宿主 `composer.json` 需含 webman 官方插件的三个 scripts（官方骨架自带，缺失则补）：
 
@@ -75,14 +75,14 @@ composer require amcolin/webman-curd-admin
 2. **示例落位**到宿主根（给用户看的示例，可自由改/删）：
    - `app/controller/admin/api/MyTestController.php`（「测试管理」控制器）
    - `app/model/MyTest.php`
-3. 生成集中配置 `config/curd.php`（插件调参入口；已存在不覆盖）；
+3. 生成集中配置 `config/curd-admin.php`（插件调参入口；已存在不覆盖）；
 4. 若 `config/database.php` 缺失或是 webman/database 占位模板 → 自动生成 env 驱动的
    `mysql` + `mysql_business` 双连接模板（单库同库）。
 
 验证：
 
 ```bash
-ls plugin/curd  config/curd.php  config/database.php
+ls plugin/curd  config/curd-admin.php  config/database.php
 # 极少见自动拷贝未触发时的兜底：
 composer dump-autoload && composer update amcolin/webman-curd-admin
 # 或直接手动拷：cp -r vendor/amcolin/webman-curd-admin/plugin/curd plugin/curd
@@ -105,7 +105,7 @@ php start.php start        # 端口默认 8787（config/process.php 的 listen�
 - **数据库连接**：主机 / 端口 / 库名 / 账号 / 密码（库不存在会自动 CREATE）；
 - **管理员账号密码**：初始管理员（非固定 admin/admin123）。
 
-向导自动完成：DB 信息写入 `.env`（按键合并，不覆盖其它内容）→ 同步写 `config/curd.php`
+向导自动完成：DB 信息写入 `.env`（按键合并，不覆盖其它内容）→ 同步写 `config/curd-admin.php`
 database 段 → 子进程执行安装脚本（建表/种子/密钥）→ 页面实时进度。
 
 > ✅ 安装成功**自动向 master 发 SIGUSR1 平滑 reload**（webman-admin 同款）：worker 处理完
@@ -216,7 +216,7 @@ RouteControllerRegistry::registerMany([
 
 > 插件以「根目录应用插件」分发（`{项目}/plugin/curd`），webman 配置加载顺序是
 > `config/` 先、`plugin/*/config` 后——插件自带配置会覆盖 `config/plugin/curd/curd.php`，
-> 所以**调参统一走宿主根 `config/curd.php`**（composer require 自动生成模板）或改
+> 所以**调参统一走宿主根 `config/curd-admin.php`**（composer require 自动生成模板）或改
 > `plugin/curd/config/curd.php`（升级会被覆盖，不推荐）。
 
 | 配置键 | 默认 | 说明 |
@@ -228,10 +228,18 @@ RouteControllerRegistry::registerMany([
 | 数据库 | 见 `.env` 的 `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD` | 单库架构一份库名即可 |
 
 后端其它调参（model_dir / controller_dirs / vue_pages_dir / casbin_model_path 等）见
-`plugin/curd/config/curd.php` 内置默认值，同名顶层键在宿主 `config/curd.php` 覆盖生效。
+`plugin/curd/config/curd.php` 内置默认值，同名顶层键在宿主 `config/curd-admin.php` 覆盖生效。
 
-**接口加密（可选）**：默认关闭（明文直连）。开启需前端 `VITE_API_ENCRYPT=true` 重建 +
-`.env` 设 `API_ENCRYPT=true`，密钥用已生成的 `config/keys/api_rsa_public.pem`。
+**接口加密（可选）**：默认关闭（明文直连，未显式 `VITE_API_ENCRYPT=true` 就是关）。
+开启（公钥必须用**本宿主**的 `config/keys/api_rsa_public.pem`，构建脚本会自动读取并校验）：
+
+```bash
+VITE_API_ENCRYPT=true \
+CURD_PUBLIC_DIR=<宿主>/plugin/curd/public \
+  bash scripts/build-frontend.sh <前端源码目录>
+```
+
+后端 `API_ENCRYPT` 默认 `true`（`.env` 设 `false` 才关）。拿错公钥 → 所有 `/api` 400。
 
 ---
 
@@ -248,7 +256,7 @@ RouteControllerRegistry::registerMany([
 
 # 2) 确认无本地改动（或已备份）后整体重拷（先备份 plugin/curd → plugin/curd.bak-<时间戳>）
 bash <宿主项目根>/scripts/sync-plugin.sh
-#    config/curd.php、config/database.php 已存在则不会被覆盖
+#    config/curd-admin.php、config/database.php 已存在则不会被覆盖
 ```
 
 > 若只改过内置前端，用 `./scripts/build-frontend.sh` 重建即可，不必动 plugin/curd 源码。
@@ -270,7 +278,7 @@ php start.php restart
 - **Nginx 反代**：`/app/curd/` 与 `/api/*` 同域反代即可，免 CORS；后端反代用
   `connection->getRemoteIp()` 取真实 IP。
 - **密钥备份**：`config/keys/` 随生产环境备份（丢失不影响登录，仅影响已加密接口）。
-- **权限收紧**：`.env` / `config/curd.php` 开 `admin_require_permission=true`。
+- **权限收紧**：`.env` / `config/curd-admin.php` 开 `admin_require_permission=true`。
 - **DB 备份 / 升级回滚**：升级前 `check-plugin-overrides.sh` + `sync-plugin.sh` 自带备份；
   回滚 = 恢复 `plugin/curd.bak-*` 后 reload。
 
@@ -295,8 +303,8 @@ Web 向导场景安装成功已**自动 SIGUSR1 平滑 reload**，新 DB 密码�
 插件路由统一走 `curd_route()` 注册（检测到同 method+path 已注册则跳过，宿主优先），
 存量项目自注册过 `/api/admin/*` 等不受影响、行为不变。
 
-**Q：为什么配置写在 config/curd.php 而不是 .env**
-插件自带 config 会覆盖 `config/plugin/curd/curd.php`；宿主根 `config/curd.php` 由安装器生成、
+**Q：为什么配置写在 config/curd-admin.php 而不是 .env**
+插件自带 config 会覆盖 `config/plugin/curd/curd.php`；宿主根 `config/curd-admin.php` 由安装器生成、
 顶层同名键覆盖内置默认，是唯一推荐调参入口。数据库连接仍走 `.env` 的 `DB_*` 键。
 
 ---

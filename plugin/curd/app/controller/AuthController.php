@@ -11,13 +11,13 @@ use support\Request;
 /**
  * 认证控制器
  * ------------------------------------------------------------------
- * 登录提供方可插拔（config/curd.php auth_provider），默认 admin_users；
- * 权限受总开关控制（config/curd.php permission_enabled）。
+ * 登录提供方可插拔（config/curd-admin.php auth_provider），默认 admin_users；
+ * 权限受总开关控制（config/curd-admin.php permission_enabled）。
  *
  * token 存认证库 admin_tokens 表（admin_user_id 存放提供方返回的用户 id）。
  *
  * 想「完全自己写一套登录」有三种方式（docs 第 4 章有完整示例）：
- *   ① config/curd.php 的 login_handler 指向你的类（login(Request): Response）——
+ *   ① config/curd-admin.php 的 login_handler 指向你的类（login(Request): Response）——
  *      本控制器直接把 /api/auth/login 交给它，其余接口不变；
  *   ② 宿主 config/route.php 里注册 POST /api/auth/login 指向自己的控制器
  *      （插件路由检测到已注册会跳过，宿主优先）；
@@ -27,7 +27,7 @@ use support\Request;
  * 登录图形验证码（webman/captcha）：
  *   默认开启，GET /api/auth/captcha 取图，登录时带 captcha_key + captcha_code。
  *   校验发生在「委派自定义 login_handler 之前」，所以自定义登录入口不用自己实现验证码；
- *   不需要验证码的宿主在 config/admin.php 里 'captcha_enabled' => false 即可（详见 app/auth/Captcha.php）。
+ *   不需要验证码的宿主在 config/curd-admin.php 里 'captcha_enabled' => false 即可（详见 app/auth/Captcha.php）。
  */
 class AuthController
 {
@@ -71,7 +71,7 @@ class AuthController
             }
         }
 
-        // ② 自定义登录入口：config/curd.php 'login_handler' => 你的类名（login(Request): Response）
+        // ② 自定义登录入口：config/curd-admin.php 'login_handler' => 你的类名（login(Request): Response）
         //    命中就把整个登录逻辑交出去（含响应结构），便于接入风控/外部账号体系。
         $handler = config('plugin.curd.curd.login_handler', '');
         if (is_string($handler) && $handler !== '' && class_exists($handler)) {

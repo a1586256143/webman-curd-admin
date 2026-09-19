@@ -169,4 +169,36 @@ trait HasBlocks
         $this->push($n);
         return $n;
     }
+
+    /**
+     * 指标卡片（图标 + 大数字 + 副标题 + 右上角标记）
+     * 仪表盘顶部一排四个的经典形态：
+     *   $col->box('访问', '{{stats.visit}}')->sub('访问总量', '{{stats.total}}')->icon('View')->color('blue')->tag('年');
+     */
+    public function box(string $title = '', $value = null): Box
+    {
+        $n = new Box();
+        if ($title !== '') {
+            $n->title($title);
+        }
+        if ($value !== null) {
+            $n->value($value);
+        }
+        $this->push($n);
+        return $n;
+    }
+
+    /**
+     * 折线图统计卡（卡片 + 子标题 + 渐变面积折线图）
+     *   $col->lineChartStat('网站数据')->subTitle('当月业绩折线图')->data('{{stats.trend}}');
+     */
+    public function lineChartStat(string $title = ''): LineChartStat
+    {
+        $n = new LineChartStat();
+        if ($title !== '') {
+            $n->title($title);
+        }
+        $this->push($n);
+        return $n;
+    }
 }

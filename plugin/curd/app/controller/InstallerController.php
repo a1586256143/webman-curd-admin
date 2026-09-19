@@ -10,14 +10,16 @@ use Webman\Http\Response;
  * 访问：
  *   GET  /app/curd-installer          → 向导页面（静态页）
  *   GET  /api/curd-installer/status   → 是否已安装
- *   POST /api/curd-installer/setup    → 提交并执行安装（DB 写 .env，调参写 config/curd.php）
+ *   POST /api/curd-installer/setup    → 提交并执行安装（DB 写 .env，调参写 config/curd-admin.php）
  *   GET  /api/curd-installer/progress → 安装进度（轮询，JSONL）
  *
  * 配置分工（单库架构）：
  *   - 数据库信息（DB_HOST/PORT/NAME/USER/PASSWORD）写入宿主 .env：按键合并/替换，
  *     绝不删除 .env 里其它内容；config/database.php 用 env() 读取这些键。
  *   - 认证库与业务库【同一库】（强制单库，向导不提供分库选项，无 DB_BUSINESS_NAME）。
- *   - 插件调参（page_base 等）写入宿主 config/curd.php（仅调参，不含数据库段）。
+ *   - 插件调参 + 宿主管家键（page_base / site / upload_* / captcha_* 等）写入宿主
+ *     config/curd-admin.php（**唯一宿主配置入口**，不含数据库段）；旧文件名
+ *     config/curd.php 与 config/admin.php 已废弃、不再读取。
  *   - 执行安装用子进程 php plugin/curd/install.php（独立加载 .env/config，
  *     规避运行期配置缓存），进度写 runtime/curd-installer-progress.log 供轮询；
  *   - 安装成功生成 runtime/curd-installed.lock（由 api/Install 统一写），
@@ -142,8 +144,8 @@ class InstallerController
             // 0) 写 .env（数据库信息是唯一 DB 来源；按键替换/追加，不删其它内容）
             static::writeEnv($root, $db);
 
-            // 1) 写 config/curd.php（仅插件调参，不含数据库段）
-            //    原文件先备份 config/curd.php.wizard.bak。
+            // 1) 写 config/curd-admin.php（仅插件调参，不含数据库段）
+            //    原文件先备份 config/curd-admin.php.wizard.bak。
             static::writeCurdConfig($root, $pageBase);
 
             // 2) 清空进度文件 → 子进程执行安装（独立进程重新加载 .env，规避运行期配置缓存）
@@ -317,13 +319,13 @@ class InstallerController
     }
 
     /**
-     * 写 config/curd.php（仅插件调参，不含数据库段）：
+     * 写 config/curd-admin.php（插件调参 + 宿主管家键，不含数据库段）：
      * 数据库连接唯一入口是 .env 的 DB_*（config/database.php 用 env() 读取）。
-     * 原文件先备份 config/curd.php.wizard.bak
+     * 原文件先备份 config/curd-admin.php.wizard.bak
      */
     protected static function writeCurdConfig(string $root, string $pageBase): void
     {
-        $file = $root . '/config/curd.php';
+        $file = $root . '/config/curd-admin.php';
         if (is_file($file)) {
             @copy($file, $file . '.wizard.bak');
         }
@@ -332,11 +334,13 @@ class InstallerController
         $php = str_replace('__PAGE_BASE__', $pageBaseEsc, <<<'PHP'
 <?php
 /**
- * webman-curd-admin 插件集中配置（Web 安装向导生成）
+ * webman-curd-admin 插件宿主配置（**唯一入口**；Web 安装向导生成）
  *
- * 本文件只承载【插件调参】；数据库连接信息在宿主 .env（DB_*，由 config/database.php
- * 用 env() 读取）。认证库与业务库同一库（单库架构）。
- * 顶层键覆盖 plugin/curd/config/curd.php 同名默认值，不写的键沿用内置默认。
+ * 本文件既承载【插件调参】，也承载【宿主管家键】（站点信息 / 落地页 / 上传 / 导出 / 验证码），
+ * 是插件的唯一宿主配置入口 —— 不再有 config/curd.php、config/admin.php（旧名已不读取）。
+ * 数据库连接信息不在这里：写宿主 .env（DB_*，由 config/database.php 用 env() 读取），
+ * 认证库与业务库同一库（单库架构）。
+ * 顶层键覆盖 plugin/curd/config/curd.php 同名默认值，不写的键沿用内置默认；改完需 restart。
  */
 return [
     // 前端挂载前缀（改了需同步重建前端：VITE_BASE_PATH）
@@ -344,6 +348,28 @@ return [
 
     // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
     'admin_require_permission' => false,
+
+    // ---- 宿主管家键（按需打开；插件直接读 config('curd-admin.*')）----
+    // 站点信息：前端 /api/config/site 读取（侧边栏 logo、登录页、浏览器标签标题）
+    // 'site' => [
+    //     'title'     => 'Webman Admin',
+    //     'logo'      => 'Monitor',   // el-icon 组件名（logo_type=icon）或图片 URL（logo_type=image）
+    //     'logo_type' => 'icon',
+    //     'copyright' => '',
+    //     'favicon'   => '',
+    // ],
+    // 默认落地页（前台路由路径，登录后/刷新根路径打开；默认 '/dashboard'）
+    // 'home_page' => '/custom-page/home',
+    // 上传与静态资源
+    // 'upload_path'   => 'uploads',                 // 相对 public 目录
+    // 'upload_driver' => 'local',                   // local | oss
+    // 'image_server'  => 'http://your-static.com/', // 图片/静态资源前缀
+    // 导出上限（0 = 不限制）
+    // 'export_max_rows' => 100000,
+    // 登录图形验证码（Redis 不可用时应急设为 false 并重启）
+    // 'captcha_enabled' => true,
+    // 'captcha_ttl'     => 300,
+    // 'captcha_length'  => 4,
 
     // 连接名（config/database.php connections 键；单库下两者指向同一 DB_NAME）：
     // 'admin_connection'    => 'mysql',            // 认证库连接名

@@ -150,7 +150,7 @@ class Column extends BaseDsl
      * 图片列（带宽高参数，控制单元格内图片显示尺寸）
      * 默认 40×40；可传 width、height 自定义
      *
-     * 自动带上 config('admin.image_server') 作为拼装前缀（写入 staticHost）：
+     * 自动带上 config('curd-admin.image_server') 作为拼装前缀（写入 staticHost）：
      * 列值为相对路径（file/xxx.png）时，前端会拼成 https://xxxx.com/file/xxx.png；
      * 配置为空字符串时不做任何拼装，行为与原先一致。
      */
@@ -159,26 +159,26 @@ class Column extends BaseDsl
         $this->config['type'] = 'image';
         $this->config['imageWidth'] = $width;
         $this->config['imageHeight'] = $height;
-        $this->config['staticHost'] = config('admin.image_server', '');
+        $this->config['staticHost'] = config('curd-admin.image_server', '');
         return $this;
     }
 
     /**
      * 静态资源域名前缀（通用列，与 image() 的域名拼装共用一套配置）
      *
-     * 设置后该列数据前面自动拼接 config('admin.image_server') 域名：
+     * 设置后该列数据前面自动拼接 config('curd-admin.image_server') 域名：
      * 列值为相对路径（file/xxx.png）时，显示文本/跳转链接会拼成 https://xxxx.com/file/xxx.png；
      * 列值已是完整 URL（http:// 或 https:// 开头）时不重复拼接。
      *
      * 用法：
-     *   ->staticHost()                        // 默认用 config('admin.image_server')，如 https://xxxx.com
+     *   ->staticHost()                        // 默认用 config('curd-admin.image_server')，如 https://xxxx.com
      *   ->staticHost('https://cdn.xxx.com')   // 显式覆盖域名
      *
-     * @param string|null $host 静态资源域名；为 null 时回退到 config('admin.image_server')
+     * @param string|null $host 静态资源域名；为 null 时回退到 config('curd-admin.image_server')
      */
     public function staticHost(?string $host = null): self
     {
-        $this->config['staticHost'] = $host ?? config('admin.image_server', '');
+        $this->config['staticHost'] = $host ?? config('curd-admin.image_server', '');
         return $this;
     }
 
