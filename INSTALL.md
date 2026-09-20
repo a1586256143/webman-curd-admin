@@ -146,6 +146,50 @@ CLI 可选参数：
   初始 admin 账号、`curd_configs` 的 `/my-test` 示例页面配置 + 「测试管理」菜单 + `my_test` 示例数据；
 - **RSA 密钥**：生成 `config/keys/`（已存在跳过；生产备份此目录）。
 
+### 3.3 全局中间件与异常处理器（必做）
+
+**① 全局中间件**：插件的接口加解密必须由宿主在 `config/middleware.php` 的 `'@'` 组注册
+（`'@'` = 跨所有 app 与 plugin 生效；写成 `''` 只作用于默认 app，插件的 `/api/*` 会绕过）：
+
+```php
+// config/middleware.php
+return [
+    '@' => [
+        \app\middleware\StaticFile::class,
+        // 接口加解密（RSA+AES 信封）；即使关闭加密也保留，否则前端加密请求无人解
+        \plugin\curd\app\middleware\ApiCrypto::class,
+    ],
+];
+```
+
+**② 异常处理器**（SQL 报错等未捕获异常的兜底出口）：
+
+- **插件路由开箱生效**（插件自带 `plugin/curd/config/exception.php`），无需配置；
+- **宿主自己的 `/api` 控制器**要覆盖到，就把宿主 `config/exception.php` 的 `''` 键指向插件处理器：
+
+```php
+// config/exception.php
+return [
+    '' => \plugin\curd\app\exception\CurdExceptionHandler::class,
+];
+```
+
+> ⚠️ 只写 `'@'` 键无效 —— 框架的判定是「本 app 配置里已有 `''` 键 ⇒ 忽略 `'@'`」，
+> 而 webman 骨架默认自带 `'' => support\exception\Handler::class`。
+> ⚠️ **别想用中间件做这件事**：webman 的中间件链在**每一层内层都先 try/catch 再转 Response**
+> （`App::getCallback` 的 `array_reduce` + 链尾 `$innermost`），外层中间件**永远捕获不到**
+> 控制器/路由中间件抛出的异常（2026-09-20 实测踩过）。
+
+**线上/本地模式**由 `.env` 的 `APP_DEBUG` 决定（`plugin.curd.app.debug` 读它）：
+
+| APP_DEBUG | 行为 |
+|---|---|
+| `true`（默认，本地） | 异常信息原样暴露：JSON 请求返回真实 msg + traces，其余返回调试页 |
+| `false`（线上必设） | `/api` 返回 **HTTP 500** `{"code":500,"msg":"服务内部错误（编号 xxxxxxxx）"}`，详情写 `runtime/logs/webman.log`（`grep <编号>` 定位） |
+
+> 宿主自己的 `/api` 控制器还要注意：其 `debug` 取宿主 `config/app.php` 的 `debug`，
+> 与插件 debug 取**交集**（任一为 false 即按线上处理），线上记得两边都关。
+
 ---
 
 ## 4. 启动验证

@@ -33,6 +33,7 @@ webman-curd-admin/
 │   │   ├── dsl/           # Grid / Form / Field / Column / Filter / Action
 │   │   ├── schema/        # PageSchema / PageRegistry / SchemaNode / blocks/*
 │   │   ├── middleware/    # Cors / AuthCheck / PermissionCheck / ApiCrypto（内置）
+│   │   ├── exception/     # CurdExceptionHandler（/api 未捕获异常兜底：线上 500+日志，本地抛出）
 │   │   ├── rbac/          # casbin Rbac + DatabaseAdapter（内置）
 │   │   ├── model/         # CurdConfigs / BaseModel（内置）
 │   │   ├── CurdDb.php     # 库连接助手（admin_connection / business_connection）
@@ -300,6 +301,40 @@ php plugin/curd/migrate.php --dry-run            # 预检
 - 前后端需一致：后端 `API_ENCRYPT` 默认 `true`，`.env` 设 `false` 才关。
 - 豁免（无需配置）：`OPTIONS` 预检、非 `/api` 路径、multipart 上传（`FormData`）、
   非 JSON 响应（CSV 导出等文件流）—— 这些始终明文。
+
+## 接口异常兜底（线上 500 + 日志，本地直接抛）
+
+SQL 报错、类型错误等**未捕获异常**的统一出口，由插件自带异常处理器
+`plugin\curd\app\exception\CurdExceptionHandler` 负责（**不是中间件**——webman 在每层
+中间件内层先 try/catch 再转 Response，外层中间件捕获不到控制器异常）：
+
+| 模式（`.env` 的 `APP_DEBUG`） | 行为 |
+|---|---|
+| `true`（默认，**本地**） | 异常信息原样暴露：JSON 请求返回真实 msg + traces，其余返回调试页 —— 当场可查 |
+| `false`（**线上**） | `/api` 返回 **HTTP 500** `{"code":500,"msg":"服务内部错误（编号 xxxxxxxx）"}`；异常类/消息/**SQL + 绑定**/请求上下文/堆栈写 `runtime/logs/webman.log` |
+
+**生效范围**：
+
+- **插件路由**（`/api/auth/*`、`/api/curd/*`、`/api/admin/*`、`/api/menu/*` …）**开箱生效**：
+  插件自带 `plugin/curd/config/exception.php`，框架按 `plugin.curd.exception` 读取。
+- **宿主自己的 `/api` 控制器**：改宿主 `config/exception.php` 的 `''` 键：
+
+  ```php
+  return ['' => \plugin\curd\app\exception\CurdExceptionHandler::class];
+  ```
+
+  ⚠️ 只加 `'@'` 键**无效**：框架规则是「本 app 配置已有 `''` 键 ⇒ 忽略 `'@'`」，
+  而 webman 骨架默认就带 `'' => support\exception\Handler::class`。
+
+- 前端拿到的编号是**报障凭据**：`grep <编号> runtime/logs/webman.log` 即可定位原始异常
+  （与 `PermissionCheck` 的 403 编号同一套排查方式）。
+- 日志**一条异常一行**：`trace_str` 里的换行已收敛成 ` | `，且 `sql` / `bindings` 等关键字段
+  排在堆栈**之前**——因为 webman 默认日志格式器开了 `allowInlineLineBreaks`，多行堆栈会把
+  后面的字段顶到几十行开外，`grep <编号>` 就只能看到第一行。收敛后可放心用 grep / jq / 采集器解析。
+- 提示文案可改：宿主 `config/curd-admin.php` 或插件 `config/curd.php` 的 `error_message`。
+- 只兜 `/api`；非 `/api` 请求任何模式都沿用框架默认错误页/调试页。
+- 响应走 HTTP 500 而非 200：便于 Nginx / 监控按 5xx 告警；前端已能解密并展示非 2xx 的
+  加密错误响应（`request.js` 的 error 分支）。
 
 ## 宿主接入调参（.env 优先）
 

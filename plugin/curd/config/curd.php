@@ -61,6 +61,22 @@ $defaults = [
     // 前端会把它当错误提示而不是下载文件（见 dynamicCurd/index.vue 的 export）。
     'export_max_rows' => 100000,
 
+    // ===== 接口异常兜底（CurdExceptionHandler 异常处理器）=====
+    // SQL 报错等未捕获异常的统一出口，见 app/exception/CurdExceptionHandler.php。
+    // 生效方式：插件自带 config/exception.php 的 '' 键 → 插件路由自动生效；
+    //           宿主自己的 /api 控制器需把宿主 config/exception.php 的 '' 键也指过来
+    //           （只加 '@' 键无效：本 app 已有 '' 键时框架会忽略 '@'）。
+    //           ⚠️ 不能用中间件实现：webman 在每层中间件内层就 try/catch 了，外层拿不到异常。
+    //
+    // 模式由 plugin.curd.app.debug 决定（即宿主 .env 的 APP_DEBUG）：
+    //   本地模式（默认，APP_DEBUG 未设为 false）→ 异常原样抛出，webman 调试页展示堆栈与 SQL；
+    //   线上模式（APP_DEBUG=false）             → 返回 HTTP 500
+    //        {"code":500,"msg":"服务内部错误（编号 xxxxxxxx）"}，
+    //        完整异常类/消息/SQL/绑定/请求上下文/堆栈写 runtime/logs/webman.log（一条异常一行）。
+    // 编号是「给用户的可读凭据」：报障时把编号给运维，服务器上 grep 该编号即可定位到原始异常
+    //（与 PermissionCheck 的 403 编号同一套排查方式）。
+    'error_message' => '服务内部错误',
+
     // 默认落地页（前端路由路径）：登录成功后、以及直接访问后台根路径 / 刷新时打开它。
     // 用「相对路径」写，不带 /app/curd 前缀（部署前缀由前端 VITE_BASE_PATH 决定）：
     //   '/custom-page/home'  → 自定义页面（app/custom/pages/home.vue 或 PageRegistry::register('home', ...)）
