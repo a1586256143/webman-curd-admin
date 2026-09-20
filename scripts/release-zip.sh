@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 打 zip 发布包：plugin/curd + composer.json + README + LICENSE（不含 keys/前端源码）
+# 打 zip 发布包：plugin/curd + composer.json + README + INSTALL + docs（不含 keys/前端源码）
 #
 # 用法：
 #   ./scripts/release-zip.sh [version]    # 默认取当前 git tag 或 git describe
@@ -9,6 +9,8 @@
 # 内容结构（zip 解压后）：
 #   composer.json
 #   README.md
+#   INSTALL.md                      # 安装说明（离线阅读）
+#   docs/                           # 文档站（index.html 自包含，双击可开）+ md 源
 #   plugin/curd/...                 # 应用插件源码（含前端 dist）
 #   scripts/release.sh              # 同步脚本（运维用）
 #   scripts/build-frontend.sh       # 前端构建脚本（开发者用）
@@ -16,6 +18,7 @@
 # 排除：
 #   plugin/curd/config/keys/         # RSA 密钥不打包（项目首次 install 时生成）
 #   plugin/curd/install-business.sql # 项目专有业务表 DDL（不通用，由项目自带）
+#   docs/_legacy/                    # 旧版文档归档，不随包分发
 #   scripts/release-zip.sh          # 自身（避免循环引用）
 #   .git/ .github/ node_modules/
 
@@ -45,13 +48,15 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
         --output "$ZIP" \
         --prefix=webman-curd-admin/ \
         HEAD \
-        $(git ls-files | grep -E '^(composer\.json|README\.md|plugin/curd/|scripts/)' | tr '\n' ' ')
+        $(git ls-files | grep -E '^(composer\.json|README\.md|INSTALL\.md|docs/|plugin/curd/|scripts/)' \
+          | grep -vE '^docs/_legacy/' | tr '\n' ' ')
 else
     echo "==> 打包全部文件（无 git，按路径排除）"
     zip -r "$ZIP" \
-        composer.json README.md plugin/curd scripts \
+        composer.json README.md INSTALL.md docs plugin/curd scripts \
         -x 'plugin/curd/config/keys/*' \
         -x 'plugin/curd/install-business.sql' \
+        -x 'docs/_legacy/*' \
         -x 'scripts/release-zip.sh'
 fi
 

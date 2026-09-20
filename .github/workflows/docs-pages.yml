@@ -1,0 +1,42 @@
+name: docs-pages
+
+# 把 docs/ 发布成在线文档站（GitHub Pages）。
+#
+# ⚠️ 只支持「手动触发」：不自动跑，避免私有仓库未开通 Pages 时产生红色 CI。
+#    要出在线文档时：仓库 → Actions → docs-pages → Run workflow。
+#    前置：仓库 Settings → Pages → Source 选 "GitHub Actions"
+#         （私有仓库需 Pro/Team/Enterprise 才允许 Pages）。
+#
+# 站点内容 = docs/ 目录（含自包含的 index.html，离线也能双击打开）。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify docs entry
+        run: test -f docs/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -11,9 +11,12 @@
  *   - 每个 md 的第一个 H1 作为该文档标题；H2/H3(及以上) 生成嵌套目录树
  *   - 输出 docs/index.html：自包含（CSS/JS/内容全部内嵌），无网络依赖，双击即可打开
  *   - 左侧栏目树：文档分组 + 章节嵌套 + 点击跳转 + 滚动高亮 + 关键字过滤
+ *   - 站内互链接管：正文里指向同目录其它 *.md 的链接自动变成「切面板」跳转，
+ *     不必再依赖浏览器整页跳转（外链与 http(s) URL 原样保留）
  *
  * 约定：
- *   - 新增文档：把 xxx.md 放进 docs/，重跑本脚本即可并入左侧栏目
+ *   - 新增文档：把 NN-主题.md 放进 docs/，重跑本脚本即可并入左侧栏目（编号决定顺序）
+ *   - 文档之间互相引用请写标准 Markdown 链接：[标题](NN-主题.md)
  *   - 排除：docs/tools/ 目录内的文件不会被扫描
  */
 const fs = require('fs');
@@ -75,6 +78,29 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// 文件名（去扩展名）→ 文档序号；供正文互链改写用
+const docJump = {};
+files.forEach((f, i) => { docJump[path.basename(f, '.md')] = { index: i }; });
+
+/**
+ * 把渲染结果里指向同目录其它 *.md 的链接换成交互式跳转锚点
+ * （只处理站内相对路径；http(s):// 等带协议的外链原样保留）
+ */
+function linkifyInternal(html) {
+  return html.replace(/href="([^"]*)"/g, (whole, raw) => {
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return whole; // 外链 / mailto …
+    let href = raw;
+    try { href = decodeURIComponent(href); } catch (e) { /* 编码异常则原样匹配 */ }
+    const cut = href.indexOf('#');
+    const pathPart = cut === -1 ? href : href.slice(0, cut);
+    if (!/\.md$/i.test(pathPart)) return whole;
+    const base = path.basename(pathPart.replace(/\\/g, '/'), '.md');
+    const hit = docJump[base];
+    if (!hit) return whole;
+    return 'href="#" class="doc-link" data-doc-jump="' + hit.index + '"';
+  });
+}
+
 const docs = [];
 for (const file of files) {
   const abs = path.join(DOCS_DIR, file);
@@ -91,12 +117,12 @@ for (const file of files) {
     title,
     mtime: stat.mtime.toLocaleString('zh-CN', { hour12: false }),
     headings: hd.filter((h) => h.depth >= 2), // h1 作为文档标题已在左侧分组显示
-    html,
+    html: linkifyInternal(html),
   });
 }
 
 // ---------- 页面模板 ----------
-const PAGE_TITLE = '后台 DSL 文档';
+const PAGE_TITLE = 'webman-curd-admin 文档';
 const STYLE = `
 :root{
   --accent:#2563eb; --accent-soft:#eff6ff; --border:#e5e7eb; --text:#1f2937; --muted:#6b7280;
@@ -161,6 +187,8 @@ a:hover{text-decoration:underline}
 .doc-body li{margin:4px 0}
 .doc-body strong{font-weight:700}
 .doc-body a{word-break:break-all}
+.doc-body a.doc-link{border-bottom:1px dashed currentColor;word-break:normal}
+.doc-body a.doc-link::after{content:" →";font-size:11px;opacity:.55}
 .doc-body blockquote{margin:14px 0;padding:10px 16px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;color:#78350f}
 .doc-body blockquote p{margin:4px 0}
 .doc-body hr{border:none;border-top:1px solid var(--border);margin:26px 0}
@@ -319,6 +347,18 @@ const SCRIPT = `
     if (prev) prev.classList.remove('active');
     if (a) a.classList.add('active');
   }
+
+  // ---------- 正文里的站内互链：切换到对应文档面板 ----------
+  panels.addEventListener('click', function (e) {
+    var a = e.target.closest('a.doc-link');
+    if (!a) return;
+    e.preventDefault();
+    var idx = parseInt(a.getAttribute('data-doc-jump'), 10);
+    if (isNaN(idx) || idx < 0 || idx >= DATA.length) return;
+    setActiveDoc(idx);
+    markActive(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 
   // 滚动高亮当前阅读标题
   var ticking = false;

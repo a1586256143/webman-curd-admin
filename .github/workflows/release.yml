@@ -45,7 +45,7 @@ jobs:
           echo "dist files: $N"
           test "$N" -gt 10
 
-      # 4. 关键文件存在性（安装器 + DDL + 路由 + 前端控制器）
+      # 4. 关键文件存在性（安装器 + DDL + 路由 + 前端控制器 + 文档随包）
       - name: Verify key files
         run: |
           test -f plugin/curd/install.sql
@@ -53,8 +53,10 @@ jobs:
           test -f plugin/curd/api/Install.php
           test -f plugin/curd/config/route.php
           test -f plugin/curd/app/controller/PageController.php
+          test -f INSTALL.md
+          test -f docs/index.html
 
-      # 5. 打 zip（排除 keys / install-business.sql / release-zip.sh）
+      # 5. 打 zip（含 docs/ 与 INSTALL.md；排除 keys / install-business.sql / _legacy）
       - name: Build zip
         run: ./scripts/release-zip.sh "${GITHUB_REF_NAME#v}"
 
