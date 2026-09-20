@@ -20,8 +20,9 @@ use plugin\curd\app\schema\SchemaNode;
  *   ① {{key.path}} 占位符 —— dataApi 里是数组时整串注入（推荐，数据驱动）；
  *   ② 直接传 PHP 数组 —— 适合静态演示数据，会原样进 JSON。
  *
- * 图表库为 echarts（前端按需注册 LineChart/Grid/MarkPoint/MarkLine/Canvas），
- * 不引入全量 echarts，新增本块不会显著增大产物。
+ * 图表库为 echarts（前端按需注册 LineChart/Grid/Tooltip/MarkPoint/MarkLine/Canvas），
+ * 不引入全量 echarts，新增本块不会显著增大产物。鼠标悬停走轴触发 tooltip，
+ * 有 unit 时数值自动带单位；seriesName 即 tooltip 里显示的系列名。
  */
 class LineChartStat extends SchemaNode
 {

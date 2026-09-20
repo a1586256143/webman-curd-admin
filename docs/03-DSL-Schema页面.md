@@ -109,7 +109,7 @@ php webman make:permission --name 概览看板 --slug dash-page --type 1 --path 
 | `alert` | `Alert` | `->title(str)` `->description(str)` `->type('success'\|'info'\|'warning'\|'error')` `->closable(bool)` `->showIcon(bool)` `->center(bool)` `->effect('light'\|'dark')` | 提示条 |
 | `statistic` | `Statistic` | `->title(str)` `->value($v)` `->prefix(str)` `->suffix(str)` `->precision(int)` `->groupSeparator(str)` `->valueStyle(array)` | 数值卡；value 整串 `{{}}` 且为数字时自动转 number |
 | `box` | `Box` | `->title(str)` `->value($v)` `->sub(str, $v=null)` `->subTitle(str)` `->subValue($v)` `->icon(str)` `->color(str)` `->tag(str)` `->height(int=108)` `->group(bool=false)` | **指标卡片**：图标 + 大数字 + 副标题 + 右上角周期标记，仪表盘顶部并排四个的经典形态。`icon` 取 EP 图标名（`View`/`Money`/`User`/`Tickets`…，见前端 `utils/icons`）；`color` 取 `blue`/`green`/`red`/`orange`/`purple`/`cyan`，同时决定图标底色与标记配色 |
-| `line-chart-stat` | `LineChartStat` | `->title(str)` `->subTitle(str)` `->data(array\|str)` `->categories(array\|str)` `->seriesName(str='业绩')` `->color(str='#36cfc9')` `->height(int=350)` `->smooth(bool=true)` `->showMax(bool=true)` `->showAverage(bool=true)` `->areaGradient(bool=true)` `->unit(str)` | **折线图统计卡**：卡片标题 + 子标题 + 渐变面积折线图（峰值气泡 + 平均值虚线）。`data` 走 echarts 按需注册（不引入全量），**取不到数据时显示「暂无数据」空态**而非空图 |
+| `line-chart-stat` | `LineChartStat` | `->title(str)` `->subTitle(str)` `->data(array\|str)` `->categories(array\|str)` `->seriesName(str='业绩')` `->color(str='#36cfc9')` `->height(int=350)` `->smooth(bool=true)` `->showMax(bool=true)` `->showAverage(bool=true)` `->areaGradient(bool=true)` `->unit(str)` | **折线图统计卡**：卡片标题 + 子标题 + 渐变面积折线图（峰值气泡 + 平均值虚线）。`data` 走 echarts 按需注册（不引入全量），**取不到数据时显示「暂无数据」空态**而非空图；鼠标悬停按**轴触发**给 tooltip（整列读数 + 虚线指示），`unit` 有值时读数自动带单位，`seriesName` 即 tooltip 里的系列名 |
 | `image` | `Image` | `->src(str)` `->fit('fill'\|'contain'\|'cover'\|'none'\|'scale-down')` `->alt(str)` `->lazy(bool)` `->previewSrcList(array)` `->previewTeleported(bool)` | 点击预览大图等 |
 | `copy-text` | `CopyText` | `->value(str)` `->label(str)` `->mono(bool=true)` `->mask(bool=false)` `->maskHead(int=4)` `->maskTail(int=4)` | **可复制文本**：等宽展示 + 一键复制按钮，用于 api_key / 密钥 / 回调地址等长串；`->mask(true)` 默认打码，配眼睛按钮切换明文 |
 | `text` | `Text` | `->value(str)`（也可 `new Text('内容')`） | 纯文本（渲染 span，非 EP 组件），说明文字用 |
@@ -202,8 +202,14 @@ $node->node($anyNode);                               // 挂载任意已构造好
 props 依旧走白名单）。复制这类交互因此可以纯前端实现，后端 block 只负责摆位置与传值。
 
 其中 `line-chart-stat` 还证明了**图表也能内建**：echarts 在节点组件内按需注册
-（`echarts/core` + LineChart/Grid/MarkPoint/MarkLine/Canvas，与 `views/dashboard` 共用同一份模块），
-所以加一个图表块不会引入全量 echarts（产物里 echarts 独立成 chunk，约 460 KB / gzip 155 KB）。
+（`echarts/core` + LineChart/Grid/**Tooltip**/MarkPoint/MarkLine/Canvas，与 `views/dashboard` 共用同一份模块），
+所以加一个图表块不会引入全量 echarts（产物里 echarts 独立成 chunk，约 480 KB / gzip 160 KB）。
+
+> ⚠️ **按需引入下，未注册的组件会被静默忽略**：`echarts.use([...])` 里少哪个，option 里写了
+> 对应配置也**不会报错、只是没效果**。典型就是 `line-chart-stat` 曾经漏注册 `TooltipComponent`
+> —— `tooltip` 配了但鼠标悬停毫无反应。加图表/新特性时记得同步 `echarts.use([...])`
+> （`TooltipComponent` 会连带装上 axisPointer，不用单独注册）。
+
 真正需要「图表联动、多图 k 线、下钻筛选」这类交互时，仍建议走 `.vue` 页面。
 
 ## 11. `.vue` 自定义页面（`app/custom/pages/`）—— 怎么用、怎么访问
