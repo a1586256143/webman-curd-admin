@@ -65,6 +65,7 @@
 | `.vue` 页面报「不支持导入模块 xxx」 | 运行时编译只放行 `vue` / `element-plus` / `@element-plus/icons-vue`；发请求改用 `inject('request')` |
 | `.vue` 页面 `<style lang="scss">` 报错 | 浏览器端无预处理器，只能用纯 CSS（`scoped` 也会降级为全局，class 加唯一前缀） |
 | 导出报「本次将导出 N 条，超过单次导出上限 M 条」 | `export_max_rows` 限制（默认 100000）。调大该键，或缩小筛选范围；前端把超限当**错误提示**而不是下载文件 |
+| `Filter::dateRange(...)->default(...)` 配了但搜索框是空的 | ①前端产物是旧的（默认值由前端写入搜索框，**必须重建部署前端**）；②`default` 写在 `$filter->between(...)` 之后又链了别的会改类型的调用，确认最终 `type` 是 `daterange`/`datetimerange`/`date`（其它类型原样透传，不报错）；③区间给了单个**具体日期**时两端同值（不是「该日期至今」），要「至今」用相对表达式（`'-7d'`）或显式 `[$start, 'today']`。核对接口返回：`GET /api/curd/config?route_path=/xxx` 里 `search[].default` 应是**已求值的具体日期** |
 
 ---
 
@@ -163,3 +164,18 @@ echo "alias composer='$(pwd)/scripts/composer.sh'" >> ~/.zshrc && source ~/.zshr
 - 命名空间 `plugin\curd\app\*`；配置读取 `config('plugin.curd.*')`；
 - 表 `curd_configs`（页面 DSL 配置）、`admin_users`、`admin_tokens`、`roles`、
   `admin_role_user`、`role_permission`、`casbin_rule`、`menus`。
+
+### `composer update` 会把我改好的配置覆盖掉吗？
+
+**不会。** 已装好的 `plugin/curd/**`（含 `config/*.php`、`config/keys/*.pem`）整个目录被跳过 ——
+`src/Install.php` 里是「目标已存在就 `echo ... 跳过拷贝` 然后 return」，一个字节都不写；
+宿主 `config/curd-admin.php` 也是「已存在即 return」。
+
+唯一的例外是宿主 `config/database.php`：如果它还是 webman 的**占位模板**
+（内容里有 `your_database` / `your_username`），会被备份成 `database.php.webman-db.bak`
+后用 env 驱动的模板替换。已经改成自定义配置的则不动。
+
+完整边界表见 [升级 · 部署 · 发布](08-升级与生产部署.md) §1.1。
+
+代价是硬币的另一面：**`composer update` 也不会把新版同步进 `plugin/curd`** ——
+升级要另外跑 `scripts/sync-plugin.sh`，确认版本看的是 `plugin/curd`，而不是 `vendor/`。

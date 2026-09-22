@@ -65,6 +65,48 @@ $grid->filter(function (Filter $filter) {
 });
 ```
 
+### 4.1 搜索项默认值 `->default()`
+
+给搜索项配默认值，**首屏加载就带上它**（搜索框已填好），点「重置」回到默认值而不是清空：
+
+```php
+$grid->filter(function (Filter $filter) {
+    // 日期区间：相对表达式在输出配置时按「当前时间」求值
+    $filter->dateRange('created_at', '创建时间')->default('-7d');            // 近 7 天（7 天前 ~ 今天）
+    $filter->dateRange('created_at', '创建时间')->default(['month', 'today']); // 本月 1 号 ~ 今天
+    $filter->dateRange('created_at', '创建时间')->default(['2026-01-01', '2026-01-31']); // 固定区间
+    $filter->between('updated_at', '更新时间')->datetime()->default(['-1d', 'now']);
+    // 其它类型：原样
+    $filter->select('status', '状态')->options(self::STATUS)->default(1);
+    $filter->singleDate('begin_time', '开始时间')->default('today');
+});
+```
+
+区间类（`daterange` / `datetimerange`）取值规则：
+
+| 写法 | 结果 |
+|---|---|
+| `['-7d', 'today']` | 两端各自求值 |
+| `['-3d', null]`（另一端给 `null` / `''`） | 缺失端补「现在」 |
+| `'-7d'`（单个**相对表达式**） | 起点 = 表达式，终点 = 现在 |
+| `'2026-01-01'`（单个**具体日期**） | 两端同值（就是那一天） |
+
+日期字符串支持相对写法（输出配置时按当前时间展开）：
+
+| 写法 | 含义 |
+|---|---|
+| `today` / `now` | 此刻 |
+| `yesterday` | 昨天 |
+| `week` / `month` / `year` | 本周一 / 本月 1 号 / 本年 1 月 1 号 |
+| `'-7d'` `'+3days'` `'-2weeks'` `'+1month'` `'-1year'` | 相对偏移（`±N` + `d/day(s)/w/week(s)/month(s)/year(s)`） |
+| `'2026-01-01'` / `'2026-01-01 08:00:00'` | 原样透传 |
+
+> - 前端协议字段是 `default`（`defaultValue` 为等价别名），由 `GenericCurd` 在挂载时写入 `searchForm`，
+>   所以**首次列表请求就带默认值**；`default` 只影响首屏与「重置」，用户改动后不会被覆盖。
+> - 配置里输出的是**求值后的具体日期**（页面每次加载重新计算），因此「近 7 天」永远跟着当天走。
+> - `->where(...)` 自定义条件同样支持 `->default('x')`：默认值会填进输入框并参与首次查询（闭包按有值执行）。
+> - 前端硬编码 config（不走 DSL）时，直接在 `search` 项上写 `default` / `defaultValue` 即可。
+
 ## 5. 表单 `grid()->form(callable)`（新增+编辑共用）
 
 ```php
