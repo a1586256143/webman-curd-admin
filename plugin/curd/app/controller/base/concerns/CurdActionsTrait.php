@@ -1,7 +1,7 @@
 <?php
 namespace plugin\curd\app\controller\base\concerns;
 
-use app\validation\Validator;
+use plugin\curd\app\validation\Validator as BundledValidator;
 use support\Request;
 
 /**
@@ -167,7 +167,10 @@ trait CurdActionsTrait
         if ($partial) {
             $rules = array_intersect_key($rules, $data);
         }
-        return Validator::validate($data, $rules);
+        // 校验器回落：宿主已提供 app\validation\Validator 则优先用宿主版（行为向后兼容），
+        // 否则用插件内置零依赖版，保证全新 webman 宿主也能直接 composer 安装使用。
+        $validatorClass = class_exists('app\\validation\\Validator') ? 'app\\validation\\Validator' : BundledValidator::class;
+        return $validatorClass::validate($data, $rules);
     }
 
     /**
