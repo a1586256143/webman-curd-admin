@@ -104,7 +104,7 @@ $defaults = [
     //   true          = 走 casbin 校验，obj 由路径推导（/api/admin/users → obj=admin act=users）
     // 新项目建议设 true：默认 admin 角色有 p,admin,*,* 不受影响，
     // 其余角色需在「角色管理」勾选对应权限后才可访问。
-    'admin_require_permission' => false,
+    'admin_require_permission' => true,
 
     // 登录提供方（可插拔）：实现 AuthProviderInterface 的类名。
     //   不设 = 内置 DefaultAuthProvider（admin_users 表 + password_verify 校验，原行为）。

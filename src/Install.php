@@ -190,7 +190,7 @@ return [
     'page_base' => '/app/curd',
 
     // /api/admin/* 是否强制 RBAC 校验：生产建议 true（默认 admin 角色不受影响）
-    'admin_require_permission' => false,
+    'admin_require_permission' => true,
 
     // 登录提供方（可插拔，实现 AuthProviderInterface）：不设=内置 admin_users 登录
     // 'auth_provider' => plugin\curd\app\auth\DefaultAuthProvider::class,
