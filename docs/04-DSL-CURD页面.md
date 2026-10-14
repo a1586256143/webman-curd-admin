@@ -48,6 +48,7 @@ class MROrdersController extends BaseAdminController
 | `->image(int $w, int $h)` / `->staticHost()` / `->open('_blank')` | 图片列 / 静态资源 host / 点击新窗口 |
 | `->href(...)` / `->href(callable)` | 单元格链接 |
 | `->switch()` | 行内开关 |
+| `column('config.api_url', '接口地址')` | **点式列**：根字段是 JSON 文本时自动解码取子键；`->map()/->datetime()` 等列方法全部可用（见 §5.2） |
 | `->remote($table, $valueKey='id', $labelKey='name')` | 关联表翻译（跨库由统一接口代替时自行 display） |
 | `->limit(int)`（截断）、`->hidden()`（默认隐藏可配置显示）、`->sortable()` | 其它 |
 | `->editable($type='input', $options)` | 单元格编辑 |
@@ -195,6 +196,64 @@ $grid->form(function (Form $form) {
 > 另外白名单语义下「编辑时不含 password」不能写 `$form->isEdit('password')`（那等于编辑只剩 password）。
 
 前端行为见 `GenericCurd/index.vue` 的 `resolveFieldForMode`（场景专属字段靠 `modeOnly`）/ `allFormFields`（白名单过滤 `sceneShow`）/ `sanitizeFormData`；后端见 `CurdActionsTrait` 的 `fieldWritableInMode / writableFields / filterWritableFields`。
+
+### 5.2 点式字段：读写 JSON 列里的子键（`config.api_url`）
+
+表单字段名带 `.` 时，按「根字段是 JSON 列」读写：**取数**解根字段 JSON 取子键，**保存**合并回根字段以 JSON 存库。典型场景是一张表上用一列 `config`（text/json）存一组配置，而不必拆几十个列。
+
+```php
+$grid->column('config.api_url', '接口地址');   // 列表列同样支持点式（根字段自动解码）
+
+$grid->form(function (Form $form) {
+    $form->text('name', '名称')->required();
+    $form->text('config.api_url', '接口地址')->required()->placeholder('https://api.example.com');
+    $form->text('config.api_token', '接口令牌');
+    $form->number('config.timeout', '超时(秒)')->min(1)->max(600);
+});
+```
+
+**点式写法对任意字段方法都成立**（`text` / `textarea` / `number` / `select` / `radio` / `switch` / `date` / `datetime` / `tags` / `remote` / `password` ……）——点式只改「prop 的名字」，与字段类型无关，各类型的取值/回显/校验规则完全保持原行为：
+
+```php
+$form->select('config.platform', '接入平台')->options([1 => '微信', 2 => '支付宝', 3 => '银联'])->default(2);
+$form->switch('config.enabled', '启用开关');                 // 布尔值入库
+$form->datetime('config.sync_at', '同步时间');               // 'Y-m-d H:i:s' 字符串入库
+$form->tags('config.scopes', '权限范围');                    // 数组入库（JSON 数组）
+```
+
+列方法同理：`$grid->column('config.platform', '接入平台')->map([...])`、`->datetime()`、`->switch()` 等全部可用。
+
+行为细则：
+
+| 环节 | 行为 |
+|---|---|
+| 列表 / 回显 | 后端把根字段（`config`）JSON 解码后，写字面键 `config.api_url` 的扁平值；前端 el-table 与表单都能按字面 key 取到 |
+| 新增 | 只提交了点式字段时，以「编辑读库现值 → 空数组」为基础值合并，未提交的子键原样保留 |
+| 编辑 | 同上：合并而非覆盖，**没出现在表单里的子键不会丢**；显式提交空串 = 真的写空值（清空语义） |
+| 校验 | 点式字段走 async-validator 的 `transform` 喂真实值，`required` 等规则正常生效 |
+| 导出 | 导出值按路径从行数据取，与列表展示一致 |
+
+- 前端提交的就是**字面键**（`formData['config.api_url']`，JS 对象键允许带点）；合并、解码全在后端（`CurdActionsTrait::mergeDotFields` / `CurdListTrait::expandDotColumns`）。
+- 根字段建议在表里建成 `text`（或 json）列；模型上有 `json`/`array` cast 时合并结果交回数组由 Eloquent 编码，否则后端 `json_encode(..., JSON_UNESCAPED_UNICODE)`。
+- 路径中的**数字段**（如 `config.list.0`）按数组下标处理，保证 JSON 输出是数组而非 `{"0":...}`；各字段类型的值按前端原样入库（`switch` 存布尔、`datetime` 存字符串、`select` 存选项 value）。
+- **回显范围**：grid 点式列 ∪ 表单点式字段（add/edit）∪ 动态配置（curd_configs）里的点式 prop —— 任一处声明过，编辑弹窗都能回显。
+- 搜索（`$filter`）**不**支持点式：JSON 列内的子键检索请用 `->where()` 自定义闭包。
+
+### 5.3 JSON 组件：`$form->json()` 键值对编辑器
+
+新增 `json` 表单组件：用户自由增删键值对，保存时生成 JSON 字符串存入数据库（列类型 text/json）。
+
+```php
+$grid->form(function (Form $form) {
+    $form->text('name', '名称')->required();
+    $form->json('extra', '扩展配置')->help('键值对形式保存到 extra 列（JSON），值按字符串存储');
+});
+```
+
+- 前端是行式编辑器（键 / 值 / 删除 + 「+ 添加一项」），空键行不提交；**空结果提交 `'{}'`**（显式清空，区别于「不提交该字段」）。
+- 编辑回显：字符串值 `JSON.parse` 成行；解析失败时保留原文作为单行值（不丢数据）。
+- 与点式字段同表单互不干扰：JSON 组件提交的是**根字段**（`extra`），点式字段提交的是**字面键**（`config.api_url`），后端先合并点式再走各自落库逻辑。
+- 值一律按字符串存储；需要数字/布尔请在业务端消费时转换（或改用点式字段 + `number`）。
 
 ## 6. 自定义操作 Action（行级/批量/全局/弹窗）
 

@@ -12,6 +12,8 @@ namespace plugin\curd\app\dsl;
  *       $form->remote('qid', '渠道', 'a_channels', 'id', 'title');
  *       $form->switch('test_mode', '测试模式');
  *       $form->textarea('desc', '描述')->rows(4);
+ *       $form->text('config.api_url', '接口地址');   // 点式字段：读写 config 列(JSON)里的 api_url 键
+ *       $form->json('extra', '扩展配置');            // JSON 键值编辑器：整列序列化为 JSON 存储
  *   });
  */
 class Form extends BaseDsl
@@ -447,6 +449,26 @@ class Form extends BaseDsl
             'labelKey' => $labelKey,
             'filterable' => true,
         ], $options));
+    }
+
+    /**
+     * JSON 键值对编辑器（前端渲染「键 = 值」可增删行，提交时序列化为 JSON 字符串入库）
+     *
+     *   $form->json('config', '配置');                 // 整列按 JSON 对象存储
+     *   $form->json('config', '配置')->required();
+     *   $form->json('extra', '扩展配置')->help('自由增删键值对');
+     *
+     * 与点式字段（$form->text('config.api_url')）如何选：
+     *   - json 组件：键结构不固定/由用户自由扩展，整列交给编辑器维护
+     *   - 点式字段：把 JSON 里的固定几个键提升为独立表单控件（还能各自 required / 联动）
+     *   - 两者可用于同一列：json 管基础键值，点式字段覆盖固定键（提交时合并，点式优先）
+     *
+     * 存储形态：JSON 对象字符串，如 {"api_url":"https://...","timeout":"30"}
+     * 值一律按字符串存储；需要数字/布尔的业务侧自行转换。
+     */
+    public function json(string $prop, string $label, array $options = []): Field
+    {
+        return $this->add('json', $prop, $label, $options);
     }
 
     /**

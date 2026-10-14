@@ -236,6 +236,8 @@ trait CurdListTrait
         // 兜底清理并在最终输出前转换为数组，避免向前端暴露模型内部属性。
         $list = $this->applyRowCleanup($list);
         $list = $this->rowsToArray($list);
+        // 点式列（prop 形如 config.api_url）：根字段 JSON 字符串解码 + 字面 key 扁平值
+        $list = $this->expandDotColumns($list);
         $payload['list'] = $list;
 
         return json(['code' => 200, 'msg' => 'success', 'data' => $payload]);
@@ -268,6 +270,130 @@ trait CurdListTrait
             }
         }
         return $result;
+    }
+
+    /**
+     * 点式列数据展开（prop 形如 config.api_url 时）：
+     *   - 根字段（config）是 JSON 字符串 → 解码为关联数组放进行数据。
+     *     element-plus 表格单元格取值走 lodash get(row, 'config.api_url')，需要嵌套对象才能取到
+     *   - 同时写一份字面 key（'config.api_url' => 值）——GenericCurd 的单元格渲染读 row[col.prop]
+     * 非 JSON 字符串 / 根字段缺失 → 保持原样；没有任何点式 prop → 原样返回（零开销）。
+     *
+     * 编辑回显也受益于此：前端 Object.assign(formData, row) 直接拿到字面 key，
+     * 无需额外请求详情接口。因此展开范围 = grid 点式列 ∪ 表单点式字段（回显需要），
+     * 动态 CURD（无 grid）再叠加 curd_configs 落库配置里的点式列/字段。
+     */
+    protected function expandDotColumns(array $rows): array
+    {
+        if (empty($rows)) {
+            return $rows;
+        }
+        $dotProps = $this->dotColumnProps();
+        if (empty($dotProps)) {
+            return $rows;
+        }
+
+        // 按根字段分组：同一根只解码一次
+        $roots = [];
+        foreach ($dotProps as $prop) {
+            $roots[explode('.', $prop)[0]] = true;
+        }
+
+        foreach ($rows as $i => $row) {
+            foreach (array_keys($roots) as $root) {
+                if (!array_key_exists($root, $row) || !is_string($row[$root]) || $row[$root] === '') {
+                    continue;
+                }
+                $decoded = json_decode($row[$root], true);
+                if (is_array($decoded)) {
+                    $row[$root] = $decoded;
+                }
+            }
+            foreach ($dotProps as $prop) {
+                $row[$prop] = $this->rowPathValue($row, $prop);
+            }
+            $rows[$i] = $row;
+        }
+        return $rows;
+    }
+
+    /**
+     * 需要展开的点式 prop 清单（去重）：
+     *   - Grid DSL：点式列（展示）+ 表单点式字段（编辑回显）
+     *   - 动态 CURD（DynamicCurdController）：curd_configs 落库配置里的点式列/字段
+     */
+    protected function dotColumnProps(): array
+    {
+        $dotProps = [];
+        $grid = $this->resolveGrid();
+        if ($grid) {
+            foreach ($grid->columns() as $col) {
+                $prop = (string)($col['prop'] ?? '');
+                if (str_contains($prop, '.')) {
+                    $dotProps[$prop] = true;
+                }
+            }
+            foreach (array_merge($grid->formFields(), $grid->addFields(), $grid->editFields()) as $field) {
+                $prop = (string)($field['prop'] ?? '');
+                if (str_contains($prop, '.')) {
+                    $dotProps[$prop] = true;
+                }
+            }
+        }
+        // 动态 CURD 落库配置（仅 DynamicCurdController 实现 dynamicDotProps）
+        if (method_exists($this, 'dynamicDotProps')) {
+            foreach ((array)$this->dynamicDotProps() as $prop) {
+                if (is_string($prop) && str_contains($prop, '.')) {
+                    $dotProps[$prop] = true;
+                }
+            }
+        }
+        return array_keys($dotProps);
+    }
+
+    /**
+     * 从行数组按点式路径取值（config.api_url）；任一段缺失返回 null
+     */
+    protected function rowPathValue(array $row, string $path)
+    {
+        $cursor = $row;
+        foreach (explode('.', $path) as $segment) {
+            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
+                return null;
+            }
+            $cursor = $cursor[$segment];
+        }
+        return $cursor;
+    }
+
+    /**
+     * 按点式路径取行值（config.api_url）：根字段为 JSON 字符串时先解码
+     * 兼容 Eloquent Model / 数组行；任一段缺失返回 null
+     */
+    protected function rowValueByPath($row, string $path)
+    {
+        $segments = explode('.', $path);
+        $root = array_shift($segments);
+        if (is_object($row) && method_exists($row, 'getAttribute')) {
+            $value = $row->getAttribute($root);
+        } elseif (is_array($row)) {
+            $value = $row[$root] ?? null;
+        } else {
+            return null;
+        }
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+        foreach ($segments as $segment) {
+            if (!is_array($value) || !array_key_exists($segment, $value)) {
+                return null;
+            }
+            $value = $value[$segment];
+        }
+        return $value;
     }
 
     /**
@@ -378,6 +504,10 @@ trait CurdListTrait
 
     protected function rowValue($row, string $prop)
     {
+        // 点式字段（config.api_url）：根字段 JSON 字符串先解码再按路径取
+        if (str_contains($prop, '.')) {
+            return $this->rowValueByPath($row, $prop);
+        }
         if (is_object($row) && method_exists($row, 'getAttribute')) {
             return $row->getAttribute($prop);
         }

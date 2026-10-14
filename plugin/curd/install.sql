@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS `menus` (
 CREATE TABLE IF NOT EXISTS `my_test` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL DEFAULT '' COMMENT '名称',
+  `config` text COMMENT '接口配置（JSON：api_url/api_token/timeout/platform/enabled/sync_at；表单用点式字段 config.xxx 读写——text/select/switch/datetime 等任意字段方法均可，列表用点式列展示）',
+  `extra` text COMMENT '扩展配置（JSON 键值对；表单用 $form->json() 键值编辑器维护）',
   `remark` varchar(255) NOT NULL DEFAULT '' COMMENT '备注',
   `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态 1启用 0禁用',
   `created_at` datetime DEFAULT NULL,

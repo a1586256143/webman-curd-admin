@@ -452,6 +452,21 @@ class Install
                     $now = date('Y-m-d H:i:s');
                     $db->table('my_test')->insert([
                         'name'       => 'webman-curd-admin 安装成功',
+                        // 点式字段演示：config 列存 JSON，表单用 config.api_url 等点式字段读写
+                        // （text/select/switch/datetime 等任意字段方法均可）
+                        'config'     => json_encode([
+                            'api_url'   => 'https://api.example.com',
+                            'api_token' => '',
+                            'timeout'   => 30,
+                            'platform'  => 2,
+                            'enabled'   => true,
+                            'sync_at'   => $now,
+                        ], JSON_UNESCAPED_UNICODE),
+                        // JSON 键值编辑器演示：extra 列存 JSON，表单用 $form->json() 维护
+                        'extra'      => json_encode([
+                            'env'   => 'dev',
+                            'remark' => 'JSON 键值编辑器演示，可自由增删键值对',
+                        ], JSON_UNESCAPED_UNICODE),
                         'remark'     => '安装向导自动写入的示例数据，可在后台「测试管理」中增删改查',
                         'status'     => 1,
                         'created_at' => $now,
@@ -503,25 +518,48 @@ class Install
                 $hasConfig = $db->table('curd_configs')->where('route_path', '/my-test')->count() > 0;
                 if (!$hasConfig) {
                     $now = date('Y-m-d H:i:s');
+                    // 与 examples/MyTestController.php 的 Grid DSL 等价（点式列 + 点式字段 + JSON 组件）。
+                    // 格式与 Grid DSL 的 toArray 输出对齐：options 用 [{value,label}] 数组，
+                    // 字典列用 map（值→文案）+ tagType（值→颜色），前端直接消费。
                     $configJson = json_encode([
                         'columns' => [
-                            ['prop' => 'id',         'label' => 'ID',         'width' => 80,  'align' => 'center'],
-                            ['prop' => 'name',       'label' => '名称'],
-                            ['prop' => 'remark',     'label' => '备注'],
-                            ['prop' => 'status',     'label' => '状态',     'dict'  => ['1' => '启用', '0' => '禁用']],
-                            ['prop' => 'created_at', 'label' => '创建时间', 'width' => 170],
-                            ['prop' => 'updated_at', 'label' => '更新时间', 'width' => 170],
+                            ['prop' => 'id',             'label' => 'ID',         'width' => 80,  'align' => 'center'],
+                            ['prop' => 'name',           'label' => '名称'],
+                            ['prop' => 'config.api_url', 'label' => '接口地址'],
+                            ['prop' => 'config.platform', 'label' => '接入平台', 'width' => 100,
+                             'map' => ['1' => '微信', '2' => '支付宝', '3' => '银联']],
+                            ['prop' => 'status',         'label' => '状态', 'type' => 'tag', 'width' => 90,
+                             'map' => ['1' => '启用', '0' => '禁用'],
+                             'tagType' => ['1' => 'success', '0' => 'danger']],
+                            ['prop' => 'created_at',     'label' => '创建时间',   'width' => 170, 'type' => 'datetime'],
+                            ['prop' => 'updated_at',     'label' => '更新时间',   'width' => 170, 'type' => 'datetime'],
                         ],
                         'search' => [
                             ['type' => 'input',  'prop' => 'name',   'label' => '名称'],
-                            ['type' => 'select', 'prop' => 'status', 'label' => '状态', 'options' => ['1' => '启用', '0' => '禁用']],
+                            ['type' => 'select', 'prop' => 'status', 'label' => '状态',
+                             'options' => [['value' => 1, 'label' => '启用'], ['value' => 0, 'label' => '禁用']]],
                         ],
                         'formFields' => [
-                            ['type' => 'input',    'prop' => 'name',   'label' => '名称', 'placeholder' => '请输入名称'],
-                            ['type' => 'textarea', 'prop' => 'remark', 'label' => '备注', 'placeholder' => '请输入备注'],
-                            ['type' => 'select',   'prop' => 'status', 'label' => '状态', 'options' => ['1' => '启用', '0' => '禁用']],
+                            ['type' => 'input',    'prop' => 'name',             'label' => '名称',     'placeholder' => '请输入名称', 'required' => true],
+                            ['type' => 'input',    'prop' => 'config.api_url',   'label' => '接口地址', 'placeholder' => 'https://api.example.com', 'required' => true],
+                            ['type' => 'input',    'prop' => 'config.api_token', 'label' => '接口令牌'],
+                            ['type' => 'number',   'prop' => 'config.timeout',   'label' => '超时(秒)', 'min' => 1, 'max' => 600],
+                            // 点式字段同样支持 select/switch/datetime 等任意类型
+                            ['type' => 'select',   'prop' => 'config.platform',  'label' => '接入平台',
+                             'options' => [['value' => 1, 'label' => '微信'], ['value' => 2, 'label' => '支付宝'], ['value' => 3, 'label' => '银联']],
+                             'defaultValue' => 2],
+                            ['type' => 'switch',   'prop' => 'config.enabled',   'label' => '启用开关'],
+                            ['type' => 'datetime', 'prop' => 'config.sync_at',   'label' => '同步时间'],
+                            ['type' => 'json',     'prop' => 'extra',            'label' => '扩展配置', 'help' => '键值对形式保存到 extra 列（JSON），值按字符串存储'],
+                            ['type' => 'textarea', 'prop' => 'remark',           'label' => '备注',     'placeholder' => '请输入备注'],
+                            ['type' => 'radio',    'prop' => 'status',           'label' => '状态',
+                             'options' => [['value' => 1, 'label' => '启用'], ['value' => 0, 'label' => '禁用']],
+                             'defaultValue' => 1],
                         ],
-                        'rules' => ['name' => 'required|max:100'],
+                        'rules' => [
+                            'name'            => 'required|max:100',
+                            'config.api_url'  => 'required',
+                        ],
                     ], JSON_UNESCAPED_UNICODE);
                     $db->table('curd_configs')->insert([
                         'table_name' => 'my_test',

@@ -40,8 +40,7 @@
 composer create-project workerman/webman my-admin && cd my-admin
 
 # ② 引包（换成本包的仓库地址 / 本地路径）
-composer config repositories.curd vcs "https://gitee.com/colingit/webman-curd-admin.git"
-composer require amcolin/webman-curd-admin:^1.0 --no-audit
+composer require amcolin/webman-curd-admin:dev-main --no-audit
 
 # ③ 启动（先启动、再装库 —— Web 向导需要服务在线；端口默认 8787）
 php start.php start

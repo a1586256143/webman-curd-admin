@@ -61,4 +61,34 @@ class DynamicCurdController extends BaseCurdController
         }
         return [];
     }
+
+    /**
+     * 落库配置里的点式 prop（列 + 表单字段，形如 config.api_url）
+     * 供列表接口展开用：根字段解 JSON + 字面 key 扁平值（见 CurdListTrait::expandDotColumns）
+     */
+    public function dynamicDotProps(): array
+    {
+        $props = [];
+        try {
+            $row = CurdConfigs::firstByTableName($this->table());
+            if ($row && !empty($row->config)) {
+                $cfg = json_decode($row->config, true);
+                $items = array_merge(
+                    (array)($cfg['columns'] ?? []),
+                    (array)($cfg['formFields'] ?? []),
+                    (array)($cfg['addFields'] ?? []),
+                    (array)($cfg['editFields'] ?? [])
+                );
+                foreach ($items as $item) {
+                    $prop = (string)($item['prop'] ?? '');
+                    if (str_contains($prop, '.')) {
+                        $props[$prop] = true;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // 配置缺失：返回空
+        }
+        return array_keys($props);
+    }
 }

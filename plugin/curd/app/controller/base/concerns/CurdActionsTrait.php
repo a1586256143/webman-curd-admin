@@ -340,6 +340,9 @@ trait CurdActionsTrait
             return json(['code' => 400, 'msg' => json_encode(['errors' => $errors], JSON_UNESCAPED_UNICODE)]);
         }
 
+        // 点式表单字段（config.api_url）合并回 JSON 列（钩子之前，钩子看到的是合并后的数据）
+        $data = $this->mergeDotFields($data);
+
         // 自动填充创建人（表含 created_uid 字段时写入当前登录用户 ID）
         $this->applyCreatedUid($data, $request);
 
@@ -387,6 +390,9 @@ trait CurdActionsTrait
             return json(['code' => 400, 'msg' => json_encode(['errors' => $errors], JSON_UNESCAPED_UNICODE)]);
         }
 
+        // 点式表单字段（config.api_url）合并回 JSON 列（读库保住没在表单里出现的键）
+        $data = $this->mergeDotFields($data, $id);
+
         // 事件：更新前
         $this->updateBefore($id, $data);
 
@@ -408,6 +414,123 @@ trait CurdActionsTrait
         $this->updateAfter($id, $data);
 
         return json(['code' => 200, 'msg' => 'success']);
+    }
+
+    /**
+     * 点式表单字段（prop 含 .，如 config.api_url）合并回 JSON 列
+     *
+     * 前端按字面 key 提交（'config.api_url' => 'https://...'），这里按根字段分组合并：
+     *   - 基础值优先级：请求里显式提交的根字段（如 json 组件序列化结果）> 编辑场景读库现值
+     *     > 空数组。编辑读库是为了保住没在表单里出现的键（只改表单里的那几个）
+     *   - 合并后写回根字段：模型声明了 json/array/object cast → 交回数组由 Eloquent 编码；
+     *     否则 json_encode 成字符串（JSON_UNESCAPED_UNICODE，中文不转义）
+     *   - 字面键从数据中移除——不会真的去写一个叫 "config.api_url" 的列
+     *
+     * 调用时机：validateData 之后、createdBefore/updateBefore 之前（钩子看到合并后的数据）。
+     * 没有点式字段时原样返回，零开销。
+     *
+     * @param array       $data 提交数据（会被修改）
+     * @param int|string|null $id 编辑场景的行 ID（新增传 null）
+     */
+    protected function mergeDotFields(array $data, $id = null): array
+    {
+        $dotKeys = [];
+        foreach (array_keys($data) as $key) {
+            if (str_contains($key, '.')) {
+                $dotKeys[] = $key;
+            }
+        }
+        if (empty($dotKeys)) {
+            return $data;
+        }
+
+        $casts = $this->modelCasts();
+        $roots = [];
+        foreach ($dotKeys as $key) {
+            $roots[explode('.', $key)[0]] = true;
+        }
+
+        foreach (array_keys($roots) as $root) {
+            $merged = [];
+            if (array_key_exists($root, $data)) {
+                // 请求显式带了根字段（json 组件）：以它为基础，点式字段再覆盖固定键
+                $raw = $data[$root];
+                if (is_array($raw)) {
+                    $merged = $raw;
+                } elseif (is_string($raw) && $raw !== '') {
+                    $decoded = json_decode($raw, true);
+                    $merged = is_array($decoded) ? $decoded : [];
+                }
+            } elseif ($id !== null && $id !== '') {
+                // 编辑：读库中现值，保住表单里没有的键
+                try {
+                    $existing = $this->query()->where('id', $id)->value($root);
+                } catch (\Throwable $e) {
+                    $existing = null; // 列不存在等：按空对象处理，不影响其余字段
+                }
+                if (is_string($existing) && $existing !== '') {
+                    $decoded = json_decode($existing, true);
+                    $merged = is_array($decoded) ? $decoded : [];
+                }
+            }
+
+            foreach ($dotKeys as $key) {
+                if (explode('.', $key)[0] !== $root) {
+                    continue;
+                }
+                $segments = explode('.', $key);
+                array_shift($segments);
+                $this->setPathValue($merged, $segments, $data[$key]);
+                unset($data[$key]);
+            }
+
+            // cast 了 json/array/object 的列交回数组（Eloquent 会编码），其余直接编码成字符串
+            $cast = $casts[$root] ?? null;
+            $data[$root] = in_array($cast, ['json', 'array', 'object'], true)
+                ? $merged
+                : json_encode($merged, JSON_UNESCAPED_UNICODE);
+        }
+
+        return $data;
+    }
+
+    /**
+     * 按路径段写入嵌套数组（数字段落下标转 int，保证 JSON 输出是数组而不是 {"0":...}）
+     *
+     * @param array $target   目标数组（引用传值）
+     * @param array $segments 路径段，如 ['api', 'urls', '0']
+     */
+    protected function setPathValue(array &$target, array $segments, $value): void
+    {
+        $cursor = &$target;
+        $last = count($segments) - 1;
+        foreach ($segments as $i => $segment) {
+            $segment = ctype_digit($segment) ? (int)$segment : $segment;
+            if ($i === $last) {
+                $cursor[$segment] = $value;
+                return;
+            }
+            if (!isset($cursor[$segment]) || !is_array($cursor[$segment])) {
+                $cursor[$segment] = [];
+            }
+            $cursor = &$cursor[$segment];
+        }
+    }
+
+    /**
+     * 模型 cast 配置（无模型类 / 模型无 getCasts 时返回空数组）
+     */
+    protected function modelCasts(): array
+    {
+        $model = $this->resolvedModel();
+        if ($model === '' || !class_exists($model)) {
+            return [];
+        }
+        $instance = new $model();
+        if (method_exists($instance, 'getCasts')) {
+            return (array)$instance->getCasts();
+        }
+        return [];
     }
 
     /**
@@ -436,14 +559,7 @@ trait CurdActionsTrait
         }
 
         // 读取模型 cast 配置：已声明 cast 的字段交给 Eloquent 处理
-        $casts = [];
-        $model = $this->resolvedModel();
-        if ($model !== '' && class_exists($model)) {
-            $instance = new $model();
-            if (method_exists($instance, 'getCasts')) {
-                $casts = $instance->getCasts();
-            }
-        }
+        $casts = $this->modelCasts();
 
         foreach ($data as $key => $value) {
             if (!is_array($value) || isset($casts[$key])) {
@@ -858,7 +974,8 @@ trait CurdActionsTrait
             return $this->stringifyExportValue($val);
         }
 
-        $raw = $row->getAttribute($prop);
+        // 点式列（config.api_url）：根字段 JSON 字符串先解码再按路径取
+        $raw = str_contains($prop, '.') ? $this->rowValueByPath($row, $prop) : $row->getAttribute($prop);
         if ($raw === null || $raw === '') return '';
 
         // 2) map 字典（col.map 是 stdClass，键为 (string)value，值为 label）
@@ -867,7 +984,6 @@ trait CurdActionsTrait
             $key = (string)$raw;
             if (isset($map->$key)) return (string)$map->$key;
         }
-
         // 3) date/datetime 格式化（与前端 formatDate/formatDateOnly 输出保持一致）
         $type = $col['type'] ?? null;
         if ($type === 'datetime') {
