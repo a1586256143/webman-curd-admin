@@ -58,7 +58,9 @@ trait CurdQueryTrait
         static $cache = [];
         $table = $this->table();
         if (!isset($cache[$table])) {
-            $result = $this->db()->select("SHOW COLUMNS FROM `{$table}`");
+            // 必须读模型声明的连接（modelConnection 在无模型时回落默认业务库），
+            // 不能用 db()（恒等于 businessDb），否则模型声明了其它连接时 SHOW COLUMNS 会查错库
+            $result = Db::connection($this->modelConnection())->select("SHOW COLUMNS FROM `{$table}`");
             $cache[$table] = array_map(fn($r) => $r->Field, $result);
         }
         return $cache[$table];
