@@ -170,9 +170,8 @@ echo "alias composer='$(pwd)/scripts/composer.sh'" >> ~/.zshrc && source ~/.zshr
 
 ### `composer update` 会把我改好的配置覆盖掉吗？
 
-**不会。** 已装好的 `plugin/curd/**`（含 `config/*.php`、`config/keys/*.pem`）整个目录被跳过 ——
-`src/Install.php` 里是「目标已存在就 `echo ... 跳过拷贝` 然后 return」，一个字节都不写；
-宿主 `config/curd-admin.php` 也是「已存在即 return」。
+**会覆盖代码，但保留密钥。** 自 2026-10-15 起，`plugin/curd` 已存在时 `composer update` 会**整目录删除后从包内重拷（覆盖同步）**，宿主在 `plugin/curd` 下的本地改动会被抹掉；唯一保留的是 `plugin/curd/config/keys/*.pem` 加密密钥（删目录时保留、拷包时排除）。
+宿主 `config/curd-admin.php` 仍是「已存在即 return」不覆盖；示例控制器 / 模型已存在也跳过。
 
 唯一的例外是宿主 `config/database.php`：如果它还是 webman 的**占位模板**
 （内容里有 `your_database` / `your_username`），会被备份成 `database.php.webman-db.bak`

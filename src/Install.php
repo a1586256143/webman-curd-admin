@@ -6,18 +6,21 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
 /**
- * webman 2.x 官方应用插件安装器（由 workerman/webman-framework 的
- * support\Plugin::install($event) 在 composer 安装/更新本包时自动调用）。
+ * webman 2.x 应用插件安装器（由 workerman/webman-framework 的
+ * support\Plugin 在 composer 安装/更新/卸载本包时自动调用）。
  *
- * 机制（webman 官方应用插件分发）：
- *   framework 的 support\Plugin::install 读取本次被安装包的 PSR-4，定位到
- *   {命名空间}Install::WEBMAN_PLUGIN 常量，再调用本类的 install()——
- *   把本包内的 plugin/curd 同步到宿主 {项目根}/plugin/curd。
+ * 机制：
+ *   framework 的 support\Plugin::install/update/uninstall 仅按 PSR-4 找到本类，
+ *   再分别调用 Amcolin\WebmanCurdAdmin\Install::install()/update()/uninstall()。
+ *   **目录的拷贝与删除完全由本类负责（framework 本身不读写 plugin/curd）**。
  *   因此宿主只需 `composer require amcolin/webman-curd-admin`，无需任何手动拷贝。
  *
- * 幂等安全策略：
- *   - 目标 plugin/curd 已存在（本地开发中的插件）→ 跳过，绝不覆盖本地改动；
- *   - 仅当目标不存在时整体拷贝，排除 .git/node_modules 等构建目录。
+ * 覆盖策略（2026-10-15 调整）：
+ *   - 安装/更新时若宿主已存在 plugin/curd → 整目录删除后重新拷贝（= 覆盖同步，
+ *     同时清除包内已移除的陈旧文件）；仅保留宿主自定义的 config/keys/*.pem
+ *     （加密密钥对，覆盖会静默破坏接口加解密，故不碰）。
+ *   - 卸载（composer remove）时 → 删除宿主 plugin/curd 目录。
+ *   - 拷贝排除 .git/node_modules 等构建目录；密钥目录 config/keys 安装时保留宿主版。
  */
 class Install
 {
@@ -32,7 +35,17 @@ class Install
     protected static array $exclude = ['.git', '.idea', '.vscode', 'node_modules', '__pycache__'];
 
     /**
-     * 安装钩子：由 framework 的 support\Plugin 在 composer 安装/更新时调用。
+     * 覆盖安装（宿主已存在 plugin/curd）时**保留宿主侧**的目录（相对插件根），
+     * 既不删除也不被包内版本覆盖。当前仅 config/keys（加密 RSA 密钥对）。
+     */
+    protected static array $keepOnOverwrite = ['config/keys'];
+
+    /**
+     * 安装/更新钩子：由 framework 的 support\Plugin 在 composer 安装/更新时调用。
+     * 负责把本包内 plugin/curd 同步到宿主 {项目根}/plugin/curd：
+     *   - 宿主无 plugin/curd → 首次整体拷贝；
+     *   - 宿主已有 plugin/curd → 整目录删除后重新拷贝（覆盖同步），
+     *     仅保留宿主 config/keys/*.pem（加密密钥不被覆盖）。
      * @param bool $isFirst 是否首次安装（framework 传入，本类忽略，行为一致）
      */
     public static function install($isFirst = true): void
@@ -44,15 +57,22 @@ class Install
             self::ensureDatabaseConfig($root);
             return;
         }
+        $hostHasKeys = is_file($dst . '/config/keys/api_rsa_pub.pem')
+            || is_file($dst . '/config/keys/api_rsa_priv.pem');
         if (is_dir($dst)) {
-            echo "  [webman-curd-admin] plugin/curd 已存在，跳过拷贝（保留本地版本）\n";
+            // 覆盖同步：整目录删除后重拷（保留宿主密钥），确保清除包内已删的陈旧文件
+            self::removeDir($dst, $hostHasKeys ? self::$keepOnOverwrite : []);
+            echo "  [webman-curd-admin] 检测到已有 plugin/curd，已整目录覆盖更新\n";
         } else {
             if (!is_dir(dirname($dst))) {
                 mkdir(dirname($dst), 0755, true);
             }
-            self::copyDir($src, $dst);
             echo "  [webman-curd-admin] 已安装应用插件: plugin/curd\n";
         }
+        // 宿主已有密钥 → 拷贝时排除 config/keys（保留宿主版）；否则连密钥一起拷入
+        $copyExclude = $hostHasKeys ? array_merge(self::$exclude, self::$keepOnOverwrite) : self::$exclude;
+        self::copyDir($src, $dst, $copyExclude);
+        echo "  [webman-curd-admin] 已同步应用插件: plugin/curd\n";
         self::ensureExamples($root);
         self::ensureCurdConfig($root);
         self::ensureDatabaseConfig($root);
@@ -60,7 +80,7 @@ class Install
 
     /**
      * 更新钩子：framework 优先调 update()，缺失时退回 install(false)。
-     * 这里不重复实现，统一走 install 的幂等逻辑。
+     * 统一走 install 的覆盖同步逻辑（已存在即整目录覆盖）。
      */
     public static function update(): void
     {
@@ -68,12 +88,22 @@ class Install
     }
 
     /**
-     * 卸载钩子：composer 卸载时无精确目标目录上下文，且删除宿主 plugin/
-     * 下目录有风险，故不自动删除；请手动删除 plugin/curd 后 reload 生效。
+     * 卸载钩子：composer remove 时由 framework 的 support\Plugin::uninstall 调用。
+     * 删除宿主 plugin/curd 目录（接口加解密/后台随之失效，宿主需自行 restart）。
+     *
+     * 注：本方法只删插件运行时目录；config/curd-admin.php、示例控制器/模型等宿主侧
+     * 产物不在此删除（避免误删用户可能已改写的业务代码），需用户按需手动清理。
      */
     public static function uninstall(): void
     {
-        // no-op（见方法注释）
+        $root = self::projectRoot();
+        $dst = $root . '/plugin/curd';
+        if (is_dir($dst)) {
+            self::removeDir($dst);
+            echo "  [webman-curd-admin] 已卸载应用插件: 删除 plugin/curd\n";
+        } else {
+            echo "  [webman-curd-admin] 未检测到 plugin/curd，无需卸载\n";
+        }
     }
 
     /**
@@ -336,17 +366,18 @@ PHP;
     }
 
     /**
-     * 递归拷贝目录（排除 self::$exclude 列表）
+     * 递归拷贝目录（排除 $exclude 列表；默认 self::$exclude）
      */
-    protected static function copyDir(string $src, string $dst): void
+    protected static function copyDir(string $src, string $dst, array $exclude = null): void
     {
+        $exclude ??= self::$exclude;
         $it = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
         );
         foreach ($it as $item) {
             $rel = substr($item->getPathname(), strlen($src) + 1);
-            foreach (self::$exclude as $ex) {
+            foreach ($exclude as $ex) {
                 if ($rel === $ex || str_starts_with($rel, $ex . DIRECTORY_SEPARATOR)) {
                     continue 2;
                 }
@@ -363,5 +394,49 @@ PHP;
             }
             copy($item->getPathname(), $file);
         }
+    }
+
+    /**
+     * 递归删除目录；命中 $keep 前缀的路径保留（用于覆盖安装时保留宿主 config/keys）。
+     * 符号链接只删链接本身，不追入目标；删除失败时静默忽略（保留项导致的非空目录）。
+     */
+    protected static function removeDir(string $dir, array $keep = []): void
+    {
+        if (is_link($dir)) {
+            @unlink($dir);
+            return;
+        }
+        if (!is_dir($dir)) {
+            return;
+        }
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($it as $item) {
+            $rel = substr($item->getRealPath(), strlen($dir) + 1);
+            if (self::relExcluded($rel, $keep)) {
+                continue; // 保留项不删
+            }
+            if ($item->isDir()) {
+                @rmdir($item->getRealPath());
+            } else {
+                @unlink($item->getRealPath());
+            }
+        }
+        @rmdir($dir);
+    }
+
+    /**
+     * 相对路径是否命中排除/保留前缀（$rel 等于前缀，或以 前缀/ 开头）
+     */
+    protected static function relExcluded(string $rel, array $exclude): bool
+    {
+        foreach ($exclude as $ex) {
+            if ($rel === $ex || str_starts_with($rel, $ex . DIRECTORY_SEPARATOR)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -58,9 +58,9 @@ composer require amcolin/webman-curd-admin
 > 不想每次手打 `--no-audit`：用本包自带 wrapper `scripts/composer.sh`，或
 > `alias composer='<包目录>/scripts/composer.sh'`。
 
-**安装器自动完成**（`src/Install.php`，幂等）：
+**安装器自动完成**（`src/Install.php`；`plugin/curd` 覆盖同步，宿主配置 / 示例幂等）：
 
-1. 拷贝 `plugin/curd` 到宿主（**已存在则跳过**，保护本地开发版）；
+1. 拷贝 `plugin/curd` 到宿主（**已存在则整目录覆盖重拷**，仅保留 `config/keys/*.pem` 密钥）；
 2. 示例落位到宿主根：`app/controller/admin/api/MyTestController.php` + `app/model/MyTest.php`；
 3. 生成集中配置 `config/curd-admin.php`（已存在不覆盖）；
 4. `config/database.php` 缺失或是占位模板时，自动生成 env 驱动的 `mysql` + `mysql_business` 双连接模板。
