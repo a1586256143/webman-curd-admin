@@ -47,6 +47,10 @@ trait CurdListTrait
                 'dialogWidth' => $grid->formLayout()['width'] ?: $grid->dialogWidth(),
                 'dialogHeight' => $grid->formLayout()['height'] ?? '',
                 'formColumns' => $grid->formLayout()['columns'] ?? 1,
+                // 表单标签/内容区宽度：Form::labelWidth()/labelPosition()/contentWidth()
+                'labelWidth' => $grid->formLayout()['labelWidth'] ?? 0,
+                'labelPosition' => $grid->formLayout()['labelPosition'] ?? '',
+                'contentWidth' => $grid->formLayout()['contentWidth'] ?? '',
                 'formConfirm' => $grid->formConfirm(),
                 'formTabs' => $grid->getFormTabs(),
                 'formSteps' => $grid->getFormSteps(),

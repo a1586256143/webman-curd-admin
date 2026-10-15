@@ -253,11 +253,17 @@ class Form extends BaseDsl
      *  - columns：每行默认列数（1 = 单列整行，2 = 一行两列，3 = 一行三列），默认 1
      *  - width：弹窗宽度（默认 ''，走 Grid::setDialogWidth() 或框架默认 600px）
      *  - height：弹窗高度（默认 '' = 自适应，内容超高时弹窗内部滚动）
+     *  - labelWidth：字段标题(标签)宽度 px（默认 0 = 前端回退 100px）
+     *  - labelPosition：标签位置 right/left/top（默认 '' = 前端回退 right）
+     *  - contentWidth：表单内容区(标签+元素整体)最大宽度（默认 '' = 不限制，撑满弹窗）
      */
     protected array $layout = [
         'columns' => 1,
         'width' => '',
         'height' => '',
+        'labelWidth' => 0,
+        'labelPosition' => '',
+        'contentWidth' => '',
     ];
 
     /**
@@ -293,6 +299,43 @@ class Form extends BaseDsl
     public function height(string $height): self
     {
         $this->layout['height'] = $height;
+        return $this;
+    }
+
+    /**
+     * 字段标题(标签)宽度(px)，默认 100（前端回退值）
+     * 长标签(如「接口地址」「配置项说明」「是否允许跨域」)建议加大，避免换行/截断。
+     *   $form->labelWidth(140);
+     */
+    public function labelWidth(int $px): self
+    {
+        $this->layout['labelWidth'] = max(0, $px);
+        return $this;
+    }
+
+    /**
+     * 标签位置：right(默认) / left / top
+     *  - right：标签在输入框左侧（默认，最省纵向空间）
+     *  - left：标签在输入框左侧且右对齐，多列布局更整齐
+     *  - top：标签在输入框上方，超长标签无截断风险
+     *   $form->labelPosition('top');
+     */
+    public function labelPosition(string $pos): self
+    {
+        $this->layout['labelPosition'] = $pos;
+        return $this;
+    }
+
+    /**
+     * 表单内容区(标签+元素整体)最大宽度，控制右侧元素区域宽度。
+     * 不设置则撑满弹窗；设为如 '420px' / '60%' 可让输入框区域收窄并居中，
+     * 避免宽弹窗下输入框被拉伸过长。
+     * 元素区域实际宽度 ≈ contentWidth - labelWidth。
+     *   $form->contentWidth('420px');
+     */
+    public function contentWidth(string $width): self
+    {
+        $this->layout['contentWidth'] = $width;
         return $this;
     }
 

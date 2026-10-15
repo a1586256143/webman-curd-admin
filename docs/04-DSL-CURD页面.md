@@ -125,7 +125,7 @@ $grid->form(function (Form $form) {
 字段通用链式能力（`Field`）：`required / placeholder / help / default / addDefault / editDefault / disabled / addDisabled / editDisabled / hidden / addHidden / addOnly / editOnly / options(map) / multiple / filterable / span / full / row / rules / min / max / step / config(extra)`，支持**动态显隐**：`->when(父值, cb)` / `->addVisibleWhen([...])`。
 其中 `addOnly()` = 仅新增场景展示并提交、`editOnly()` = 仅编辑场景（也可以用 `if ($form->isCreate())` 包裹字段，见 3.5.1，效果等价且更好读）。
 
-表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`、`isCreate()` / `isEdit()`（**场景判断，写在 `if` 里**，见 3.5.1）；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。
+表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`、`isCreate()` / `isEdit()`（**场景判断，写在 `if` 里**，见 3.5.1）；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。**表单标签与内容区宽度**：`$form->labelWidth(int $px)`（字段标题宽度，默认 100，长标签建议加大避免换行/截断）、`$form->labelPosition('right'|'left'|'top')`（标签位置，默认 right）、`$form->contentWidth(string $w)`（表单内容区「标签+元素」整体最大宽度，元素区域 ≈ contentWidth − labelWidth；不设置则撑满弹窗，宽弹窗下设如 `'480px'` 可让输入框区域收窄并居中）。
 
 ### 5.1 场景字段控制：`if ($form->isCreate())` / `if ($form->isEdit())`
 

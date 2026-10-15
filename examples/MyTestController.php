@@ -77,6 +77,8 @@ class MyTestController extends BaseCurdController
 
         // ===== 编辑弹窗 =====
         $grid->form(function (Form $form) {
+            // 表单布局：标签宽度 + 内容区(右侧元素区域)最大宽度，按需调整
+            $form->labelWidth(140)->contentWidth('480px');
             $form->text('name', '名称')->required();
             // 点式字段：读写 config 列（JSON）里的固定键，任意字段方法均可用
             $form->text('config.api_url', '接口地址')->required()

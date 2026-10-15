@@ -43,12 +43,22 @@ class Grid extends BaseDsl
     protected $summaryCb = null;
 
     /**
-     * 表单布局元数据（来自 Form::columns()/width()/height()）
+     * 表单布局元数据（来自 Form::columns()/width()/height()/labelWidth()/labelPosition()/contentWidth()）
      *  - columns：每行默认列数（默认 1）
      *  - width：弹窗宽度（默认 ''，回退到 setDialogWidth() 的 600px）
      *  - height：弹窗高度（默认 '' = 自适应）
+     *  - labelWidth：字段标题宽度 px（默认 0 = 前端回退 100）
+     *  - labelPosition：标签位置 right/left/top（默认 '' = 前端回退 right）
+     *  - contentWidth：表单内容区最大宽度（默认 '' = 不限制）
      */
-    protected array $formLayout = ['columns' => 1, 'width' => '', 'height' => ''];
+    protected array $formLayout = [
+        'columns' => 1,
+        'width' => '',
+        'height' => '',
+        'labelWidth' => 0,
+        'labelPosition' => '',
+        'contentWidth' => '',
+    ];
 
     /**
      * 表单提交二次确认（来自 Form::confirm()）：['create' => msg, 'edit' => msg]
