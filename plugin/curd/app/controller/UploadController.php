@@ -59,8 +59,9 @@ class UploadController
                 // 客户端未上报 mime 时，用 finfo 读真实类型兜底
                 $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($file->getPathname()) ?: '';
             }
-            if (!in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'], true)) {
-                return json(['code' => 400, 'msg' => '只允许上传图片（jpg/png/gif/webp/bmp）']);
+            // 图片字段仅允许 jpg / jpeg / png（与前端 UploadField 的 accept + before-upload 校验一致）
+            if (!in_array(strtolower($mime), ['image/jpeg', 'image/png'], true)) {
+                return json(['code' => 400, 'msg' => '只允许上传 jpg / jpeg / png 格式的图片']);
             }
         }
 

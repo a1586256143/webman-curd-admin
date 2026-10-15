@@ -69,6 +69,12 @@ class DynamicCurdController extends BaseCurdController
     public function dynamicDotProps(): array
     {
         $props = [];
+        $collect = function ($prop) use (&$props) {
+            $prop = (string)$prop;
+            if ($prop !== '' && str_contains($prop, '.')) {
+                $props[$prop] = true;
+            }
+        };
         try {
             $row = CurdConfigs::firstByTableName($this->table());
             if ($row && !empty($row->config)) {
@@ -80,10 +86,11 @@ class DynamicCurdController extends BaseCurdController
                     (array)($cfg['editFields'] ?? [])
                 );
                 foreach ($items as $item) {
-                    $prop = (string)($item['prop'] ?? '');
-                    if (str_contains($prop, '.')) {
-                        $props[$prop] = true;
-                    }
+                    $collect($item['prop'] ?? '');
+                }
+                // 详情里显式声明的点式字段（含分组写法 [{group, fields:[...]}]）
+                foreach ($this->collectDetailProps((array)($cfg['detail'] ?? [])) as $prop) {
+                    $collect($prop);
                 }
             }
         } catch (\Throwable $e) {

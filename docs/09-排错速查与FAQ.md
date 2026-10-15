@@ -66,9 +66,12 @@
 | `.vue` 页面 `<style lang="scss">` 报错 | 浏览器端无预处理器，只能用纯 CSS（`scoped` 也会降级为全局，class 加唯一前缀） |
 | 导出报「本次将导出 N 条，超过单次导出上限 M 条」 | `export_max_rows` 限制（默认 100000）。调大该键，或缩小筛选范围；前端把超限当**错误提示**而不是下载文件 |
 | `Filter::dateRange(...)->default(...)` 配了但搜索框是空的 | ①前端产物是旧的（默认值由前端写入搜索框，**必须重建部署前端**）；②`default` 写在 `$filter->between(...)` 之后又链了别的会改类型的调用，确认最终 `type` 是 `daterange`/`datetimerange`/`date`（其它类型原样透传，不报错）；③区间给了单个**具体日期**时两端同值（不是「该日期至今」），要「至今」用相对表达式（`'-7d'`）或显式 `[$start, 'today']`。核对接口返回：`GET /api/curd/config?route_path=/xxx` 里 `search[].default` 应是**已求值的具体日期** |
-| 点式字段（`config.api_url`）编辑不回显 / 列表为空 | ①回显范围 = grid 点式列 ∪ 表单点式字段 ∪ 动态配置点式 prop，确认字段在任一处的 prop 带 `.` 且**根字段名一致**（`config` vs `configs` 不互通）；②根字段存的不是合法 JSON（手写数据时注意引号）；③前端产物旧（字面键写入是前端行为，改后端也要重建前端）。点式对**任意字段类型**都成立（select/switch/datetime…），与类型无关 |
+| 点式字段（`config.api_url`）编辑不回显 / 列表为空 | ①展开范围 = grid 点式列 ∪ 表单点式字段 ∪ **详情里显式声明的点式字段** ∪ 动态配置点式 prop，确认字段在任一处的 prop 带 `.` 且**根字段名一致**（`config` vs `configs` 不互通）；②根字段存的不是合法 JSON（手写数据时注意引号）；③前端产物旧（字面键写入是前端行为，改后端也要重建前端）。点式对**任意字段类型**都成立（select/switch/datetime…），与类型无关 |
 | JSON 组件（`$form->json()`）保存后是 `[object Object]` 或行没回显 | ①前端产物旧（`serializeJsonRows` 序列化 + `parseJsonValueToRows` 回显都在前端）；②库里该列被存成了双层编码字符串（`"{\"a\":1}"`）——查是否自定义钩子又 `json_encode` 了一次；③编辑回显单行原文 = 库里值不是合法 JSON，被当纯文本保留 |
 | 点式字段合并后其它子键丢了 | 合并基础值优先级 = 请求显式根字段 > 编辑读库现值 > 空数组；编辑时没带 `id` 对应的行数据（如自定义入口绕过 `update()`）会拿不到现值。确认走的是插件 `add()/update()` 主链路 |
+| 点式字段（`config.xxx`）**明明有值**仍提示「不能为空」、提交被卡住 | 两类原因：①前端产物旧（取值一致性靠前端「字面键 + 嵌套路径」双写，改后端也要重建部署前端）；②**给校验规则多挂了键（最常见是 async-validator 的 `transform`）** —— EP 只剥掉 `trigger`，async-validator 只在「剥掉 `message` 后**恰好只剩 `required`**」时才用 required 校验器，**多一个键就退回 `validators['string']`** → 数字/布尔值被判「不是字符串」→ 报错文案仍用规则的 `message` → 看着就是「不能为空」（这解释了为什么**字符串字段正常、数字/开关/下拉字段必错**）。最小复现：`{required:true,message:'M'}` → PASS；`{required:true,message:'M',transform:()=>30}` → FAIL；显式 `type:'number'` → PASS。**修法：规则只保留 `{required,message,trigger}`**，取值一致性交给前端 `setFieldValue()` 双写 + `initFormData()/handleEdit()` 末尾 `syncDotNested()` 镜像（lodash `get(formData,'config.x')` 命中字面键即取到真值） |
+| 查看详情里看不到表单里的字段（点式 `config.xxx` 也一样） | 详情默认 = **列表列 ∪ 表单字段**（按 `prop` 去重，列在前），所以表单里声明的字段本该出现。仍看不到时：①该字段是「仅新增」字段（`modeOnly === 'add'`，如创建时的密码）或标了 `hidden` —— 设计上不进详情；②控制器**显式调用过 `$grid->setDetail([...])`**，此时以显式声明为准、不再并入表单字段，把缺的字段补进 `setDetail()` 即可；③前端产物旧。详情是只读视图：`switch` 显示「开/关」文字、`select`/`radio` 显示选项文案、`image`/`date`/`datetime` 保留专用单元格 |
+| 图片字段选不了 gif/webp，或提示「只允许上传 jpg / jpeg / png」 | 预期行为：`image` 字段只收 jpg/jpeg/png（前端 `accept` + 上传前硬校验，服务端 `/api/upload/image` 按真实 MIME 复核）。需要其它格式请改用通用 `file` 字段（`/api/upload`） |
 
 ---
 

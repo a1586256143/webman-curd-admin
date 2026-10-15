@@ -230,13 +230,13 @@ $form->tags('config.scopes', '权限范围');                    // 数组入库
 | 列表 / 回显 | 后端把根字段（`config`）JSON 解码后，写字面键 `config.api_url` 的扁平值；前端 el-table 与表单都能按字面 key 取到 |
 | 新增 | 只提交了点式字段时，以「编辑读库现值 → 空数组」为基础值合并，未提交的子键原样保留 |
 | 编辑 | 同上：合并而非覆盖，**没出现在表单里的子键不会丢**；显式提交空串 = 真的写空值（清空语义） |
-| 校验 | 点式字段走 async-validator 的 `transform` 喂真实值，`required` 等规则正常生效 |
+| 校验 | 前端**同时**写字面键与嵌套路径（`setFieldValue` 双写 + `initFormData`/`handleEdit` 末尾 `syncDotNested` 镜像），el-form-item 取值 (`lodash.get(formData,'config.x')`) 天然命中字面键，`required` 等规则正常生效。⚠️ **不要给校验规则挂 async-validator 的 `transform`**：4.2.5 下带 `transform` 的规则会让 `required` 误报「不能为空」，即便字段有值（详见 09 排错 §4） |
 | 导出 | 导出值按路径从行数据取，与列表展示一致 |
 
 - 前端提交的就是**字面键**（`formData['config.api_url']`，JS 对象键允许带点）；合并、解码全在后端（`CurdActionsTrait::mergeDotFields` / `CurdListTrait::expandDotColumns`）。
 - 根字段建议在表里建成 `text`（或 json）列；模型上有 `json`/`array` cast 时合并结果交回数组由 Eloquent 编码，否则后端 `json_encode(..., JSON_UNESCAPED_UNICODE)`。
 - 路径中的**数字段**（如 `config.list.0`）按数组下标处理，保证 JSON 输出是数组而非 `{"0":...}`；各字段类型的值按前端原样入库（`switch` 存布尔、`datetime` 存字符串、`select` 存选项 value）。
-- **回显范围**：grid 点式列 ∪ 表单点式字段（add/edit）∪ 动态配置（curd_configs）里的点式 prop —— 任一处声明过，编辑弹窗都能回显。
+- **展开范围**：grid 点式列 ∪ 表单点式字段（add/edit）∪ 详情里显式声明的点式字段 ∪ 动态配置（curd_configs）里的点式 prop —— 任一处声明过，列表 / 编辑 / 详情都能取到值。
 - 搜索（`$filter`）**不**支持点式：JSON 列内的子键检索请用 `->where()` 自定义闭包。
 
 ### 5.3 JSON 组件：`$form->json()` 键值对编辑器
@@ -254,6 +254,41 @@ $grid->form(function (Form $form) {
 - 编辑回显：字符串值 `JSON.parse` 成行；解析失败时保留原文作为单行值（不丢数据）。
 - 与点式字段同表单互不干扰：JSON 组件提交的是**根字段**（`extra`），点式字段提交的是**字面键**（`config.api_url`），后端先合并点式再走各自落库逻辑。
 - 值一律按字符串存储；需要数字/布尔请在业务端消费时转换（或改用点式字段 + `number`）。
+
+### 5.4 查看详情（`$grid->setDetail()`）：默认「列表列 ∪ 表单字段」
+
+行操作里的「查看」打开只读详情弹窗（按钮由 `options(['view' => true])` 控制，默认开）。
+
+**不写任何配置时，详情字段 = 列表列 ∪ 表单字段**（按 `prop` 去重，列在前）——所以表单里声明的点式字段（`config.api_url` / `config.timeout` …）在详情里同样可见，不会出现「表单能编辑、详情看不到」。
+
+```php
+$grid->form(function (Form $form) {
+    $form->text('config.api_url', '接口地址');
+    $form->switch('config.enabled', '启用开关');
+});
+
+// 想自定义字段顺序 / 分组时再声明；一旦声明就以此为准，不再并入表单字段
+$grid->setDetail([
+    ['group' => '基础信息', 'fields' => [
+        ['prop' => 'name', 'label' => '名称'],
+        ['prop' => 'config.api_url', 'label' => '接口地址'],
+    ]],
+    ['group' => '运行配置', 'fields' => [
+        ['prop' => 'config.timeout', 'label' => '超时(秒)'],
+        ['prop' => 'config.enabled', 'label' => '启用开关'],
+    ]],
+]);
+```
+
+要点：
+
+| 项 | 说明 |
+|---|---|
+| 默认字段 | 列表列（`showInView !== false`）在前，表单字段在后；跳过 `hidden` 字段与「仅新增」字段（`modeOnly === 'add'`，如创建时才填的密码） |
+| 点式字段 | 与列表同机制：后端把根字段解 JSON 后写字面键扁平值，详情直接读 `row['config.api_url']`；**显式 `setDetail()` 里声明的点式 prop 也会纳入展开清单**，不会取不到值 |
+| 只读渲染 | 复用列表单元格渲染器，但转成只读形态：`switch` → 「开 / 关」文字（不再渲染可点开关）；`select` / `radio` 的 `options` 自动转 `map` → 显示文案而非裸值；`image` / `date` / `datetime` 保留专用单元格（缩略图 / 日期格式化） |
+| 关闭详情 | `options(['view' => false])`（旧写法用 `features`） |
+| 旧数组写法 | 同一个 `detail()` 方法返回字段数组（不分组），语义与 Grid DSL 一致 |
 
 ## 6. 自定义操作 Action（行级/批量/全局/弹窗）
 
@@ -339,6 +374,7 @@ class ImportOrdersAction extends Action
 
 行为说明：
 - 表单字段支持全部 Form DSL 能力（file/image/remote/when/isCreate 等）；文件类字段先走 `/api/upload` 上传拿到路径，`handle` 里拿到的就是路径字符串。
+- **图片 `image` 字段只收 jpg / jpeg / png**：前端选择器 `accept=".jpg,.jpeg,.png"` + 上传前按扩展名/MIME 硬校验，服务端 `/api/upload/image` 也按真实 MIME 只放行 jpeg/png（gif/webp/bmp 会被拒）。需要别的格式请改用通用 `file` 字段（`/api/upload`，仅限 5MB 内不限类型）。
 - `global(true)` 提交时自动附带 `{ query: 当前搜索条件 }`；`batch(true)` 自动附带 `{ ids: 勾选主键 }`；行级自动附带 `{ id: 当前行主键 }`（`->field()` 可改字段名）。
 - 无 `->api()` 时自动路由到 `/api/curd/model/{model}/action/{name}`；弹窗提交失败（接口返回错误）时弹窗保持打开，便于修改后重试。
 

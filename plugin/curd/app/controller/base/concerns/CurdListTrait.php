@@ -19,17 +19,11 @@ trait CurdListTrait
         // 优先使用 Grid DSL
         $grid = $this->resolveGrid();
         if ($grid) {
+            // 详情字段：仅当开发者显式 $grid->detail() 声明时才输出。
+            // 未声明时不输出 detail，由前端默认取「列表列 ∪ 表单字段」——
+            // 这样表单里的点式字段（如 config.api_url）在详情里同样可见，
+            // 不会再出现「表单能编辑、详情看不到」。
             $detail = $grid->detail();
-            if (empty($detail)) {
-                $detail = array_map(fn($c) => [
-                    'prop' => $c['prop'],
-                    'label' => $c['label'],
-                    'type' => $c['type'] ?? '',
-                    'map' => $c['map'] ?? null,
-                    'tagType' => $c['tagType'] ?? null,
-                    'display' => $c['display'] ?? null,
-                ], $grid->columns());
-            }
             $config = [
                 'title' => $grid->title() ?: $this->title(),
                 '_modelName' => $this->modelName(),
@@ -40,7 +34,6 @@ trait CurdListTrait
                 'addFields' => $grid->addFields(),
                 'editFields' => $grid->editFields(),
                 'rules' => $grid->rules(),
-                'detail' => $detail,
                 'actions' => $grid->actions($this->modelName()),
                 'options' => $grid->options(),
                 // 弹窗宽高：Form::width()/height() 优先，回退到 setDialogWidth()/默认值
@@ -55,6 +48,10 @@ trait CurdListTrait
                 'formTabs' => $grid->getFormTabs(),
                 'formSteps' => $grid->getFormSteps(),
             ];
+            // 显式声明了详情字段才下发（未声明交给前端默认：列表列 ∪ 表单字段）
+            if (!empty($detail)) {
+                $config['detail'] = $detail;
+            }
             // 场景字段白名单（Form::isCreate()/isEdit()）：任一场景声明了清单才输出
             $sceneShow = $grid->formSceneShow();
             if ($sceneShow['create'] !== null || $sceneShow['edit'] !== null) {
@@ -81,17 +78,8 @@ trait CurdListTrait
         }
 
         // 兼容旧写法（数组方式）
+        // detail 同样只在显式声明时下发（未声明 -> 前端默认「列表列 ∪ 表单字段」）
         $detail = $this->detail();
-        if (empty($detail)) {
-            $detail = array_map(fn($c) => [
-                'prop' => $c['prop'],
-                'label' => $c['label'],
-                'type' => $c['type'] ?? '',
-                'map' => $c['map'] ?? null,
-                'tagType' => $c['tagType'] ?? null,
-                'display' => $c['display'] ?? null,
-            ], $this->columns());
-        }
 
         $config = [
             'title' => $this->title(),
@@ -101,7 +89,6 @@ trait CurdListTrait
             'search' => $this->search(),
             'formFields' => $this->formFields(),
             'rules' => $this->resolveRules(),
-            'detail' => $detail,
             'actions' => $this->actions(),
             'options' => $this->options(),
             'dialogWidth' => $this->dialogWidth(),
@@ -109,6 +96,9 @@ trait CurdListTrait
             'formColumns' => 1,
             'formConfirm' => [],
         ];
+        if (!empty($detail)) {
+            $config['detail'] = $detail;
+        }
         // 注意：旧写法暂不支持 rowStyle/rowClass
         return $config;
     }
@@ -323,36 +313,79 @@ trait CurdListTrait
 
     /**
      * 需要展开的点式 prop 清单（去重）：
-     *   - Grid DSL：点式列（展示）+ 表单点式字段（编辑回显）
+     *   - Grid DSL：点式列（展示）+ 表单点式字段（编辑回显）+ 详情显式声明的点式字段
+     *   - 旧写法：columns() + formFields() + detail()
      *   - 动态 CURD（DynamicCurdController）：curd_configs 落库配置里的点式列/字段
      */
     protected function dotColumnProps(): array
     {
         $dotProps = [];
+        $collect = function ($prop) use (&$dotProps) {
+            $prop = (string)$prop;
+            if ($prop !== '' && str_contains($prop, '.')) {
+                $dotProps[$prop] = true;
+            }
+        };
+
         $grid = $this->resolveGrid();
         if ($grid) {
             foreach ($grid->columns() as $col) {
-                $prop = (string)($col['prop'] ?? '');
-                if (str_contains($prop, '.')) {
-                    $dotProps[$prop] = true;
-                }
+                $collect($col['prop'] ?? '');
             }
             foreach (array_merge($grid->formFields(), $grid->addFields(), $grid->editFields()) as $field) {
-                $prop = (string)($field['prop'] ?? '');
-                if (str_contains($prop, '.')) {
-                    $dotProps[$prop] = true;
-                }
+                $collect($field['prop'] ?? '');
+            }
+            // 详情显式声明的点式字段：不收集就不会展开 -> 详情里取不到值
+            foreach ($this->collectDetailProps($grid->detail()) as $prop) {
+                $collect($prop);
+            }
+        } else {
+            // 兼容旧写法
+            foreach ($this->columns() as $col) {
+                $collect($col['prop'] ?? '');
+            }
+            foreach ($this->formFields() as $field) {
+                $collect($field['prop'] ?? '');
+            }
+            foreach ($this->collectDetailProps($this->detail()) as $prop) {
+                $collect($prop);
             }
         }
         // 动态 CURD 落库配置（仅 DynamicCurdController 实现 dynamicDotProps）
         if (method_exists($this, 'dynamicDotProps')) {
             foreach ((array)$this->dynamicDotProps() as $prop) {
-                if (is_string($prop) && str_contains($prop, '.')) {
-                    $dotProps[$prop] = true;
-                }
+                $collect($prop);
             }
         }
         return array_keys($dotProps);
+    }
+
+    /**
+     * 从 detail 配置提取 prop 清单
+     * 兼容两种写法：扁平 [['prop'=>'a'], ...] 与分组 [['group'=>'G','fields'=>[['prop'=>'a']]], ...]
+     */
+    protected function collectDetailProps(array $detail): array
+    {
+        $props = [];
+        foreach ($detail as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            if (isset($item['fields']) && is_array($item['fields'])) {
+                foreach ($item['fields'] as $field) {
+                    $prop = is_array($field) ? ($field['prop'] ?? '') : $field;
+                    if (is_string($prop) && $prop !== '') {
+                        $props[] = $prop;
+                    }
+                }
+                continue;
+            }
+            $prop = $item['prop'] ?? '';
+            if (is_string($prop) && $prop !== '') {
+                $props[] = $prop;
+            }
+        }
+        return $props;
     }
 
     /**
