@@ -10,6 +10,42 @@
 use plugin\curd\app\CurdDb;
 use plugin\curd\app\rbac\Rbac;
 
+if (!function_exists('__')) {
+    /**
+     * 翻译别名（symfony/translation，webman trans() 的快捷方式）
+     *
+     * 字段标题统一用本函数，语言文件位于宿主 resource/translations/{locale}/fields.php
+     * （domain 固定为 'fields'，与文件名对应；插件安装时已内置一份常用字段默认翻译，
+     * 宿主同名文件可自由增改覆盖）。未命中 key 时原样返回，安全降级。
+     *
+     * 用法：
+     *   $grid->column('created_at', __('Created at'));   // zh_CN → 「创建时间」
+     *   __('Ip platform')
+     *   __('Hello :name', ['name' => 'Tom'])             // symfony 参数占位
+     *
+     * 与原生 trans() 的关系：__(...) === trans(..., [], 'fields')；
+     * 需要 messages 域或动态 domain 时直接用 trans($id, $params, $domain)。
+     *
+     * ⚠️ 依赖插件自带 config/translation.php：webman 的 Translation 按「当前请求所属插件」
+     *    取配置（请求走 /api/curd/* 时读 config('plugin.curd.translation')），
+     *    插件不提供该配置时 $config['locale'] 未定义会直接抛错。本函数额外兜一层
+     *    try/catch —— 翻译不可用时原样返回 key，绝不因语言配置缺失把页面打崩。
+     *
+     * @param string $id       翻译键（建议用英文短语原文作 key，如 'Created at'）
+     * @param array  $replace  占位参数（symfony 格式，如 [':name' => 'Tom']）
+     * @param string|null $locale  语言（默认取 config/translation.php 的 locale）
+     */
+    function __(string $id, array $replace = [], ?string $locale = null): string
+    {
+        try {
+            return trans($id, $replace, 'fields', $locale);
+        } catch (\Throwable $e) {
+            // 无请求上下文（bootstrap/console）或翻译配置缺失：原样返回 key
+            return $id;
+        }
+    }
+}
+
 if (!function_exists('current_user')) {
     /**
      * 当前登录用户对象（基于 AuthCheck 中间件注入到 $request->user）

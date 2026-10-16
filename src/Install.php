@@ -76,6 +76,7 @@ class Install
         self::ensureExamples($root);
         self::ensureCurdConfig($root);
         self::ensureDatabaseConfig($root);
+        self::ensureTranslations($root);
     }
 
     /**
@@ -149,6 +150,42 @@ class Install
             echo "  [webman-curd-admin] 路由注册（宿主 config/route.php，示例已含写法注释）：\n";
             echo "      RouteControllerRegistry::register('/my-test', \\app\\controller\\admin\\api\\MyTestController::class);\n";
             echo "      或加入 RouteControllerRegistry::registerMany([...]) 数组。my_test 表与「测试管理」菜单由安装向导自动创建。\n";
+        }
+    }
+
+    /**
+     * 确保宿主存在字段翻译文件 resource/translations/{locale}/fields.php：
+     * 按插件内置的 resource/translations/* 逐语言复制，宿主同名文件已存在则不动
+     * （用户自定义优先）。补齐目录，避免 webman Translation 因目录不存在抛
+     * NotFoundException，导致 trans() / __() 全挂。
+     *
+     * 语言目录约定 = 宿主 config/translation.php 的 path（默认 resource/translations）
+     * + locale（默认 zh_CN）；domain 固定 'fields'（= 文件名），与 __() 别名一致。
+     */
+    protected static function ensureTranslations(string $root): void
+    {
+        $srcRoot = __DIR__ . '/../plugin/curd/resource/translations';
+        if (!is_dir($srcRoot)) {
+            return;
+        }
+        foreach ((array)scandir($srcRoot) as $locale) {
+            if ($locale === '.' || $locale === '..') {
+                continue;
+            }
+            $src = $srcRoot . '/' . $locale . '/fields.php';
+            if (!is_file($src)) {
+                continue;
+            }
+            $hostFile = $root . '/resource/translations/' . $locale . '/fields.php';
+            if (is_file($hostFile)) {
+                continue;
+            }
+            if (!is_dir(dirname($hostFile))) {
+                @mkdir(dirname($hostFile), 0755, true);
+            }
+            if (@copy($src, $hostFile)) {
+                echo "  [webman-curd-admin] 已生成字段翻译文件: resource/translations/{$locale}/fields.php（可自由增改，改完 restart 生效）\n";
+            }
         }
     }
 

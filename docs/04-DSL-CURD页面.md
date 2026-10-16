@@ -21,19 +21,24 @@
 ```php
 class MROrdersController extends BaseAdminController
 {
-    protected string $modelClass = MobileRechargeOrder::class;  // ① 模型（grid 支持传 model，可不写 model()）
     protected string $title = '话费订单';
 
     protected function grid(): Grid
     {
-        $grid = new Grid(new MobileRechargeOrder(), $this->title);
-        $grid->getModel()->orderByDesc('id');                   // ② 列表默认排序
+        // ① 推荐写法：不声明 $modelClass —— 框架自动从 Grid 的模型实例提取回填
+        //    （Grid 里 new 的 Model 与 $modelClass 本就是同一个类，无需写两遍）
+        // ② 推荐写法：Grid 不传 title —— 自动读控制器的 $this->title
+        $grid = new Grid(new MobileRechargeOrder());
+        $grid->getModel()->orderByDesc('id');                   // ③ 列表默认排序
 
-        // ③ 列 / 搜索 / 表单 / 操作 / 汇总 ……
+        // ④ 列 / 搜索 / 表单 / 操作 / 汇总 ……
         return $grid;
     }
 }
 ```
+
+> 旧写法（声明 `$modelClass` + `new Grid(new Model(), $this->title)`）依然兼容；
+> 新写法少两行、且改模型类时只改一处。字段标题请统一用 `__()` 翻译，见 §9。
 
 ## 3. 常用列 `grid()->column($prop, $label)`
 
@@ -51,7 +56,9 @@ class MROrdersController extends BaseAdminController
 | `column('config.api_url', '接口地址')` | **点式列**：根字段是 JSON 文本时自动解码取子键；`->map()/->datetime()` 等列方法全部可用（见 §5.2） |
 | `->remote($table, $valueKey='id', $labelKey='name')` | 关联表翻译（跨库由统一接口代替时自行 display） |
 | `->limit(int)`（截断）、`->hidden()`（默认隐藏可配置显示）、`->sortable()` | 其它 |
-| `->editable($type='input', $options)` | 单元格编辑 |
+| `->copy()` | **可复制列**：单元格带复制按钮，一键复制该列文本（复制的是 `display()` 之后的最终展示值；与 tag/switch/image 等共存时 copy 优先） |
+| `->select([1=>'安卓',2=>'iOS'])` | **行内下拉编辑**（`= editable('select', …)` 的便捷写法）：参数为 `[值 => 文案]` 关联数组，或 `[['value'=>1,'label'=>'安卓'],…]` 二维列表，两种写法等价；选中即提交保存，字段自动加入可写字段白名单 |
+| `->editable($type='input', $options)` | 单元格编辑（`select` 的底层方法） |
 
 ## 4. 搜索 `grid()->filter(callable)`
 
@@ -479,3 +486,26 @@ Content-Disposition: attachment; filename="hf_accoount_waters_20260918205603.csv
 - `<= 0` = 不限制。
 - 校验按**实际命中条数**：导出当前页按 `min(总数, size)`，导出选中按选中条数，导出全部按筛选后总数。
 - 前端会嗅探响应类型：拿到 JSON 就当错误提示，不会把报错内容当 CSV 下载下来（`dynamicCurd/index.vue` 的 `export`）。
+
+## 9. 字段标题国际化 `__()`（symfony/translation）
+
+字段标题统一走翻译函数 `__()`（`trans($id, [], 'fields')` 的别名），key 写英文短语，中文在语言文件里维护：
+
+```php
+$grid->column('created_at', __('Created at'));   // 显示「创建时间」
+$grid->column('id', __('ID'));                   // 显示「ID」
+```
+
+| 项 | 说明 |
+|---|---|
+| 别名 | `__($id, $replace = [], $locale = null)` ≡ `trans($id, $replace, 'fields', $locale)`（`plugin/curd/app/functions.php`） |
+| domain | 固定 `fields`（即语言文件名 `fields.php`） |
+| 插件内置 | `plugin/curd/resource/translations/zh_CN/fields.php` —— 常用英文短语→中文（`'Created at' => '创建时间'` 等），安装时由 `Install::ensureTranslations()` 复制到宿主（已存在不覆盖） |
+| 宿主覆盖/补充 | `resource/translations/zh_CN/fields.php`（宿主根），同名 key 优先于插件内置 |
+| 加载顺序 | 插件 `config/translation.php` 配两段 path：先插件内置、后宿主，宿主缺 key 自动落到插件默认 |
+| 未命中 | 原样返回英文短语（如 `'Created at'`），不会报错、不会打崩页面 |
+| 生成器 | `make:curd` 生成的控制器标题已统一 `__()`（`created_at` → `__('Created at')`），见[快速开始 §6.3](01-快速开始.md) |
+
+> 注意：`__()` 依赖「当前请求所属插件」= curd 的翻译配置（webman 按 `request()->plugin` 取
+> `config('plugin.curd.translation')`）。宿主如果没有该配置文件，插件请求会因缺 `locale` 报错——
+> 插件已内置 `plugin/curd/config/translation.php`，无需宿主再配。

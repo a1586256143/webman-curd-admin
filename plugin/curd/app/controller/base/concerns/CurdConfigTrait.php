@@ -23,12 +23,25 @@ trait CurdConfigTrait
     /**
      * 获取 Grid DSL 实例（当前控制器实例内只构建一次）
      * 业务控制器仍然实现 grid()；框架内部统一走本方法读配置。
+     *
+     * 构建成功后自动把 Grid 的模型类回填到 $modelClass（未手动声明时）——
+     * 控制器只需在 grid() 里写 new XxxModel()，无需再单独声明 $modelClass。
      */
     protected function resolveGrid(): ?Grid
     {
         if (!$this->gridResolved) {
             $this->gridResolved = true;
             $this->gridCache = $this->grid();
+        }
+        if ($this->gridCache && ($this->modelClass ?? '') === '') {
+            try {
+                $model = $this->gridCache->getModelInstance();
+                if ($model !== null) {
+                    $this->modelClass = get_class($model);
+                }
+            } catch (\Throwable $e) {
+                // 提取失败保持空串，走原有 model()/table() 推断链
+            }
         }
         return $this->gridCache;
     }

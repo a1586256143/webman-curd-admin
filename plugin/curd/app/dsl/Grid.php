@@ -4,18 +4,21 @@ namespace plugin\curd\app\dsl;
 use Illuminate\Database\Eloquent\Builder;
 use support\Model;
 
-/**
- * Grid 链式构建器（对标 laravel-admin 的 model-grid）
- *
- * 用法：
- *   $grid = new Grid(new \app\model\APackage());
- *   $grid->column('id', 'ID')->width(80);
- *   $grid->column('status', '状态')->map([1 => '开启', 0 => '关闭'])->label([1 => 'success', 0 => 'danger']);
- *   $grid->filter(function ($filter) { $filter->like('title', '标题'); });
- *   $grid->form(function ($form) { $form->text('title', '标题')->required(); });
- *
- * 输出：->columns() / ->search() / ->formFields() / ->options() 供 BaseCurdController::config() 使用
- */
+    /**
+     * Grid 链式构建器（对标 laravel-admin 的 model-grid）
+     *
+     * 用法：
+     *   $grid = new Grid(new \app\model\APackage());          // title 不传：自动读控制器 protected string $title
+     *   $grid = new Grid(new \app\model\APackage(), '包管理'); // 显式传 title：优先生效
+     *   $grid->column('id', 'ID')->width(80);
+     *   $grid->column('status', '状态')->map([1 => '开启', 0 => '关闭'])->label([1 => 'success', 0 => 'danger']);
+     *   $grid->column('url', __('Url'))->copy();              // 可复制列
+     *   $grid->column('ip_platform', 'Ip platform')->select([1 => '安卓', 2 => 'iOS']);  // 行内下拉编辑
+     *   $grid->filter(function ($filter) { $filter->like('title', '标题'); });
+     *   $grid->form(function ($form) { $form->text('title', '标题')->required(); });
+     *
+     * 输出：->columns() / ->search() / ->formFields() / ->options() 供 BaseCurdController::config() 使用
+     */
 class Grid extends BaseDsl
 {
     protected string $title = '';

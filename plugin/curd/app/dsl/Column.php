@@ -296,6 +296,72 @@ class Column extends BaseDsl
     }
 
     /**
+     * 行内下拉编辑便捷方法（等价 editable('select', ['options' => $options])）
+     *
+     * 用法：
+     *   $grid->column('ip_platform', 'Ip platform')->select($options);
+     *
+     * ------------------------------------------------------------------
+     * $options 支持两种写法（内部自动归一化为前端要的 [{value,label}] 列表）：
+     *
+     * ① 关联数组【推荐】：键 = 提交/存储值，值 = 显示文案
+     *    [1 => '安卓', 2 => 'iOS', 3 => 'PC']
+     *    → 归一化为 [['value'=>1,'label'=>'安卓'], ['value'=>2,'label'=>'iOS'], ...]
+     *    注意：键必须是标量（int/string），不能是 null；浮点键会被 PHP 截断，勿用
+     *
+     * ② 二维列表：直接给 value/label 键的数组（前端原生格式，原样透传）
+     *    [['value' => 1, 'label' => '安卓'], ['value' => 2, 'label' => 'iOS']]
+     *    适合 value 与 label 都是字符串、或需要顺序敏感/重复 label 的场景
+     *
+     * 说明：
+     * - 保存走当前控制器的 update 接口（行内改完即提交 {id, 字段: 新值}）；
+     *   该字段会自动加入可写字段白名单，无需再在 form() 里重复声明；
+     * - 若要文案翻译：label 处自行包 __()，如 select([1 => __('Android')])；
+     * - 想连颜色标签一起配：再链 ->label([1 => 'success', 2 => 'danger'])。
+     *
+     * @param array $options 选项，格式见上
+     */
+    public function select(array $options): self
+    {
+        $this->config['editable'] = true;
+        $this->config['editType'] = 'select';
+        $normalized = [];
+        foreach ($options as $key => $item) {
+            if (is_array($item)) {
+                // ② 二维列表：取 value/label 键
+                $normalized[] = [
+                    'value' => $item['value'] ?? $key,
+                    'label' => (string)($item['label'] ?? $item['value'] ?? $key),
+                ];
+            } else {
+                // ① 关联数组：键=值，值=文案
+                $normalized[] = ['value' => $key, 'label' => (string)$item];
+            }
+        }
+        $this->config['options'] = $normalized;
+        return $this;
+    }
+
+    /**
+     * 可复制列：单元格展示文本旁附复制按钮，点击复制显示值
+     *
+     * 用法：
+     *   $grid->column('url', __('Url'))->copy();
+     *
+     * 复制内容 = 该列的【显示值】，优先级：
+     *   display()/prefix()/suffix() 的服务端结果（display_{prop}）
+     *   → 列 map() 映射文案 → 原始值
+     * 即 ->display(fn($v) => 'https://xxx.com/'.$v)->copy() 复制的是拼好后的完整链接。
+     *
+     * 注意：copy() 会优先于 tag/switch/image 等专用单元格（复制语义以文本为准）。
+     */
+    public function copy(): self
+    {
+        $this->config['copy'] = true;
+        return $this;
+    }
+
+    /**
      * 隐藏列（detail 中显示但列表不显示，或反之）
      */
     public function hidden(bool $hidden = true): self

@@ -47,15 +47,25 @@ abstract class BaseCurdController
     use CurdActionsTrait;
 
     /**
-     * 数据模型类声明（可选，推荐）
+     * 数据模型类声明（可选）
      *
-     * 子类声明后，ModelRegistry::scanControllers() 启动扫描时只做反射读取，
-     * 不会再执行 grid()。grid() 是业务代码（可能用 request()/current_user_id()），
-     * 在 worker 启动阶段无请求上下文，执行会抛错导致控制器↔模型关联注册失败。
+     * 【推荐写法】不再声明本属性：在 grid() 里直接 new 模型实例，
+     * 框架构建 Grid 时自动提取模型类回填到这里（resolveGrid 做的）：
+     *
+     *   protected function grid(): \plugin\curd\app\dsl\Grid
+     *   {
+     *       return (new \plugin\curd\app\dsl\Grid(new \app\model\MyTest()))
+     *           ->column('id', 'ID')->width(80)...
+     *   }
+     *
+     * 仍显式声明也完全兼容：ModelRegistry::scanControllers() 启动扫描时
+     * 优先反射读本属性（getDefaultProperties 不实例化、不执行 grid()，
+     * grid() 里用到 request() 等请求上下文的控制器请保留声明）。
      *
      *   protected string $modelClass = \app\model\CompanySettleDan::class;
      *
-     * 未声明时保持旧行为：扫描阶段调用 getGridModel()（执行 grid()）兜底。
+     * 未声明时：运行期由 resolveGrid() 从 Grid 提取；启动扫描期兜底执行
+     * getGridModel()（会执行 grid()，需保证启动期安全）。
      */
     protected string $modelClass = '';
 

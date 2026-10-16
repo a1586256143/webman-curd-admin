@@ -201,6 +201,13 @@ trait CurdActionsTrait
         foreach ($extra as $f) {
             $map[$f['prop'] ?? ''] = $f;
         }
+        // 行内可编辑列（->editable() / ->select()）不在表单里也能行内保存：
+        // 自动加入可写字段白名单（prop 相同时不覆盖表单字段的显式配置）
+        foreach ($grid->columns() as $col) {
+            if (!empty($col['editable']) && ($p = $col['prop'] ?? '') !== '' && !isset($map[$p])) {
+                $map[$p] = ['prop' => $p, 'editable' => true];
+            }
+        }
         unset($map['']);
 
         // Form::isCreate()/isEdit() 场景白名单：该场景仅保留清单内字段（hidden 提交字段始终保留）

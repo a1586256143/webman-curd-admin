@@ -6,6 +6,7 @@ use plugin\curd\app\controller\base\DynamicCurdController;
 use plugin\curd\app\CurdConfigRegistry;
 use plugin\curd\app\CurdDb;
 use plugin\curd\app\ModelRegistry;
+use plugin\curd\app\RouteControllerRegistry;
 use plugin\curd\app\model\CurdConfigs;
 use support\Db;
 use support\Request;
@@ -97,7 +98,30 @@ class CurdController
             return json(['code' => 400, 'msg' => '模型名、表名、路由路径或配置键不能为空']);
         }
 
-        // ---- 1. 模型名直查（最高优先级，URL 不暴露表名） ----
+        // ---- 0. route.php 注册的路径（最高优先级，路由路径以 / 开头时）----
+        // 在宿主 config/route.php 里 RouteControllerRegistry::registerMany() 注册过的页面，
+        // 配置永远从控制器 grid() 实时生成 —— 控制器改 grid 立即生效，
+        // 不再被 curd_configs 落库配置覆盖（这正是「配置生成器保存后控制器改动失效」的根因）。
+        if (is_string($identifier) && str_starts_with($identifier, '/')) {
+            $registered = RouteControllerRegistry::instance($identifier);
+            if ($registered) {
+                $frontendConfig = $registered->config();
+                if (!isset($frontendConfig['_routePath'])) {
+                    $frontendConfig['_routePath'] = $identifier;
+                }
+                $frontendConfig['_modelName'] = $frontendConfig['_modelName'] ?? '';
+                if (!$frontendConfig['_modelName']) {
+                    $modelClass = $this->callControllerModel($registered);
+                    $realTable = $modelClass && class_exists($modelClass) ? (new $modelClass())->getTable() : '';
+                    $frontendConfig['_modelName'] = ModelRegistry::modelByTable($realTable)
+                        ?? $this->tableNameToModelName($realTable);
+                }
+                unset($frontendConfig['table'], $frontendConfig['_tableName']);
+                return json(['code' => 200, 'msg' => 'success', 'data' => $frontendConfig]);
+            }
+        }
+
+        // ---- 1. 模型名直查（URL 不暴露表名） ----
         if ($model && ModelRegistry::exists($model)) {
             $controller = ModelRegistry::controller($model);
             if ($controller) {
