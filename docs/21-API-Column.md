@@ -346,6 +346,9 @@ new Html('<div class="tip">任意 <b>HTML</b></div>');
 - **HTML 自动检测（所有组件通用）**：`Table` 单元格 / `Card` 条目的值只要含真实 HTML 标签
   （如 `<span class="el-tag">池</span>`）就自动按 HTML 渲染，纯文本照常转义；
   `Card` 条目可用 `html => true` 强制、`html => false` 强制文本。
+- **列宽自适应**：`Table` 未显式给 `width` / `minWidth` 的列自动按内容估算宽度
+  （全角 ≈12px、半角 ≈6.5px，clamp 64–460px，以 `min-width` 应用，表格仍自动撑满）；
+  显式给了宽度则不干预；`'fit' => false` 可整体关闭。
 
 > 弹窗默认宽 720px；`expand` 是通栏整行展开，宽度不受列宽限制，宽内容（明细表）优先用 `expand`。
 
