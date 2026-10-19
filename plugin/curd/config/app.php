@@ -15,4 +15,21 @@ return [
     'controller_suffix' => 'Controller',
     'controller_reuse' => false,
     'version' => '1.0.0',
+
+    /**
+     * 命令行显式注册（宿主零配置）
+     *
+     * 为什么不能只靠目录扫描：webman/console 的 Command::installCommands() 用
+     *   getRealPath() 解析文件路径，再做字符串前缀裁剪拼类名：
+     *     str_replace($path . '\\', '', $file->getRealPath())
+     * 当 plugin/curd 是软链（composer path 仓库方式开发）时，realpath 会解析到软链的
+     * 真实目标，前缀对不上 → 拼出的类名是乱的 → class_exists 失败后**静默跳过**（不报错），
+     * 表现为 `php webman make:curd` 命令凭空消失。
+     *
+     * 显式写在 'command' 里则走 Command::createCommandInstance()，直接按类名反射，
+     * 不经过路径拼接，天然免疫软链。目录扫描成功时两边同名注册，后者覆盖前者（无副作用）。
+     */
+    'command' => [
+        \plugin\curd\app\command\MakeCurdCommand::class,
+    ],
 ];

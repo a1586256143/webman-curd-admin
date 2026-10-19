@@ -185,6 +185,40 @@ echo "alias composer='$(pwd)/scripts/composer.sh'" >> ~/.zshrc && source ~/.zshr
 **会覆盖代码，但保留密钥。** 自 2026-10-15 起，`plugin/curd` 已存在时 `composer update` 会**整目录删除后从包内重拷（覆盖同步）**，宿主在 `plugin/curd` 下的本地改动会被抹掉；唯一保留的是 `plugin/curd/config/keys/*.pem` 加密密钥（删目录时保留、拷包时排除）。
 宿主 `config/curd-admin.php` 仍是「已存在即 return」不覆盖；示例控制器 / 模型已存在也跳过。
 
+---
+
+## 10. 命令行（`make:curd`）
+
+| 现象 | 原因 / 解法 |
+|---|---|
+| `php webman list` 里**没有** `make:curd` | 插件版本 < 2026-10-19，且 `plugin/curd` 是**软链**挂载（composer path 仓库开发）。升级到本版即可（插件已内置显式注册） |
+| 出现的是**英文描述**的旧版（`Generate a CURD controller for a table`） | 宿主 `app/command/` 里还留着早期拷贝的命令，且插件的没注册上（同上）。删掉宿主那份，或升级插件 |
+| `make:crud` 报「已经存在」/ 生成的代码风格不对 | **别混用**：`make:crud` 是 `webman/console` 自带的通用生成器（Model + Controller + Validator），与本插件无关；本插件是 `make:curd`（u 在前） |
+
+**为什么软链会吃掉命令**（原理，出问题时好排查）：
+
+`webman/console` 的 `Command::installCommands()` 用 `getRealPath()` 拿真实路径，再做字符串前缀裁剪拼类名：
+
+```php
+$relativePath = str_replace(str_replace('/', '\\', $path . '\\'), '', str_replace('/', '\\', $file->getRealPath()));
+```
+
+`plugin/curd` 是软链时 `getRealPath()` 解析到软链目标（如 `../../company/webman-curd-admin/plugin/curd`），
+前缀对不上 → 拼出的类名是乱的 → `class_exists` 失败后**静默 `continue`**（不报错，所以毫无线索）。
+
+**解法**：插件在 `plugin/curd/config/app.php` 里显式声明了 `command`，走
+`Command::createCommandInstance()` 直接按类名反射，不经过路径拼接，天然免疫软链：
+
+```php
+'command' => [
+    \plugin\curd\app\command\MakeCurdCommand::class,
+],
+```
+
+> 老版本宿主想临时救急：在宿主新建 `config/plugin/curd/app.php`，内容为
+> `return ['enable' => true, 'command' => [\plugin\curd\app\command\MakeCurdCommand::class]];`
+> —— 效果相同（插件内置后就不需要了，两边同名注册时后者覆盖前者，无副作用）。
+
 唯一的例外是宿主 `config/database.php`：如果它还是 webman 的**占位模板**
 （内容里有 `your_database` / `your_username`），会被备份成 `database.php.webman-db.bak`
 后用 env 驱动的模板替换。已经改成自定义配置的则不动。
