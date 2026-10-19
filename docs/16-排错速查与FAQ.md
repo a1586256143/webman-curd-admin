@@ -26,7 +26,7 @@
 |---|---|
 | 改 PHP 类 / 常量 / 配置后不生效 | webman 常驻内存：reload 不重读类文件，改 PHP 要 `restart`（改 `.env` / config 可用 `SIGUSR1` 平滑 reload） |
 | 端口不是 8787 | webman 2.x 端口在 `config/process.php` 的 `listen`，改这里再重启 |
-| 后台页面 404 / 静态资源 404 | /app/curd/` 没被正确反代（Nginx 见 [升级 · 部署 · 发布](08-升级与生产部署.md)），或 `page_base` 与前端 `VITE_BASE_PATH` 不一致（两者必须相同，改完要重建前端） |
+| 后台页面 404 / 静态资源 404 | /app/curd/` 没被正确反代（Nginx 见 [升级 · 部署 · 发布](15-升级与生产部署.md)），或 `page_base` 与前端 `VITE_BASE_PATH` 不一致（两者必须相同，改完要重建前端） |
 | SPA 深链（`/app/curd/dashboard`）404 | 反代没把未知路径回退到 `index.php`（`PageController` 只负责把请求交给 `index.html`，前面得有 try_files 兜住） |
 | 换了端口打开登录页，账号没自动回填 | `localStorage` 按**源**隔离（`127.0.0.1:18082` ≠ `127.0.0.1:8787`），属正常现象 |
 
@@ -36,6 +36,7 @@
 
 | 现象 | 原因 / 解法 |
 |---|---|
+| 「配置生成器」菜单不见了 / 直连被弹回首页 / 接口 403「配置生成器已关闭（当前为生产模式）」 | **预期行为**：`generator_enabled` 未配置时跟随 `APP_DEBUG`，生产（`false`）自动关闭。开发期要用就 `APP_DEBUG=true`，或显式 `'generator_enabled' => true` 后 `restart`。详见 [配置参考 §4.5](03-配置参考.md) |
 | 403 只看到「编号」看不到原因 | **设计如此**（不泄露权限结构）。拿编号 grep `runtime/logs/webman-*.log` 看 `reason` |
 | 403 日志里 `reason=unresolved-permission` | 不是没权限，是**路径推导不出 `obj:act`**：控制器没进 `RouteControllerRegistry`，或菜单 `path` 与注册 key 不一致 |
 | 勾了「一键生成权限」却没生成 | `path` 不是已注册的 CURD 页 → 推导不出 `curd.{Model}`。接口响应 `data.warning` 会提示，手填「权限标识」后重试 |
@@ -62,6 +63,7 @@
 | `line-chart-stat` 折线贴底 / 全 0 | 数据本身全 0（如订单表为空），不是 bug；用 `->data([...])` 静态数组可快速自查渲染 |
 | 图表宽度不随侧边栏折叠变化 | 节点组件用 `ResizeObserver` 监听容器，正常会自动重绘；若嵌在 `display:none` 的 tab 里初始化，切回时会重绘一次 |
 | Action 按钮不出现 | `->show(fn)` 返回了 false；或 `->batch(true)` 的按钮在批量工具栏（需勾选行） |
+| 点按钮报「Action xxx 未实现 handle」 | 链式 `$grid->action(...)` 应回退到控制器 `action{Name}()`。①控制器方法名没对上（`batch-on` → `actionBatchOn`）；②插件 `CurdActionsTrait` 是旧版（用 `method_exists` 判断，恒为 true）—— 升级插件后 `restart` |
 | `.vue` 页面报「不支持导入模块 xxx」 | 运行时编译只放行 `vue` / `element-plus` / `@element-plus/icons-vue`；发请求改用 `inject('request')` |
 | `.vue` 页面 `<style lang="scss">` 报错 | 浏览器端无预处理器，只能用纯 CSS（`scoped` 也会降级为全局，class 加唯一前缀） |
 | 导出报「本次将导出 N 条，超过单次导出上限 M 条」 | `export_max_rows` 限制（默认 100000）。调大该键，或缩小筛选范围；前端把超限当**错误提示**而不是下载文件 |
@@ -76,6 +78,9 @@
 | `Call to undefined function xxx\__()` | 宿主的 `plugin/curd/app/functions.php` 是旧版（缺 `__()` 别名）。重新同步插件 `app/` 目录后 `restart`；`__()` 定义见 `plugin/curd/app/functions.php`（= `trans($id, [], 'fields')`） |
 | `__()` 返回的是英文原句 | ①该 key 未收录：在宿主 `resource/translations/zh_CN/fields.php` 补一行（宿主 key 优先于插件内置）；②key 收录了但仍英文：确认 locale 是 `zh_CN`（插件 `config/translation.php` 的 `locale`，默认取宿主 `translation.locale`）；③确认走的是插件请求路径（`request()->plugin === 'curd'`，CLI 下无请求上下文时 `__()` 兜底返回原句，属预期） |
 | 行内 `->select()` / `->copy()` 不生效 | ①前端产物旧：copy 单元格与 select 行内提交由前端渲染，**必须重建部署前端**（`scripts/build-frontend.sh`）；②`->select()` 的 options 传关联数组 `[值=>文案]` 或二维 `[['value'=>…,'label'=>…]]`，传错结构时无选项；③copy 列优先级高于 display/tag 等其它单元格渲染，确认不是被更高优先级形态盖住（copy 本身就应盖住它们） |
+| `display()` 返回的 HTML 被当成源码显示 | ①闭包返回 HTML 需显式 `->html()`（默认文本转义）；②字符串形式 `->display('<b>{name}</b>')` 会自动按 HTML 渲染，无需 `->html()`；③`{prop}` 取当前行字段、`{value}` 取该列原始值，占位符写错会留空；④前端产物旧 |
+| `help()` 里的 `@click="hello()"` 点了没反应 | ①`hello` 必须**全局可访问**：在 `setCustomJs()` 里用顶层 `function hello(){}` / `var` / `window.hello = …`（`const`/`let` 在顶层也算全局，但代码变更后重新注入可能报重复声明）；②customJs 内容变了才会重新注入，确认保存后刷新页面；③前端产物旧（事件委托是新逻辑）；④修饰符写在**属性名**上（`@click.stop="fn()"`），不是值里 |
+| `curd is not defined` / `window.curd` 取不到 | ①前端产物旧（`window.curd` 由新前端注入）；②该页面没有配置 `customJs` 时不会构建 API，给页面加 `$grid->setCustomJs('…')` 即可；③旧名 `window.__curd` 仍兼容 |
 
 ---
 
@@ -184,7 +189,7 @@ echo "alias composer='$(pwd)/scripts/composer.sh'" >> ~/.zshrc && source ~/.zshr
 （内容里有 `your_database` / `your_username`），会被备份成 `database.php.webman-db.bak`
 后用 env 驱动的模板替换。已经改成自定义配置的则不动。
 
-完整边界表见 [升级 · 部署 · 发布](08-升级与生产部署.md) §1.1。
+完整边界表见 [升级 · 部署 · 发布](15-升级与生产部署.md) §1.1。
 
 代价是硬币的另一面：**`composer update` 也不会把新版同步进 `plugin/curd`** ——
 升级要另外跑 `scripts/sync-plugin.sh`，确认版本看的是 `plugin/curd`，而不是 `vendor/`。

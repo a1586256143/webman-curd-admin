@@ -161,13 +161,15 @@ php start.php restart      # CLI 安装后重启一次；Web 向导场景已自�
 
 | 你想做的事 | 看哪里 |
 |---|---|
-| 写第一个业务 CURD / 用配置生成器零代码出页面 | `docs/01-快速开始.md` |
-| 查某个配置项、或「配置改了没反应」 | `docs/02-配置参考.md` |
-| DSL 造 Schema / CURD 页面 | `docs/03-DSL-Schema页面.md`、`docs/04-DSL-CURD页面.md` |
-| 菜单与权限、默认落地页 | `docs/05-菜单与权限.md` |
-| 换登录方式、账号状态判定 | `docs/06-认证与登录.md` |
-| 接口加密、线上异常兜底 | `docs/07-接口加密与异常兜底.md` |
-| 升级 / supervisor / Nginx / 备份回滚 | `docs/08-升级与生产部署.md` |
-| 报错了 | `docs/09-排错速查与FAQ.md` |
+| 空项目从零装、装挂了要排错 | `docs/01-安装指南.md` |
+| 写第一个业务 CURD / 用配置生成器零代码出页面 | `docs/02-快速开始.md` |
+| 查某个配置项、或「配置改了没反应」 | `docs/03-配置参考.md` |
+| DSL 造 Schema / CURD 页面 | `docs/10-DSL-Schema页面.md`、`docs/11-DSL-CURD页面.md` |
+| 查 Grid / Column / Form / Filter / Action 的方法 | `docs/20-API-Grid.md` 起四篇 |
+| 菜单与权限、默认落地页 | `docs/12-菜单与权限.md` |
+| 换登录方式、账号状态判定 | `docs/13-认证与登录.md` |
+| 接口加密、线上异常兜底 | `docs/14-接口加密与异常兜底.md` |
+| 升级 / supervisor / Nginx / 备份回滚 | `docs/15-升级与生产部署.md` |
+| 报错了 | `docs/16-排错速查与FAQ.md` |
 
 浏览器直接打开 **`docs/index.html`** 可读完整文档站（自包含单页，无需服务器）。

@@ -2,24 +2,31 @@
 
 > 列表管理页：表格 / 搜索 / 表单 / 自定义操作 / 汇总条 / 导出，用 `Grid/Form/Filter/Column/Action` 流式声明。
 > 代码位置 `plugin/curd/app/dsl/`；配套示例见 `app/controller/admin/api/MROrdersController.php`。
-> 展示型页面见[DSL · Schema 页面](03-DSL-Schema页面.md)，菜单 / 权限 / 生效见[菜单与权限](05-菜单与权限.md)。
+> 展示型页面见[DSL · Schema 页面](10-DSL-Schema页面.md)，菜单 / 权限 / 生效见[菜单与权限](12-菜单与权限.md)。
 
 ---
 
 ## 1. 五步建一个 CURD 页
 
 1. **Model**（业务 `app/model/`）：extends 平台 BaseModel、设 `$table`，必要时加常量字典；
-2. **Controller**（业务 `app/controller/admin/api/`）：extends `BaseAdminController`，声明 `$modelClass / $title`，实现 `grid()`；
+2. **Controller**（业务 `app/controller/api/` 或 `admin/api/`）：extends `plugin\curd\app\controller\base\BaseCurdController`，声明 `$title`，实现 `grid()`；
 3. **路由**（业务 `config/route.php`）：`RouteControllerRegistry::registerMany(['/xxx' => XxxController::class])`；
-4. **菜单**：`php webman make:permission --name … --slug … --type 1 --path /xxx --icon … --sort n`；
-5. **功能声明**：全部在 `grid()` 里流式拼装（列/搜索/表单/操作/汇总/导出开关）。
+4. **菜单**：后台「菜单管理」新增（`path` 填上一步的路径）；宿主若带 `make:permission` 命令（如 huafei）也可用命令建；
+5. **功能声明**：全部在 `grid()` 里流式拼装（列 / 搜索 / 表单 / 操作 / 汇总 / 导出开关）。
 
-参考完整实现：`app/controller/admin/api/MROrdersController.php`（话费订单）。
+参考完整实现：`examples/MyTestController.php`（示例「测试管理」，覆盖点式字段、`display()` HTML、
+`help()` 里写 `@click`、`setCustomJs()` 与 `window.curd`）。
+
+> **本篇 vs [API 参考](20-API-Grid.md)**：本篇按任务讲「怎么拼成一个能跑的页面」，示例偏整体；
+> 逐个方法的参数与边界条件看 API 参考（与源码逐行对齐），两处冲突时以 API 参考为准。
 
 ## 2. 控制器骨架
 
 ```php
-class MROrdersController extends BaseAdminController
+use plugin\curd\app\controller\base\BaseCurdController;
+use plugin\curd\app\dsl\Grid;
+
+class MROrdersController extends BaseCurdController
 {
     protected string $title = '话费订单';
 
@@ -48,6 +55,8 @@ class MROrdersController extends BaseAdminController
 | `->map([0=>'否',1=>'是'])` | 值→文案 |
 | `->label([0=>'danger',1=>'success'])` | 值→el-tag 颜色（配合 map 成徽标） |
 | `->display(fn() => …)` | 自定义渲染：回调内 `$this` 即当前行，可访问 `$this->status` 等 |
+| `->display('<b>{name}</b>')` | **字符串模板 = HTML**：直接按 HTML 渲染（v-html）；`{prop}` 取当前行字段、`{value}` 取该列原始值，如 `<a href="/u/{id}">{name}</a>` |
+| `->display(fn($v) => '<i>'.$v.'</i>')->html()` | 闭包返回 HTML 时需显式 `->html()`（默认按文本转义，防误渲染）；`->html(false)` 可关闭 |
 | `->prefix('￥')` | 前缀文案（金额） |
 | `->datetime()` / `->date()` | 时间格式化显示 |
 | `->image(int $w, int $h)` / `->staticHost()` / `->open('_blank')` | 图片列 / 静态资源 host / 点击新窗口 |
@@ -129,10 +138,14 @@ $grid->form(function (Form $form) {
 });
 ```
 
-字段通用链式能力（`Field`）：`required / placeholder / help / default / addDefault / editDefault / disabled / addDisabled / editDisabled / hidden / addHidden / addOnly / editOnly / options(map) / multiple / filterable / span / full / row / rules / min / max / step / config(extra)`，支持**动态显隐**：`->when(父值, cb)` / `->addVisibleWhen([...])`。
-其中 `addOnly()` = 仅新增场景展示并提交、`editOnly()` = 仅编辑场景（也可以用 `if ($form->isCreate())` 包裹字段，见 3.5.1，效果等价且更好读）。
+**字段通用链式（`Field`）**：`required / placeholder / help / default / addDefault / editDefault / disabled / addDisabled / editDisabled / hidden / addHidden / addOnly / editOnly / options(map) / multiple / filterable / span / full / row / rules / min / max / step / config(extra)`；
+动态显隐 `->when(父值, cb)` / `->addVisibleWhen([...])`。
+`addOnly()` = 仅新增场景、`editOnly()` = 仅编辑场景（也可用 `if ($form->isCreate())` 包裹，见 §5.1，更好读）。
 
-表单级：`$form->columns(int)`（栅格列数）、`$form->width/height`、`confirm`、`isCreate()` / `isEdit()`（**场景判断，写在 `if` 里**，见 3.5.1）；`Grid::addForm / editForm` 可拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步。**表单标签与内容区宽度**：`$form->labelWidth(int $px)`（字段标题宽度，默认 100，长标签建议加大避免换行/截断）、`$form->labelPosition('right'|'left'|'top')`（标签位置，默认 right）、`$form->contentWidth(string $w)`（表单内容区「标签+元素」整体最大宽度，元素区域 ≈ contentWidth − labelWidth；不设置则撑满弹窗，宽弹窗下设如 `'480px'` 可让输入框区域收窄并居中）。
+**表单级**：`$form->columns(int)` 栅格列数、`$form->width/height`、`confirm`、`isCreate()` / `isEdit()`；
+`Grid::addForm / editForm` 拆分新增/编辑差异、`setFormTabs / setFormSteps` 分 Tab/分步；
+`$form->labelWidth(int)` 标签宽（默认 100）、`labelPosition('right'|'left'|'top')`、
+`contentWidth(string)` 内容区整体最大宽度（元素区 ≈ contentWidth − labelWidth，不设则撑满弹窗）。
 
 ### 5.1 场景字段控制：`if ($form->isCreate())` / `if ($form->isEdit())`
 
@@ -159,11 +172,11 @@ $grid->form(function (Form $form) {
 | 新增 | account、name、password |
 | 编辑 | account、name、amount |
 
-- 块外字段两个场景共用，**不需要任何白名单**：以后新增字段也不会"漏字段"（这正是白名单写法最容易踩的坑）。
-- 前端不渲染、不回显、不提交；后端 `add()/update()` 按同一份配置剔除，校验规则同步收敛 —— 抓包往 `update` 强塞 `password=xxx` 也写不进库。
-- `if / else` 同样支持（`else` 块里的字段自动成为另一个场景专属）。
+- 块外字段两个场景共用，**不需要任何白名单**（以后加字段也不会「漏字段」—— 白名单写法最常踩的坑）。
+- 前端不渲染 / 不回显 / 不提交；后端 `add()/update()` 按同一份配置剔除，校验规则同步收敛。
+- `if / else` 同样支持（`else` 块里的字段自动成为另一场景专属）。
 - 未指定场景时（如 `Action::form()` 的行级弹窗只有一份表单）两个判断都返回 `true`，两段都注册。
-- 回调里**没用**场景判断时只执行一次回调，行为与开销和以前完全一致（用到时才会按另一个场景多执行一次再合并）。
+- 回调里**没用**场景判断时只执行一次，行为与开销与以前一致。
 
 **兼容旧写法（场景白名单）**：`isCreate(...)` / `isEdit(...)` 传字段名时仍是白名单语义 —— 该场景**只**保留列出的字段，支持可变参数、数组、回调动态控制：
 
@@ -184,11 +197,11 @@ $grid->form(function (Form $form) {
 
 **严格提交（前端 + 后端双端生效）：**
 
-1. **场景专属字段 + 白名单外字段即提交范围**：不渲染、不初始化、不提交；即使恶意客户端多提交，后端 `add()/update()` 保存前也会按同一份配置剔除，校验规则同步剔除（不会因被剔除的 required 字段而报错）。
-2. **disabled 不提交**：`->disabled()` / `->addDisabled()` / `->editDisabled()` 生效的场景中，该字段 UI 禁用且**不参与提交**（前端 `sanitizeFormData` 剔除 + 后端白名单剔除）。只读展示需求照常满足，且杜绝"前端禁用、抓包改值"绕过。
-3. **例外**：`$form->hidden('prop', ...)` 声明的隐藏提交字段（顶层 `hidden=true`）不受白名单/禁用影响，始终随表单提交；但它若声明在场景块内，仍只在所属场景提交。
-4. 条件字段（`->when()`）如需在受限场景使用，应把字段名写进白名单（或用 `if` 写法包裹）；其可见性仍由父字段值在前端实时控制。
-5. 数组写法的继承式控制器（`actions()` 同级的 `formFields()` 数组）可在返回的 config 里自带 `sceneShow: {create: [...], edit: [...]}` 键，前端同样生效。
+1. **场景专属字段 + 白名单外字段即提交范围**：不渲染、不初始化、不提交；恶意客户端多提交，后端保存前同样剔除，校验规则同步剔除（不会因被剔除的 required 字段报错）。
+2. **disabled 不提交**：`->disabled()` / `->addDisabled()` / `->editDisabled()` 生效的场景中，字段 UI 禁用且**不参与提交**，杜绝「前端禁用、抓包改值」绕过。
+3. **例外**：`$form->hidden('prop', ...)` 声明的隐藏提交字段始终随表单提交；但它若声明在场景块内，仍只在所属场景提交。
+4. 条件字段（`->when()`）要在受限场景使用，应把字段名写进白名单（或用 `if` 包裹）；可见性仍由父字段值在前端实时控制。
+5. 数组写法的继承式控制器（`formFields()` 数组）可在返回的 config 里自带 `sceneShow: {create: [...], edit: [...]}`，前端同样生效。
 
 > ⚠️ **三种写法的区别，别搞混**：
 >
@@ -237,7 +250,7 @@ $form->tags('config.scopes', '权限范围');                    // 数组入库
 | 列表 / 回显 | 后端把根字段（`config`）JSON 解码后，写字面键 `config.api_url` 的扁平值；前端 el-table 与表单都能按字面 key 取到 |
 | 新增 | 只提交了点式字段时，以「编辑读库现值 → 空数组」为基础值合并，未提交的子键原样保留 |
 | 编辑 | 同上：合并而非覆盖，**没出现在表单里的子键不会丢**；显式提交空串 = 真的写空值（清空语义） |
-| 校验 | 前端**同时**写字面键与嵌套路径（`setFieldValue` 双写 + `initFormData`/`handleEdit` 末尾 `syncDotNested` 镜像），el-form-item 取值 (`lodash.get(formData,'config.x')`) 天然命中字面键，`required` 等规则正常生效。⚠️ **不要给校验规则挂 async-validator 的 `transform`**：4.2.5 下带 `transform` 的规则会让 `required` 误报「不能为空」，即便字段有值（详见 09 排错 §4） |
+| 校验 | 前端**同时**写字面键与嵌套路径（`setFieldValue` 双写 + `initFormData`/`handleEdit` 末尾 `syncDotNested` 镜像），el-form-item 取值 (`lodash.get(formData,'config.x')`) 天然命中字面键，`required` 等规则正常生效。⚠️ **不要给校验规则挂 async-validator 的 `transform`**：4.2.5 下带 `transform` 的规则会让 `required` 误报「不能为空」，即便字段有值（详见 [16 排错 §4](16-排错速查与FAQ.md#4-页面--dsl)） |
 | 导出 | 导出值按路径从行数据取，与列表展示一致 |
 
 - 前端提交的就是**字面键**（`formData['config.api_url']`，JS 对象键允许带点）；合并、解码全在后端（`CurdActionsTrait::mergeDotFields` / `CurdListTrait::expandDotColumns`）。
@@ -304,6 +317,30 @@ $grid->addAction(new MrOrderRetryAction());          // 行级（默认）
 $grid->addAction(new MrOrderBatchRetryAction());     // 批量：Action 内 ->batch(true)
 // $grid->addAction(…->global(true))                 // 全局按钮：工具栏右侧
 ```
+
+**不建 Action 类时的三个快捷方法**（逻辑写在控制器里，够用且最省事）：
+
+```php
+// 行级按钮 → 控制器 actionAudit(Request $request)
+$grid->action('audit', '审核')->icon('Check')->confirm('确定审核该记录？')->handler('audit');
+
+// 批量按钮（勾选行后可用）＝ action($name,$label)->batch(true)
+$grid->batAction('batch-on', '批量上架')->icon('Top');
+// 控制器 actionBatchOn(Request $request) 里读 $request->post('ids')
+
+// 全局 Excel 导入按钮 ＝ action($name,$label)->icon('Upload')->type('warning')
+//                            ->global(true)->form(fn($f) => $f->excel('file','Excel 文件'))
+$grid->importAction();                          // 默认 name=import / label=导入
+$grid->importAction('import', '导入订单');        // 也可自定义
+// 控制器 actionImport(Request $request) 里读 $this->excelRows('file')
+```
+
+`->handler('audit')` 表示「不实现 Action 子类，交给控制器的 `actionAudit()`」；方法名由按钮名推导
+（`batch-on` → `actionBatchOn`）。**只在 Action 子类自己实现了 `handle()` 时才走子类**，
+链式 `action()` 一律回退到控制器方法（否则会抛「Action xxx 未实现 handle」）。
+
+用 `make:curd --action / --bat-action / --import-action` 可以连按钮配置和这三个方法骨架一起生成，
+见 [快速开始 §6](02-快速开始.md#6-命令行生成-makecurd)。
 
 Action 类（放 `app/controller/admin/api/actions/`）用 `init()` 声明外观、`handle()` 写业务：
 
@@ -387,7 +424,10 @@ class ImportOrdersAction extends Action
 
 ### 6.2 Excel 导入字段 `$form->excel()`（multipart 直传 + 自动解析）
 
-Excel 导入推荐用专用 `excel` 字段：**不走 `/api/upload`**，本地选文件后以 multipart 表单把二进制直接提交到 action 接口，服务端自动解析，`handle` 里直接拿解析好的数据行：
+Excel 导入推荐用专用 `excel` 字段：**不走 `/api/upload`**，本地选文件后以 multipart 表单把二进制直接提交到 action 接口，服务端自动解析，`handle` 里直接拿解析好的数据行。
+
+> 只要「导入」这一个按钮时不用建 Action 类：`$grid->importAction()` 一行即可（见 §6 快捷方法），
+> 逻辑写在控制器 `actionImport()` 里。
 
 ```php
 $grid->addAction(new ImportOrdersAction());
@@ -464,28 +504,14 @@ $grid->setRules([...]);                             // 提交前校验（参考�
 
 无 grid 配置的动态 CURD 页会回退到「表字段」，该回退路径同样受 `_columns` 约束。
 
-**导出文件名**：默认 `{页面标题}_{YmdHis}.csv`，标题与 `/api/curd/config` 返回的 `data.title` **同源**
-（控制器 `$title` → 落库配置 `curd_configs.title` → 表名兜底）。响应同时给两个头：
+**导出文件名**：默认 `{页面标题}_{YmdHis}.csv`，标题与 `/api/curd/config` 的 `data.title` 同源
+（控制器 `$title` → 落库 `curd_configs.title` → 表名兜底）。响应同时给 `filename`（ASCII 兜底，
+中文剥空后退回表名）与 `filename*`（UTF-8，现代浏览器优先）两个头，前端 blob 下载名按同一规则拼。
 
-```
-Content-Disposition: attachment; filename="hf_accoount_waters_20260918205603.csv";
-                     filename*=UTF-8''%E8%AF%9D%E8%B4%B9%E6%B5%81%E6%B0%B4_20260918205603.csv
-```
-
-- 现代浏览器读 `filename*`，拿到中文标题（如 `话费流水_….csv`）；`filename` 是给老客户端（不认 `filename*`）的 ASCII 兜底。
-- 中文标题剥掉非 ASCII 后为空 → ASCII 兜底**退回表名**（`hf_accoount_waters`），不会退化成一串下划线。
-- 前端 blob 下载名（`link.download`）由前端自己拼一份同名文件（浏览器不读 `Content-Disposition`），两边规则一致。
-
-**单次导出上限**：超过则**直接报错**（`{"code":400,"msg":"本次将导出 N 条，超过单次导出上限 M 条…"}`），不做静默截断。
-
-| 位置 | 键 | 说明 |
-|---|---|---|
-| 宿主 `config/curd-admin.php`（推荐） | `'export_max_rows' => 100000` | 与 `upload_path` / `site` 同一个宿主配置文件，运维改这一个即可 |
-| 插件 `config/curd.php`（本文件内置默认） | `'export_max_rows' => 100000` | 兜底值；宿主 `config/curd-admin.php` 的同名顶层键会覆盖它 |
-
-- `<= 0` = 不限制。
-- 校验按**实际命中条数**：导出当前页按 `min(总数, size)`，导出选中按选中条数，导出全部按筛选后总数。
-- 前端会嗅探响应类型：拿到 JSON 就当错误提示，不会把报错内容当 CSV 下载下来（`dynamicCurd/index.vue` 的 `export`）。
+**单次导出上限**：`export_max_rows`（默认 `100000`，`<= 0` 不限制），超过**直接报错**不做静默截断：
+`{"code":400,"msg":"本次将导出 N 条，超过单次导出上限 M 条…"}`。按实际命中条数校验
+（当前页 `min(总数, size)` / 选中条数 / 筛选后总数）；前端嗅探响应类型，拿到 JSON 就当错误提示而非下载。
+配置项见 [配置参考](03-配置参考.md)。
 
 ## 9. 字段标题国际化 `__()`（symfony/translation）
 
@@ -504,8 +530,78 @@ $grid->column('id', __('ID'));                   // 显示「ID」
 | 宿主覆盖/补充 | `resource/translations/zh_CN/fields.php`（宿主根），同名 key 优先于插件内置 |
 | 加载顺序 | 插件 `config/translation.php` 配两段 path：先插件内置、后宿主，宿主缺 key 自动落到插件默认 |
 | 未命中 | 原样返回英文短语（如 `'Created at'`），不会报错、不会打崩页面 |
-| 生成器 | `make:curd` 生成的控制器标题已统一 `__()`（`created_at` → `__('Created at')`），见[快速开始 §6.3](01-快速开始.md) |
+| 生成器 | `make:curd` 生成的控制器标题已统一 `__()`（`created_at` → `__('Created at')`），见[快速开始 §6](02-快速开始.md#6-命令行生成-makecurd) |
 
 > 注意：`__()` 依赖「当前请求所属插件」= curd 的翻译配置（webman 按 `request()->plugin` 取
 > `config('plugin.curd.translation')`）。宿主如果没有该配置文件，插件请求会因缺 `locale` 报错——
 > 插件已内置 `plugin/curd/config/translation.php`，无需宿主再配。
+
+## 10. 自定义 JS `setCustomJs()` 与公共 API `window.curd`
+
+页面级注入一段 JS，用来写本页专属逻辑；**不需要再重复实现**取表单、弹窗、请求这些常见操作。
+
+```php
+$grid->setCustomJs(<<<'JS'
+function hello() {
+  curd.message.success('hello')
+}
+JS);
+$grid->setCustomCss('.my-tip { color: #e6a23c; }');
+```
+
+### 10.1 执行方式（为什么 help 里的 `@click` 能调到函数）
+
+customJs 以**经典 `<script>`** 注入（不是包在函数里），因此：
+
+- 顶层 `function hello(){}` / `var x` 会挂到**全局**，`help()` 里的 `@click="hello()"` 可直接调用；
+- 也可以显式 `window.hello = () => {}`；
+- 只在该段代码**内容变化**时重新注入，避免 `const` 重复声明报错（建议用 `function` / `var` / `window.x=`）；
+- 注入前会先挂好 `window.curd`，脚本里可直接用。
+
+### 10.2 `help()` 里写事件
+
+`Field::help()` 的内容用 `v-html` 渲染，**不会被 Vue 编译**，所以 `@click` 由前端事件委托执行：
+
+```php
+$form->text('config.api_token', __('Api token'))
+    ->help('留空沿用旧值 · <span @click="fillDemoToken()" style="cursor:pointer;color:var(--el-color-primary)">填入示例</span>');
+```
+
+支持的写法：
+
+| 写法 | 说明 |
+|---|---|
+| `@click="fn()"` / `@click="fn($event)"` | 调全局函数，`$event` 为原生事件；`this` 为被点元素 |
+| `@click.stop` / `.prevent` / `.self` / `.once` | 常用修饰符均支持（写在属性名上，与 Vue 一致） |
+| `v-on:click="fn()"` | 等价写法 |
+| `onclick="fn()"` | 原生内联事件，同样可用（全局函数已存在） |
+| `<span class="content-click">文本</span>` | 原有能力：点击把文本回填到当前字段 |
+
+### 10.3 公共 API `window.curd`
+
+| 分组 | 方法 / 属性 |
+|---|---|
+| 状态（只读） | `curd.config`、`curd.loading`、`curd.tableData`、`curd.pagination`、`curd.searchForm`、`curd.selectedRows`、`curd.dialogVisible`、`curd.dialogMode`、`curd.formData` |
+| 表单 | `getFormData()`（深拷贝）、`setFormData(patch)`、`resetForm()`、`validateForm()`、`submitForm()`、`getFormRef()` |
+| 弹窗 | `openAdd()`、`openEdit(row)`、`openView(row)`、`closeDialog()`、`closeView()` |
+| 列表 | `refresh()` / `reload()`、`search(patch?)`、`resetSearch()`、`getSelection()`、`clearSelection()`、`toggleRowSelection(row, selected)` |
+| 提示 | `curd.message.success/error/warning/info(msg)`、`curd.confirm(msg, title?)`、`curd.alert(...)`、`curd.prompt(...)` |
+| 请求 | `curd.get(url, params)`、`curd.post(url, data)`、`curd.put(url, data)`、`curd.del(url, params)`、`curd.request`（原实例） |
+| 工具 | `curd.openUrl(url)`、`curd.copyText(text)`、`curd.$nextTick(fn)` |
+
+请求走**与内部同一套 axios 实例**：自动带 token、走接口加密、统一错误提示，无需自己处理。
+
+```js
+// 例：表单里改一个值 + 提示
+curd.setFormData({ 'config.api_token': 'demo-' + Date.now() })
+curd.message.success('已填入')
+
+// 例：确认后调接口并刷新列表
+const ok = await curd.confirm('确定同步吗？').catch(() => false)
+if (ok) {
+  await curd.post('/api/curd/model/MyTest/sync', { id: curd.getFormData().id })
+  curd.refresh()
+}
+```
+
+> 兼容：旧名 `window.__curd` 仍然可用（与 `window.curd` 是同一个对象）；旧版的 `__curd.loadData/handleAdd/handleSearch/handleReset` 也已保留为 `curd.refresh/openAdd/search/resetSearch` 的等价方法。

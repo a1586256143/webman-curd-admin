@@ -16,16 +16,26 @@
 
 | 篇目 | 内容 |
 |---|---|
-| [总览与导航](docs/00-总览与导航.md) | 能力清单、按场景索引、**两类 DSL 与文件归属**、目录结构、环境要求、后台界面导览 |
-| [快速开始](docs/01-快速开始.md) | 引包三选一 → 初始化（Web 向导 / CLI）→ 全局中间件 → 启动验证 → 第一个 CURD → 业务建表 / 种子 / migration |
-| [配置参考](docs/02-配置参考.md) | 配置加载与覆盖规则、数据库连接、**插件调参 + 宿主管家键全量表**、路由「宿主优先」 |
-| [DSL · Schema 页面](docs/03-DSL-Schema页面.md) | 数组 DSL 拼展示型页面：布局块 / 容器块 / 统计卡 / 折线图 / 数据绑定 / 自定义 `.vue` |
-| [DSL · CURD 页面](docs/04-DSL-CURD页面.md) | `grid()` 五步建列表页：列 / 搜索 / 表单 / 场景字段 / 自定义 Action / Excel 导入 / 汇总条 / 导出 |
-| [菜单与权限](docs/05-菜单与权限.md) | 菜单 path 约定、一键生成权限、403 不泄露结构、默认落地页、两个权限开关的差别 |
-| [认证与登录](docs/06-认证与登录.md) | `auth_provider` 换登录来源、`login_handler` 接管登录接口、`auth_state_guard` 状态钩子、图形验证码 |
-| [接口加密与异常兜底](docs/07-接口加密与异常兜底.md) | RSA+AES 信封开关与构建、公钥每宿主一份、线上 `/api` 统一 500 + 编号、日志一行一条 |
-| [升级 · 部署 · 发布](docs/08-升级与生产部署.md) | 升级安全与同步脚本、卸载、supervisor / Nginx / 密钥 / 备份 / 回滚、打 zip 与 CI |
-| [排错速查与 FAQ](docs/09-排错速查与FAQ.md) | 按现象查：安装 / 运行 / 权限 / DSL / 登录 / 加密 / 日志 / 升级 + 常见问题 |
+| [总览与导航](docs/00-总览与导航.md) | 三条阅读路径、文档地图、能力清单、按场景索引、三条约定、环境要求、后台界面导览、代码归属 |
+| [安装指南](docs/01-安装指南.md) | **空项目 → 后台能登录**：环境自检 → 建骨架 → 引包 → 配库 → 建表（向导 / CLI）→ 宿主接线 → 验收清单 → 20+ 条安装期坑 |
+| [快速开始](docs/02-快速开始.md) | 五步建第一个 CURD（模型 / 控制器 / 路由 / 菜单）、配置生成器、`make:curd`、业务建表 / 种子 / migration |
+| [配置参考](docs/03-配置参考.md) | 配置加载与覆盖规则、数据库连接、**插件调参 + 宿主管家键全量表**、路由「宿主优先」 |
+| [DSL · Schema 页面](docs/10-DSL-Schema页面.md) | 数组 DSL 拼展示型页面：布局块 / 容器块 / 统计卡 / 折线图 / 数据绑定 / 自定义 `.vue` |
+| [DSL · CURD 页面](docs/11-DSL-CURD页面.md) | `grid()` 建列表页：列 / 搜索 / 表单 / 场景字段 / 自定义 Action / Excel 导入 / 汇总条 / 导出 / `__()` / 自定义 JS |
+| [菜单与权限](docs/12-菜单与权限.md) | 菜单 path 约定、一键生成权限、403 不泄露结构、默认落地页、两个权限开关的差别 |
+| [认证与登录](docs/13-认证与登录.md) | `auth_provider` 换登录来源、`login_handler` 接管登录接口、`auth_state_guard` 状态钩子、图形验证码 |
+| [接口加密与异常兜底](docs/14-接口加密与异常兜底.md) | RSA+AES 信封开关与构建、公钥每宿主一份、线上 `/api` 统一 500 + 编号、日志一行一条 |
+| [升级 · 部署 · 发布](docs/15-升级与生产部署.md) | 升级安全与同步脚本、卸载、supervisor / Nginx / 密钥 / 备份 / 回滚、打 zip 与 CI、文档站构建、仓库结构 |
+| [排错速查与 FAQ](docs/16-排错速查与FAQ.md) | 按现象查：安装 / 运行 / 权限 / DSL / 登录 / 加密 / 日志 / 升级 + 常见问题 |
+
+**API 参考**（按类查方法，与源码逐行对齐）：
+
+| 篇目 | 内容 |
+|---|---|
+| [API · Grid](docs/20-API-Grid.md) | `Grid` 全部方法：构造、列、搜索、表单、tabs / steps、详情、操作、汇总、样式开关、`customJs` |
+| [API · Column](docs/21-API-Column.md) | `Column` 全部方法：布局、映射、HTML、时间、图片、链接、`remote`、行内编辑、兜底 |
+| [API · Form / Field](docs/22-API-Form-Field.md) | `Form` 布局 + 15 种字段类型 + `Field` 通用方法：点式字段、`help`、`quickOptions`、`link`、级联、场景控制 |
+| [API · Filter / Action](docs/23-API-Filter-Action.md) | `Filter` 全部搜索方法；`Action` 行级 / 批量 / 全局 / 弹窗 / `jump` / `api` / 权限角色 / Excel 导入 |
 
 > 文档站由 `docs/tools/build_docs.cjs` 生成（需 `marked`）：改完 md 后在 `docs/` 执行
 > `node tools/build_docs.cjs` 重新生成 `index.html`。文档之间请用 `[标题](NN-主题.md)`
@@ -56,7 +66,7 @@ php start.php start
 
 之后写业务：`app/model/APackage.php`（模型）→ 继承 `BaseCurdController` 的控制器 →
 `RouteControllerRegistry::registerMany([...])` 注册路由 → 后台「菜单管理」登记菜单与授权。
-完整走法见 [快速开始](docs/01-快速开始.md)。
+完整走法见 [快速开始](docs/02-快速开始.md)。
 
 > ⚠️ `composer audit` 红字（`Failed to audit installed packages.`）是已知尾部告警：
 > audit 硬编码访问 `packagist.org`，国内常不可达，命令本身 `exit 0`、不影响安装。
@@ -143,11 +153,11 @@ git tag v1.1.0 && git push origin v1.1.0
 ```
 
 升级与部署的完整流程（`check-plugin-overrides.sh` / `sync-plugin.sh` / supervisor / Nginx /
-备份回滚）见 [升级 · 部署 · 发布](docs/08-升级与生产部署.md)。
+备份回滚）见 [升级 · 部署 · 发布](docs/15-升级与生产部署.md)。
 
 ## 与本项目 webman-huafei-platform 的关系
 
 本包由 `webman-huafei-platform/plugin/curd` 发布而来，演进分三阶段（**M1** 自包含下沉 →
 **M2** 开箱即用 → **M3** 管理面内置 + 空项目端到端验证，另有 **M5** 宿主旧副本下线）。
 宿主开发期的两条命令仍是 `scripts/release.sh`（回灌）与 `scripts/build-frontend.sh`（重建前端）。
-详细记录见 [升级 · 部署 · 发布](docs/08-升级与生产部署.md) §6。
+详细记录见 [升级 · 部署 · 发布](docs/15-升级与生产部署.md) §6。

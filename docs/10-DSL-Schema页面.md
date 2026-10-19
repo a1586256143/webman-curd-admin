@@ -2,7 +2,7 @@
 
 > 展示型页面（首页 / 看板）：后端 PHP 声明组件树 → 前端 `SchemaRenderer` 递归渲染。
 > **纯数据、无脚本**，改后端即生效、前端无需重新构建。
-> 对应的 CURD 列表页 DSL 见[DSL · CURD 页面](04-DSL-CURD页面.md)，分层与文件归属见[webman-curd-admin · 总览与导航](00-总览与导航.md) 的 §3。
+> 对应的 CURD 列表页 DSL 见[DSL · CURD 页面](11-DSL-CURD页面.md)，分层与文件归属见[总览 §9 代码该写在哪](00-总览与导航.md#9-代码该写在哪插件-vs-业务)。
 
 ---
 
@@ -58,7 +58,7 @@ class DashPage
 PageRegistry::register('dash', [\app\controller\admin\api\DashPage::class, 'schema']);
 ```
 
-**③ 建菜单**，`path` 填 `/custom-page/dash`：
+**③ 建菜单**，`path` 填 `/custom-page/dash` —— 后台「菜单管理」新增，或宿主带 `make:permission` 时用命令：
 
 ```bash
 php webman make:permission --name 概览看板 --slug dash-page --type 1 --path /custom-page/dash --icon DataBoard --sort 3
