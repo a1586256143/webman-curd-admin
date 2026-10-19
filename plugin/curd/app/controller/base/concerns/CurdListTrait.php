@@ -12,6 +12,12 @@ use support\Request;
 trait CurdListTrait
 {
     /**
+     * 点式列自动预加载的关联名（eagerLoadDotRelations 里 with() 的 key）。
+     * 仅服务于 rowValueByPath 取点式值，展开后从输出行剔除，避免整个关联对象混进列表 JSON。
+     */
+    protected array $autoWithRelations = [];
+
+    /**
      * 输出前端 CURD 配置（供 dynamicCurd 渲染）
      */
     public function config(): array
@@ -236,6 +242,8 @@ trait CurdListTrait
         $list = $this->rowsToArray($list);
         // 点式列（prop 形如 config.api_url）：根字段 JSON 字符串解码 + 字面 key 扁平值
         $list = $this->expandDotColumns($list);
+        // 剔除自动预加载的关联对象（with('platform') 不应出现在列表 JSON 里）
+        $list = $this->stripEagerRelations($list);
         $payload['list'] = $list;
 
         return json(['code' => 200, 'msg' => 'success', 'data' => $payload]);
@@ -429,8 +437,31 @@ trait CurdListTrait
             }
         }
         if ($with) {
-            $query->with(array_keys($with));
+            $this->autoWithRelations = array_keys($with);
+            $query->with($this->autoWithRelations);
         }
+    }
+
+    /**
+     * 从输出行剔除点式列自动预加载的关联（如 with('platform') 产生的 platform 键）：
+     * Eloquent toArray() 会把已加载的关联一并输出，前端只需要 'platform.name' 这类字面 key，
+     * 不需要整个关联对象。必须在 expandDotColumns 之后执行（展开还要读关联数组取值）。
+     */
+    protected function stripEagerRelations(array $rows): array
+    {
+        if (empty($this->autoWithRelations) || empty($rows)) {
+            return $rows;
+        }
+        foreach ($rows as $i => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            foreach ($this->autoWithRelations as $rel) {
+                unset($row[$rel]);
+            }
+            $rows[$i] = $row;
+        }
+        return $rows;
     }
 
     /**

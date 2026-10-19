@@ -81,6 +81,10 @@ $grid->column('config.api_url', __('Api url'));   // JSON 字段取键（字段�
 $grid->column('user.name', __('User'));           // 关联关系取字段（不是字段才走关联）
 ```
 
+> 关联预加载**只用于取点式值**：`with('user')` 载入的关联对象不会出现在列表 JSON 里，
+> 行数据只有真实字段 + `user.name` 这类字面 key（避免整个关联对象被序列化下发）。
+> 若确实要输出关联内容，用 `->display()` 自行拼装。
+
 **弹窗 / 行内展开**：`->modal('标题', $content)` / `->expand($content)`，内容支持
 `Table` / `Card` / `Html` 组件、闭包、类名、HTML 模板 —— 见 [Column §9](21-API-Column.md#9-弹窗与行内展开)。
 
