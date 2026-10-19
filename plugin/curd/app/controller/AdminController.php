@@ -3,6 +3,7 @@ namespace plugin\curd\app\controller;
 
 use plugin\curd\app\auth\Captcha;
 use plugin\curd\app\CurdDb;
+use plugin\curd\app\Generator;
 use plugin\curd\app\rbac\Rbac;
 use support\Request;
 
@@ -96,8 +97,11 @@ class AdminController
                 'copyright' => '',
                 'favicon'   => '',
             ], $site, [
-                'home_page'       => $this->normalizeHomePage($homePage),
-                'captcha_enabled' => Captcha::enabled(),
+                'home_page'         => $this->normalizeHomePage($homePage),
+                'captcha_enabled'   => Captcha::enabled(),
+                // 配置生成器开关（dev 开 / prod 关，见 app/Generator.php）：
+                // 前端据此隐藏「配置生成器」菜单并拦截该路由，后端接口另有 403 兜底
+                'generator_enabled' => Generator::enabled(),
             ]),
         ]);
     }

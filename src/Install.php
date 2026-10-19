@@ -287,6 +287,10 @@ return [
     // 'captcha_ttl'     => 300,
     // 'captcha_length'  => 4,
 
+    // 配置生成器（后台 /curd-generator）：不配 = 跟随 APP_DEBUG（dev 开 / prod 关）
+    // 生产环境建议显式写 false，彻底禁用「选表生成页面」入口（后端接口同时 403）
+    // 'generator_enabled' => false,
+
     // 连接名（config/database.php connections 键；单库下两者指向同一 DB_NAME）：
     // 'admin_connection'    => 'mysql',            // 认证库连接名
     // 'business_connection' => 'mysql_business',   // 业务模型默认连接名

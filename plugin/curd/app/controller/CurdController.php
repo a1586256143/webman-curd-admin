@@ -5,6 +5,7 @@ use plugin\curd\app\controller\base\BaseCurdController;
 use plugin\curd\app\controller\base\DynamicCurdController;
 use plugin\curd\app\CurdConfigRegistry;
 use plugin\curd\app\CurdDb;
+use plugin\curd\app\Generator;
 use plugin\curd\app\ModelRegistry;
 use plugin\curd\app\RouteControllerRegistry;
 use plugin\curd\app\model\CurdConfigs;
@@ -266,6 +267,10 @@ class CurdController
      */
     public function saveConfig(Request $request)
     {
+        if (!Generator::enabled()) {
+            return Generator::denied();
+        }
+
         $data      = $request->post();
         $table     = $data['table']     ?? '';
         $title     = $data['title']     ?? $table;
@@ -352,6 +357,10 @@ class CurdController
      */
     public function tables()
     {
+        if (!Generator::enabled()) {
+            return Generator::denied();
+        }
+
         $tables = $this->businessDb()->select('SHOW TABLES');
         $tableList = [];
         foreach ($tables as $table) {
@@ -370,6 +379,10 @@ class CurdController
      */
     public function models()
     {
+        if (!Generator::enabled()) {
+            return Generator::denied();
+        }
+
         ModelRegistry::scanModels();
         $list = [];
         foreach (ModelRegistry::all() as $name => $class) {
@@ -391,6 +404,10 @@ class CurdController
      */
     public function schema(Request $request)
     {
+        if (!Generator::enabled()) {
+            return Generator::denied();
+        }
+
         $table = $request->get('table');
         if (!$table) {
             return json(['code' => 400, 'msg' => '表名不能为空']);
@@ -445,6 +462,10 @@ class CurdController
      */
     public function generate(Request $request)
     {
+        if (!Generator::enabled()) {
+            return Generator::denied();
+        }
+
         $table = $request->get('table');
         $title = $request->get('title', $table);
 

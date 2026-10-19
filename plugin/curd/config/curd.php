@@ -99,6 +99,13 @@ $defaults = [
     // 验证码位数（3~6，越界回落 4）；字符集已剔除易混的 i/l/o/0/1（见 app/auth/Captcha.php）
     'captcha_length' => 4,
 
+    // ===== 配置生成器（后台 /curd-generator 页面）=====
+    // null（默认）= 跟随调试模式：APP_DEBUG=true 视为开发环境→开，false 视为生产→关。
+    // true / false  = 强制开关，覆盖上面的自动判定。
+    // 关掉后：前端隐藏该菜单并拦截路由；后端 /api/curd/{tables,models,schema,save-config,generate}
+    //         一律 403 —— 生产环境不会被误操作写进 curd_configs（落库配置会盖住控制器 grid()）。
+    'generator_enabled' => null,
+
     // /api/admin/*（用户/角色/个人中心）是否强制 RBAC 校验
     //   false（默认）= 仅登录即可（与宿主历史行为一致，兼容存量项目）
     //   true          = 走 casbin 校验，obj 由路径推导（/api/admin/users → obj=admin act=users）
