@@ -231,8 +231,89 @@ $grid->column('order_no', __('Order no'))->modal('订单详情', function ($valu
 |---|---|---|
 | 组件实例 | `new Table(...)` / `new Card(...)` / `new Html(...)` | 推荐，最直观 |
 | 闭包 | `fn($value, $row) => new Card([...])` | `$this` 绑定当前行，可 `$this->id` 取字段 |
-| 类名 | `OrderDetailModal::class` | 实例化后依次找 `render($row)` / `schema($row)` / `__invoke($row)` |
+| 类名 | `OrderDetailModal::class` | 实例化后依次找 `render($row)` / `schema($row)` / `make($row)` / `content($row)` / `__invoke($row)` |
 | HTML 模板 | `'<b>{order_no}</b> 金额 {amount}'` | `{prop}` 取行字段，`{value}` 取本列值 |
+
+### 9.1.1 用类写弹窗内容（`OrderDetailModal`）
+
+弹窗/展开的类**没有基类和接口要求**，就是一个普通类：
+
+```php
+<?php
+namespace app\controller\admin\api\modals;
+
+use plugin\curd\app\dsl\component\Card;
+
+class OrderDetailModal
+{
+    // $row = 当前行 Eloquent Model（不是数组），可直接 $row->字段 / $row->关联
+    public function render($row)
+    {
+        return new Card([
+            '订单号'   => $row->order_no,
+            '金额'     => '￥' . $row->amount,
+            '状态'     => $row->status_text ?? '-',
+            '创建时间' => (string)$row->created_at,
+        ], '订单详情', ['column' => 2]);   // 第三个参数：卡片分列数
+    }
+}
+```
+
+```php
+use app\controller\admin\api\modals\OrderDetailModal;
+
+$grid->column('id', 'ID')->modal('详情', OrderDetailModal::class);
+```
+
+**契约**
+
+| 项 | 说明 |
+|---|---|
+| 实例化 | `support\Container::get($class)` —— 构造函数可注入依赖（Service / 配置等） |
+| 方法查找顺序 | `render($row)` → `schema($row)` → `make($row)` → `content($row)` → `__invoke($row)`，命中第一个即用；都没有则不弹（静默） |
+| 返回值 | ① `Component` 实例（`Table` / `Card` / `Html`）；② `['type' => 'table'\|'card'\|'html', ...]` 数组；③ 字符串（按 HTML 渲染）；④ `null` = 该行不弹 |
+| 执行时机 | 列表接口里**逐行**执行（`_modal_{prop}` 随行下发），所以别在里面跑重查询 |
+| 位置 | 任意能被 composer 自动加载的命名空间，惯例 `app/controller/admin/api/modals/` |
+
+**三种常见形态**
+
+```php
+// ① 明细表（配合预加载，见下方注意）
+public function render($row)
+{
+    return new Table(
+        ['goods_name' => '商品', 'qty' => '数量', 'price' => '单价'],
+        $row->items->toArray(),
+        ['stripe' => true, 'maxHeight' => 320]
+    );
+}
+
+// ② 自定义 HTML（v-html 渲染，只放自己拼的可信内容）
+public function render($row)
+{
+    return new Html('<div>订单 <b>' . htmlspecialchars($row->order_no) . '</b> 已支付</div>');
+}
+
+// ③ 按状态决定弹不弹
+public function render($row)
+{
+    return $row->status === 0 ? null : new Card([...], '订单详情');
+}
+```
+
+**性能注意**：`render` 在列表接口逐行调用，弹窗里要用的关联必须先预加载，否则 N 行 = N 次查询：
+
+```php
+public function grid(): Grid
+{
+    $grid = new Grid(new Order());
+    $grid->getModel()->with(['items']);      // 弹窗里 $row->items 才不会逐行查库
+    $grid->column('id', 'ID')->modal('详情', OrderDetailModal::class);
+    return $grid;
+}
+```
+
+> 弹窗默认宽 720px；宽表格用 `Table` + `maxHeight`，或改用 `->expand()` 行内展开（见 §9.3 优先级）。
 
 ### 9.2 内置组件
 
