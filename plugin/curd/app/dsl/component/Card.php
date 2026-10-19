@@ -7,10 +7,11 @@ namespace plugin\curd\app\dsl\component;
  * 用法：
  *   new Card(['订单号' => 'A001', '金额' => 100], '订单详情')
  *
- *   // 也可以细配（value 支持 HTML 时设 html => true）
+ *   // 也可以细配：html => true 强制按 HTML 渲染、false 强制文本；
+ *   // 都不写时前端自动检测（值含真实 HTML 标签如 <span>/<b> 才渲染，纯文本照常转义）
  *   new Card([
  *       ['label' => '订单号', 'value' => 'A001'],
- *       ['label' => '状态',   'value' => '<el-tag>已支付</el-tag>', 'html' => true],
+ *       ['label' => '状态',   'value' => '<span class="el-tag el-tag--success">已支付</span>'],
  *   ], '订单详情', ['column' => 2])
  *
  * options：column（每行几列，默认 1）/ border / size
@@ -50,14 +51,15 @@ class Card extends Component
                 $out[] = [
                     'label' => (string)($value['label'] ?? ''),
                     'value' => $this->stringify($value['value'] ?? ''),
-                    'html' => (bool)($value['html'] ?? false),
+                    // null = 未表态（前端自动检测：值含真实 HTML 标签才按 HTML 渲染）
+                    'html' => isset($value['html']) ? (bool)$value['html'] : null,
                 ];
                 continue;
             }
             $out[] = [
                 'label' => (string)$key,
                 'value' => $this->stringify($value),
-                'html' => false,
+                'html' => null,
             ];
         }
         return $out;

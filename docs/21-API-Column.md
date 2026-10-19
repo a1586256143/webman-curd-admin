@@ -342,7 +342,10 @@ new Html('<div class="tip">任意 <b>HTML</b></div>');
 - `Table` 的列也可以细配：`[['prop' => 'id', 'label' => 'ID', 'width' => 80, 'align' => 'center']]`，
   `options` 直接透传 el-table（`border` / `stripe` / `maxHeight` / `size` / `emptyText`）；
 - `Card` 的 items 支持 `['标签' => '值']`，或 `[['label' => '..', 'value' => '..', 'html' => true]]`；
-- `Html` 按 v-html 渲染，只放自己拼的可信内容。
+- `Html` 按 v-html 渲染，只放自己拼的可信内容；
+- **HTML 自动检测（所有组件通用）**：`Table` 单元格 / `Card` 条目的值只要含真实 HTML 标签
+  （如 `<span class="el-tag">池</span>`）就自动按 HTML 渲染，纯文本照常转义；
+  `Card` 条目可用 `html => true` 强制、`html => false` 强制文本。
 
 > 弹窗默认宽 720px；`expand` 是通栏整行展开，宽度不受列宽限制，宽内容（明细表）优先用 `expand`。
 
