@@ -319,7 +319,22 @@ public function grid(): Grid
 ### 9.2 内置组件
 
 ```php
+// ① 键值对：键 = 行数据字段名
 new Table(['id' => 'ID', 'name' => '名称'], $rows, ['stripe' => true, 'maxHeight' => 320]);
+
+// ② 纯标题列表：标题按顺序对齐行数据的键（键序 = 各行键的首次出现顺序）
+new Table(['标题', '标题2'], [
+    ['xxx' => '111', 'xxx2' => '113'],
+    ['xxx' => '1222', 'xxx2' => '112'],
+]);
+// 行也可以是纯列表（按位置与标题对齐）：new Table(['ID', '名称'], [[1, 'A'], [2, 'B']]);
+
+// ③ 列数组细配（width / align / minWidth / fixed 直接透传 el-table-column）
+new Table([
+    ['prop' => 'id',   'label' => 'ID',   'width' => 80, 'align' => 'center'],
+    ['prop' => 'name', 'label' => '名称', 'minWidth' => 160],
+], $rows, ['stripe' => true, 'maxHeight' => 320]);
+
 new Card(['订单号' => 'A001', '状态' => '已支付'], '订单详情', ['column' => 2]);
 new Html('<div class="tip">任意 <b>HTML</b></div>');
 ```
