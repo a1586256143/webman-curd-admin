@@ -485,6 +485,19 @@ class Column extends BaseDsl
     }
 
     /**
+     * 该列是否【显式】设置过 html（true / false），未设置返回 null
+     *
+     * 用途：服务端 display 自动 HTML 检测只在「未显式设置」时生效——
+     *   ->html()      显式开启，永远按 HTML 渲染（不再检测）
+     *   ->html(false) 显式关闭，即使返回内容带标签也按文本转义
+     *   都没写        交给自动检测（内容含 HTML 标签则按 HTML 渲染）
+     */
+    public function htmlExplicit(): ?bool
+    {
+        return array_key_exists('html', $this->config) ? (bool)$this->config['html'] : null;
+    }
+
+    /**
      * 在显示值前面添加固定前缀
      * 例：->prefix('$')  原数 100 → $100
      * 可与 display() 组合：先经 display 闭包处理，再拼接前缀

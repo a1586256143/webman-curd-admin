@@ -445,6 +445,24 @@ class Grid extends BaseDsl
     }
 
     /**
+     * display 列的 html 显式配置：[prop => true|false|null]
+     *
+     * null = 该列没写 ->html()/->html(false)，服务端可对返回内容做 HTML 自动检测；
+     * true/false = 开发者显式表态，按表态执行，不再自动检测。
+     */
+    public function displayHtmlConfig(): array
+    {
+        $config = [];
+        foreach ($this->columns as $column) {
+            if (!$column->getDisplayHandler()) {
+                continue;
+            }
+            $config[$column->toArray()['prop']] = $column->htmlExplicit();
+        }
+        return $config;
+    }
+
+    /**
      * 收集 href 动态链接处理器：[prop => callable]（PHP 服务端用，不进 JSON）
      */
     public function hrefHandlers(): array

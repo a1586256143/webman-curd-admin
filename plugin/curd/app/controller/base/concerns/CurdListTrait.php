@@ -553,13 +553,25 @@ trait CurdListTrait
         if (empty($handlers)) {
             return $list;
         }
+        // 显式 html 配置（null=未表态，允许自动检测）+ 全局开关（宿主 config/curd-admin.php 可关）
+        $htmlConfig = $grid->displayHtmlConfig();
+        $autoHtml = (bool)config('curd-admin.display_auto_html', true);
 
         foreach ($list as $i => $row) {
             foreach ($handlers as $prop => $handler) {
                 $value = $this->rowValue($row, $prop);
                 try {
                     $bound = $this->bindRowHandler($handler, $row);
-                    $row->setAttribute('display_' . $prop, $bound($value, $row));
+                    $out = $bound($value, $row);
+                    $row->setAttribute('display_' . $prop, $out);
+                    // HTML 自动检测：该列没显式 ->html()/->html(false) 时，
+                    // 返回值里出现真实标签就按 HTML 渲染（逐行标记 display_html_{prop}）
+                    if (($htmlConfig[$prop] ?? null) === null
+                        && $autoHtml
+                        && is_string($out)
+                        && $this->looksLikeHtml($out)) {
+                        $row->setAttribute('display_html_' . $prop, true);
+                    }
                 } catch (\Throwable $e) {
                     $row->setAttribute('display_' . $prop, $value);
                 }
@@ -568,6 +580,22 @@ trait CurdListTrait
         }
 
         return $list;
+    }
+
+    /**
+     * 粗判一段文本是否含 HTML 标签（用于 display 自动渲染）
+     *
+     * 只认「<字母 开头 + 合法标签名 + 可选属性 + >」，因此：
+     *   '<span class="a">x</span>' → true
+     *   'a < b 且 b > c'           → false（`<` 后是空格）
+     *   '5 < 10'                   → false
+     */
+    protected function looksLikeHtml(string $text): bool
+    {
+        if ($text === '' || !str_contains($text, '<')) {
+            return false;
+        }
+        return (bool)preg_match('/<([a-z][a-z0-9]*)\b[^<>]*>/i', $text);
     }
 
     /**

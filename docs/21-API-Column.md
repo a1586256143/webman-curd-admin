@@ -80,6 +80,14 @@ $grid->column('name', __('Name'))
     ->display(fn($v, $row) => '<b>' . htmlspecialchars($v) . '</b>')
     ->html();
 
+// ②' 闭包返回 HTML 但没写 ->html()：自动检测（默认开启，见下方说明）
+$grid->column('ip_status', __('IP状态'))
+    ->display(function () {
+        return $this->getOther()['proxy_cache'] ?? ''
+            ? "<el-tag type='info'>池</el-tag>"
+            : "<el-tag type='danger'>兜底</el-tag>";
+    });   // 返回值里出现真实标签 → 自动按 HTML 渲染
+
 // ③ 字符串模板：自动按 HTML 渲染，{prop} 取行字段、{value} 取原始值
 $grid->column('name', __('Name'))
     ->display('<a href="/admin/user/{id}" target="_blank">{name}</a>');
@@ -89,6 +97,22 @@ $grid->column('price', __('Price'))->prefix('￥')->suffix(' 元');
 ```
 
 > 闭包内 `$this` 绑定为**当前行**，也可用第二个参数 `$row`。
+
+**HTML 自动检测（`display_auto_html`，默认开启）**
+
+服务端逐行判断闭包返回值：命中「`<字母…>` 真实标签」就按 HTML 渲染，纯文本照常转义。判定规则：
+
+| 返回值 | 是否按 HTML 渲染 |
+|---|---|
+| `<span class="label">池</span>` / `<el-tag type="info">池</el-tag>` | ✅ 是 |
+| `价格 <span>12</span> 元` | ✅ 是（含真实标签） |
+| `纯文本` / `5 < 10` / `a < b 且 b > c` / `<>` | ❌ 否（`<` 后不是标签名） |
+
+优先级：`->html()` 强制 HTML → `->html(false)` 强制文本 → 都没写才走自动检测。
+全局关闭：宿主 `config/curd-admin.php` 加 `'display_auto_html' => false`（之后闭包返回 HTML 必须显式 `->html()`）。
+
+> ⚠️ 自动检测开启后，返回值不再自动转义：拼接外部数据（如代理 IP、用户昵称）请自行 `htmlspecialchars()`。
+> 该能力需要新前端产物（`display_html_{prop}` 标记），升级插件后**必须重建/同步前端**。
 
 **可复制列**：
 

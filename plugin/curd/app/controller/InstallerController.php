@@ -366,6 +366,8 @@ return [
     // 'image_server'  => 'http://your-static.com/', // 图片/静态资源前缀
     // 导出上限（0 = 不限制）
     // 'export_max_rows' => 100000,
+    // display 闭包返回值含 HTML 标签时自动按 HTML 渲染（false = 关闭，需显式 ->html()）
+    // 'display_auto_html' => true,
     // 登录图形验证码（Redis 不可用时应急设为 false 并重启）
     // 'captcha_enabled' => true,
     // 'captcha_ttl'     => 300,

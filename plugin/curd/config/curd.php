@@ -61,6 +61,14 @@ $defaults = [
     // 前端会把它当错误提示而不是下载文件（见 dynamicCurd/index.vue 的 export）。
     'export_max_rows' => 100000,
 
+    // display 闭包返回值的 HTML 自动检测（逐行判断，默认开启）。
+    //   true  = 该列没写 ->html() / ->html(false) 时，返回值里出现真实 HTML 标签
+    //           （如 <span class="x">池</span>、<el-tag type="info">池</el-tag>）就按 HTML 渲染；
+    //   false = 全局关闭，闭包返回 HTML 必须显式 ->html() 才渲染。
+    // 显式 ->html() 永远按 HTML、->html(false) 永远按文本，不受本开关影响。
+    // ⚠️ 开启后 display 返回值不再自动转义：拼接外部数据请自行 htmlspecialchars()。
+    'display_auto_html' => true,
+
     // ===== 接口异常兜底（CurdExceptionHandler 异常处理器）=====
     // SQL 报错等未捕获异常的统一出口，见 app/exception/CurdExceptionHandler.php。
     // 生效方式：插件自带 config/exception.php 的 '' 键 → 插件路由自动生效；

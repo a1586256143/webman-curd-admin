@@ -56,7 +56,7 @@ class MROrdersController extends BaseCurdController
 | `->label([0=>'danger',1=>'success'])` | 值→el-tag 颜色（配合 map 成徽标） |
 | `->display(fn() => …)` | 自定义渲染：回调内 `$this` 即当前行，可访问 `$this->status` 等 |
 | `->display('<b>{name}</b>')` | **字符串模板 = HTML**：直接按 HTML 渲染（v-html）；`{prop}` 取当前行字段、`{value}` 取该列原始值，如 `<a href="/u/{id}">{name}</a>` |
-| `->display(fn($v) => '<i>'.$v.'</i>')->html()` | 闭包返回 HTML 时需显式 `->html()`（默认按文本转义，防误渲染）；`->html(false)` 可关闭 |
+| `->display(fn($v) => '<i>'.$v.'</i>')` | 闭包返回 HTML：**默认自动检测**（返回值含真实标签就按 HTML 渲染）；`->html()` 强制 HTML、`->html(false)` 强制文本（详见 [Column §3](21-API-Column.md#3-显示值与-html)） |
 | `->prefix('￥')` | 前缀文案（金额） |
 | `->datetime()` / `->date()` | 时间格式化显示 |
 | `->image(int $w, int $h)` / `->staticHost()` / `->open('_blank')` | 图片列 / 静态资源 host / 点击新窗口 |
