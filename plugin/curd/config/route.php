@@ -20,21 +20,27 @@
 use Webman\Route;
 
 // ============================================================
-// 宿主后台路由（可选）：项目根目录 admin-route.php
+// 宿主后台路由（可选）：config/admin-route.php
 // ------------------------------------------------------------
 // 后台业务路由集中放这个文件（RouteControllerRegistry 注册 + 后台专用 Route::group），
 // 与项目自身的 config/route.php 分开维护；插件在这里自动加载，宿主零改动。
 //
-// ⚠️ 为什么在项目根目录，而不是 config/admin-route.php：
+// ⚠️ 文件内容是「return 数组 + 闭包」，不能直接调 Route::xxx()：
 //    webman 启动时会把 config/ 下除 route.php 以外的所有 .php 当【配置】加载
-//    （Config::loadFromDir，早于路由初始化），路由文件放进去会直接
-//    “Call to a member function addRoute() on null” 致命错误。
+//    （Config::loadFromDir，早于路由初始化，且要求 return 数组），此时 Route 还没
+//    初始化，顶层直接 Route::group() 会报
+//    “Call to a member function addGroup() on null”。
+//    所以约定：config/admin-route.php return ['register' => function () { ... }]，
+//    由插件在路由加载阶段取出这个闭包执行（就是下面这几行）。
 //
 // 放在插件路由【之前】：后台自定义路由先注册，插件同路径路由会被下方
 // curd_route() 的冲突检测跳过（宿主优先原则）。
-// require_once：宿主若已在 config/route.php 里自行 require，这里不会重复执行。
 // ============================================================
-if (is_file(base_path('admin-route.php'))) {
+$curdAdminRoute = config('admin-route.register');
+if ($curdAdminRoute instanceof \Closure) {
+    $curdAdminRoute();
+} elseif (is_file(base_path('admin-route.php'))) {
+    // 兼容老位置：项目根目录 admin-route.php（直接写 Route::xxx() 的旧写法）
     require_once base_path('admin-route.php');
 }
 

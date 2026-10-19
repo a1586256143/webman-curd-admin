@@ -95,7 +95,7 @@ class MakeCurdCommand extends Command
   php webman make:curd -t hf_goods --action=audit:审核 --bat-action=batch-on:批量上架 --import-action
 
 <comment>路由注册：</comment>
-  --register  优先写项目根目录 admin-route.php（后台路由独立文件，插件自动加载）；
+  --register  优先写 config/admin-route.php（后台路由独立文件，插件自动加载）；
               没有该文件时写 config/route.php。写前备份 .bak，写后 php -l 自检。
 HELP);
     }
@@ -215,11 +215,14 @@ HELP);
 
         // ---------- 7. 路由注册 ----------
         $registerLine = "    '" . $routePath . "' => \\" . $controllerFqcn . "::class,";
-        // 优先写项目根目录 admin-route.php（后台路由独立文件，插件自动加载）；
-        // 宿主没有这个文件时退回 config/route.php（老项目行为不变）
-        $adminRouteFile = base_path() . '/admin-route.php';
-        $registerFile   = is_file($adminRouteFile) ? $adminRouteFile : base_path() . '/config/route.php';
+        // 目标优先级：config/admin-route.php（标准位置）→ 项目根 admin-route.php（旧位置）
+        //            → config/route.php（都没有时的老行为）
+        $registerFile = $this->routeRegisterTarget();
         if ($input->getOption('register')) {
+            // 目标就是 config/admin-route.php 但它不存在时，按模板创建一个（含空 registerMany 区块）
+            if (!is_file($registerFile) && $registerFile === base_path() . '/config/admin-route.php') {
+                $this->createAdminRouteFile($registerFile);
+            }
             $result = $this->registerRoute($registerFile, $registerLine);
             if ($result === true) {
                 $output->writeln('');
@@ -447,7 +450,8 @@ use plugin\curd\app\dsl\Grid;
  * 表：{$table}    路由：{$routePath}
  *
  * ⚠️ 本控制器【不要】进 curd_configs 配置表，只在宿主路由文件注册路径 ——
- *    推荐放项目根目录 admin-route.php（插件自动加载，与 config/route.php 分开）；
+ *    推荐放 config/admin-route.php（插件自动加载，与 config/route.php 分开；
+ *    文件内是 return ['register' => function () { ... }]，路由写在闭包里）；
  *    没有该文件时放 config/route.php 也一样。这样改下面的 grid() 立即生效，
  *    不会被配置生成器保存的落库配置覆盖：
  *
@@ -1003,6 +1007,87 @@ PHP;
     // 文件写入 / 路由注册
     // ============================================================
 
+    /**
+     * 路由注册写到哪里：config/admin-route.php（标准）→ 根 admin-route.php（旧）→ config/route.php
+     */
+    protected function routeRegisterTarget(): string
+    {
+        $configRoute = base_path() . '/config/admin-route.php';
+        if (is_file($configRoute)) {
+            return $configRoute;
+        }
+        $legacy = base_path() . '/admin-route.php';
+        if (is_file($legacy)) {
+            return $legacy;
+        }
+        return $configRoute; // 都没有：--register 时按模板创建它
+    }
+
+    /**
+     * 按模板创建 config/admin-route.php（已存在则不动）
+     */
+    protected function createAdminRouteFile(string $file): void
+    {
+        $dir = dirname($file);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        @file_put_contents($file, $this->adminRouteTemplate());
+    }
+
+    /**
+     * config/admin-route.php 模板
+     *
+     * ⚠️ 必须 return 数组（webman 会把 config/ 下的 .php 当配置加载），
+     *    路由注册放进 'register' 闭包，由插件在路由加载阶段执行。
+     */
+    protected function adminRouteTemplate(): string
+    {
+        return <<<'PHP'
+<?php
+/**
+ * 后台路由（webman-curd-admin）
+ *
+ * 分工：
+ *   - 本文件（config/admin-route.php）：后台页面路由（RouteControllerRegistry）、后台专用 Route::group
+ *   - config/route.php：项目自身的接口 / 前台路由
+ *
+ * ⚠️ 为什么这里是「return 数组 + 闭包」，而不是直接写 Route::group()：
+ *   webman 启动时会把 config/ 下除 route.php 以外的 .php 当【配置】加载
+ *   （Config::loadFromDir，早于路由初始化），此时 Route 还没初始化，
+ *   顶层直接调 Route::group() 会报 “Call to a member function addGroup() on null”。
+ *   所以本文件只负责 return，路由注册放进 register 闭包，由插件在路由加载阶段执行。
+ *
+ * 加载：plugin/curd/config/route.php 会取 config('admin-route.register') 并执行。
+ *       宿主不需要在 config/route.php 里加任何一行。
+ *       加载顺序在插件路由之前 → 这里注册的同名路由优先，插件的同路径路由会被跳过。
+ *
+ * 注意：路由在进程启动时注册，改完要 `php webman restart`（reload 不重新加载路由）。
+ */
+
+use plugin\curd\app\RouteControllerRegistry;
+use Webman\Route;
+
+return [
+    'register' => function () {
+        // 后台 CURD 页面：路由路径 => 控制器类（控制器继承 BaseCurdController）
+        RouteControllerRegistry::registerMany([
+            // '/my-test' => \app\controller\admin\api\MyTestController::class,
+        ]);
+
+        // 后台专用接口（需要鉴权）：直接写 Route::group 即可，插件路由不会重复注册
+        // Route::group('/api/admin', function () {
+        //     Route::get('/stats', [\app\controller\admin\api\AdminStatsController::class, 'index']);
+        // })->middleware([
+        //     \plugin\curd\app\middleware\CorsMiddleware::class,
+        //     \plugin\curd\app\middleware\AuthCheck::class,
+        //     \plugin\curd\app\middleware\PermissionCheck::class,
+        // ]);
+    },
+];
+PHP;
+    }
+
     protected function writeFile(string $path, string $content): void
     {
         $dir = dirname($path);
@@ -1040,10 +1125,17 @@ PHP;
             return true; // 已注册，幂等
         }
 
-        if (preg_match('/(RouteControllerRegistry::registerMany\(\s*\[)(.*?)(\]\s*\);)/s', $code, $m)) {
-            $body = rtrim(rtrim($m[2]));
-            $body = rtrim($body, ',');
-            $replacement = $m[1] . $body . ",\n" . $registerLine . "\n" . $m[3];
+        // 匹配 registerMany([...]) 区块：m[3] 是闭合 ] 前的换行+缩进，m[4] 是 ]);
+        // 用它推导新行的缩进，避免插进去的行破坏原有排版（config/admin-route.php 里区块在闭包内，缩进更深）
+        if (preg_match('/(RouteControllerRegistry::registerMany\(\s*\[)(.*?)(\n[ \t]*)(\]\s*\);)/s', $code, $m)) {
+            $body = rtrim($m[2]);
+            $hasItems = trim($body) !== '';
+            if ($hasItems) {
+                $body = rtrim($body, ',') . ',';
+            }
+            $closeIndent = str_replace(["\r", "\n"], '', $m[3]);  // 闭合 ] 那行的缩进（纯空格）
+            $itemIndent = $closeIndent . '    ';                  // 数组元素比闭合 ] 多一级
+            $replacement = $m[1] . $body . "\n" . $itemIndent . trim($registerLine) . "\n" . $closeIndent . $m[4];
             $newCode = str_replace($m[0], $replacement, $code);
         } else {
             // 没有现成区块：追加一段（FQCN 写法，避免 use 出现在文件中部）
@@ -1088,18 +1180,19 @@ PHP;
 
     protected function printRouteHint(OutputInterface $output, string $registerLine, string $routePath): void
     {
-        $hasAdminRoute = is_file(base_path() . '/admin-route.php');
+        $target = $this->relative($this->routeRegisterTarget());
+        $isAdminRoute = str_ends_with($target, 'admin-route.php');
         $output->writeln('');
         $output->writeln('  <comment>路由注册（不要进 curd_configs 配置表）：</comment>');
-        $output->writeln('    ' . ($hasAdminRoute
-            ? '写进 <info>admin-route.php</info>（项目根目录，后台路由独立文件，插件自动加载）'
-            : '写进 <info>config/route.php</info>；想和项目自身路由分开，可新建项目根目录的 admin-route.php（插件自动加载）'));
+        $output->writeln('    ' . ($isAdminRoute
+            ? '写进 <info>' . $target . '</info>（后台路由独立文件，插件自动加载）'
+            : '写进 <info>' . $target . '</info>；想和项目自身路由分开，可新建 config/admin-route.php（插件自动加载）'));
         $output->writeln('');
         $output->writeln('    use plugin\curd\app\RouteControllerRegistry;');
         $output->writeln('    RouteControllerRegistry::registerMany([');
         $output->writeln('    ' . $registerLine);
         $output->writeln('    ]);');
         $output->writeln('');
-        $output->writeln("  <comment>下次想自动写入可加</comment> --register <comment>（优先写项目根目录 admin-route.php，没有则写 config/route.php；先备份 .bak 再 php -l 自检）。路由路径：</comment>{$routePath}");
+        $output->writeln("  <comment>下次想自动写入可加</comment> --register <comment>（优先写 config/admin-route.php，没有则新建；再退到 config/route.php。写前备份 .bak 并 php -l 自检）。路由路径：</comment>{$routePath}");
     }
 }

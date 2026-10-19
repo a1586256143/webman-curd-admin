@@ -10,7 +10,7 @@
 
 1. **Model**（业务 `app/model/`）：extends 平台 BaseModel、设 `$table`，必要时加常量字典；
 2. **Controller**（业务 `app/controller/api/` 或 `admin/api/`）：extends `plugin\curd\app\controller\base\BaseCurdController`，声明 `$title`，实现 `grid()`；
-3. **路由**（项目根目录 `admin-route.php` 或业务 `config/route.php`）：`RouteControllerRegistry::registerMany(['/xxx' => XxxController::class])`；
+3. **路由**（`config/admin-route.php` 的 `register` 闭包，或业务 `config/route.php`）：`RouteControllerRegistry::registerMany(['/xxx' => XxxController::class])`；
 4. **菜单**：后台「菜单管理」新增（`path` 填上一步的路径）；宿主若带 `make:permission` 命令（如 huafei）也可用命令建；
 5. **功能声明**：全部在 `grid()` 里流式拼装（列 / 搜索 / 表单 / 操作 / 汇总 / 导出开关）。
 

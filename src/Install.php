@@ -228,31 +228,38 @@ class Install
     }
 
     /**
-     * 确保宿主存在 admin-route.php（可选的后台路由文件，已存在则不动）
+     * 确保宿主存在 config/admin-route.php（可选的后台路由文件，已存在则不动）
      *
      * 目的：后台页面路由与项目自身路由分开维护 —— 后台的
      * RouteControllerRegistry::registerMany(...) 和后台专用 Route::group 放这里，
      * 其余业务接口仍留在 config/route.php。
      *
-     * ⚠️ 必须放项目根目录，不能放 config/：webman 启动时会把 config/ 下除 route.php
-     *    以外的 .php 全当配置加载（早于路由初始化），路由文件放进去会直接致命错误。
+     * ⚠️ 文件内容是「return 数组 + register 闭包」：webman 会把 config/ 下除 route.php
+     *    以外的 .php 全当配置加载（早于路由初始化，且要求 return 数组），
+     *    顶层直接 Route::group() 会报 addGroup() on null。闭包由插件在路由加载阶段执行。
      *
-     * 加载由插件负责：plugin/curd/config/route.php 顶部 require_once 本文件，
+     * 加载由插件负责：plugin/curd/config/route.php 取 config('admin-route.register') 执行，
      * 宿主不用改 config/route.php；加载顺序在插件路由之前（后台路由优先）。
+     *
+     * 兼容：宿主若还留着旧位置（项目根 admin-route.php）且已写了自己的路由，
+     *      不再生成 config 版，避免两份路由文件同时生效造成困惑。
      */
     protected static function ensureAdminRoute(string $root): void
     {
-        $file = $root . '/admin-route.php';
+        if (is_file($root . '/admin-route.php')) {
+            return; // 旧位置已有（可能写了路由），沿用旧位置，不制造第二份
+        }
+        $file = $root . '/config/admin-route.php';
         if (is_file($file)) {
             return; // 宿主已有（可能已写了自己的路由），绝不覆盖
         }
         if (@file_put_contents($file, self::adminRouteTemplate()) !== false) {
-            echo "  [webman-curd-admin] 已生成后台路由文件 admin-route.php（项目根目录；后台路由与 config/route.php 分开维护，插件自动加载）\n";
+            echo "  [webman-curd-admin] 已生成后台路由文件 config/admin-route.php（后台路由与 config/route.php 分开维护，插件自动加载）\n";
         }
     }
 
     /**
-     * 宿主 admin-route.php 默认模板（空注册，只放写法说明）
+     * 宿主 config/admin-route.php 默认模板（空注册，只放写法说明）
      */
     protected static function adminRouteTemplate(): string
     {
@@ -262,15 +269,16 @@ class Install
  * 后台路由（由 webman-curd-admin 安装时生成；已存在则不会覆盖，可自由修改）
  *
  * 分工：
- *   - 本文件（项目根目录）：后台页面路由（RouteControllerRegistry）、后台专用 Route::group
+ *   - 本文件（config/admin-route.php）：后台页面路由（RouteControllerRegistry）、后台专用 Route::group
  *   - config/route.php：项目自身的接口 / 前台路由
  *
- * ⚠️ 为什么在项目根目录而不是 config/：
+ * ⚠️ 为什么是「return 数组 + 闭包」，而不是直接写 Route::group()：
  *   webman 启动时会把 config/ 下除 route.php 以外的 .php 全当【配置】加载
- *   （Config::loadFromDir，早于路由初始化），路由文件放进去会直接报
- *   “Call to a member function addRoute() on null”。
+ *   （Config::loadFromDir，早于路由初始化），此时 Route 还没初始化，
+ *   顶层直接调 Route::group() 会报 “Call to a member function addGroup() on null”。
+ *   所以本文件只负责 return，路由注册放进 register 闭包，由插件在路由加载阶段执行。
  *
- * 加载：插件在 plugin/curd/config/route.php 顶部 require_once 本文件，
+ * 加载：plugin/curd/config/route.php 取 config('admin-route.register') 并执行，
  *       宿主不需要在 config/route.php 里加任何一行。
  *       加载顺序在插件路由之前 → 这里注册的同名路由优先，插件的同路径路由会被跳过。
  *
@@ -280,19 +288,23 @@ class Install
 use plugin\curd\app\RouteControllerRegistry;
 use Webman\Route;
 
-// 后台 CURD 页面：路由路径 => 控制器类（控制器继承 BaseCurdController）
-RouteControllerRegistry::registerMany([
-    // '/my-test' => \app\controller\admin\api\MyTestController::class,
-]);
+return [
+    'register' => function () {
+        // 后台 CURD 页面：路由路径 => 控制器类（控制器继承 BaseCurdController）
+        RouteControllerRegistry::registerMany([
+            // '/my-test' => \app\controller\admin\api\MyTestController::class,
+        ]);
 
-// 后台专用接口（需要鉴权）：直接写 Route::group 即可，插件路由不会重复注册
-// Route::group('/api/admin', function () {
-//     Route::get('/stats', [\app\controller\admin\api\AdminStatsController::class, 'index']);
-// })->middleware([
-//     \plugin\curd\app\middleware\CorsMiddleware::class,
-//     \plugin\curd\app\middleware\AuthCheck::class,
-//     \plugin\curd\app\middleware\PermissionCheck::class,
-// ]);
+        // 后台专用接口（需要鉴权）：直接写 Route::group 即可，插件路由不会重复注册
+        // Route::group('/api/admin', function () {
+        //     Route::get('/stats', [\app\controller\admin\api\AdminStatsController::class, 'index']);
+        // })->middleware([
+        //     \plugin\curd\app\middleware\CorsMiddleware::class,
+        //     \plugin\curd\app\middleware\AuthCheck::class,
+        //     \plugin\curd\app\middleware\PermissionCheck::class,
+        // ]);
+    },
+];
 PHP;
     }
 
