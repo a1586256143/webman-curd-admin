@@ -36,6 +36,16 @@ class Column extends BaseDsl
     protected $hrefHandler = null;
 
     /**
+     * 弹窗内容处理器（PHP 闭包 / 类名 / HTML 模板 / Component，服务端逐行执行）
+     */
+    protected $modalHandler = null;
+
+    /**
+     * 行内展开内容处理器（同上）
+     */
+    protected $expandHandler = null;
+
+    /**
      * 显示值前缀（如 '$'），由服务端拼接进 display_{prop}，与 display() 可叠加
      */
     protected ?string $prefix = null;
@@ -359,6 +369,61 @@ class Column extends BaseDsl
     {
         $this->config['copy'] = true;
         return $this;
+    }
+
+    /**
+     * 点击单元格弹出弹窗，弹窗里展示自定义内容
+     *
+     * 内容（$content）支持四种写法，服务端逐行求值后随列表返回：
+     *   1) 闭包：fn($value, $row) => new Table([...], [...])   （$this 绑定当前行，可 $this->id）
+     *   2) 类名：XxxModal::class —— 实例化后依次找 render($row) / schema($row) / __invoke($row)
+     *   3) HTML 模板字符串：'<b>{order_no}</b> 金额 {amount}'（{prop} 取当前行字段，{value} 取本列值）
+     *   4) 组件实例：new Card([...], '标题')
+     *
+     * 可用组件（plugin\curd\app\dsl\component）：
+     *   Table(['id' => 'ID'], $rows)     表格
+     *   Card(['订单号' => 'A001'], '详情') 键值卡片
+     *   Html('<div>...</div>')           原始 HTML
+     *
+     *   $grid->column('order_no', __('Order no'))->modal('订单详情', OrderDetailModal::class);
+     *   $grid->column('detail', __('Detail'))->modal('详情', fn($v, $row) => new Table([...], [...]));
+     */
+    public function modal(string $title, $content): self
+    {
+        $this->modalHandler = $content;
+        $this->config['modal'] = ['title' => $title];
+        return $this;
+    }
+
+    /**
+     * 点击单元格行内展开/收起一块内容（不弹窗，就在单元格下面展开）
+     *
+     *   $grid->column('items', __('Items'))->expand(fn($v, $row) => new Table(['xxx' => '标题'], [[...]]));
+     *   $grid->column('remark', __('Remark'))->expand('<div>{remark}</div>', '备注');
+     *
+     * 参数与 modal() 完全一致；第二个参数是可选标题（不传则不显示标题）。
+     */
+    public function expand($content, string $title = ''): self
+    {
+        $this->expandHandler = $content;
+        $this->config['expand'] = ['title' => $title];
+        return $this;
+    }
+
+    /**
+     * 获取弹窗内容处理器（PHP 侧用，不进 JSON）
+     */
+    public function getModalHandler()
+    {
+        return $this->modalHandler;
+    }
+
+    /**
+     * 获取行内展开内容处理器（PHP 侧用，不进 JSON）
+     */
+    public function getExpandHandler()
+    {
+        return $this->expandHandler;
     }
 
     /**

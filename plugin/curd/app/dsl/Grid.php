@@ -459,6 +459,36 @@ class Grid extends BaseDsl
         return $handlers;
     }
 
+    /**
+     * 收集弹窗内容处理器：[prop => handler]（PHP 服务端用，不进 JSON）
+     */
+    public function modalHandlers(): array
+    {
+        $handlers = [];
+        foreach ($this->columns as $column) {
+            $handler = $column->getModalHandler();
+            if ($handler !== null) {
+                $handlers[$column->toArray()['prop']] = $handler;
+            }
+        }
+        return $handlers;
+    }
+
+    /**
+     * 收集行内展开内容处理器：[prop => handler]（PHP 服务端用，不进 JSON）
+     */
+    public function expandHandlers(): array
+    {
+        $handlers = [];
+        foreach ($this->columns as $column) {
+            $handler = $column->getExpandHandler();
+            if ($handler !== null) {
+                $handlers[$column->toArray()['prop']] = $handler;
+            }
+        }
+        return $handlers;
+    }
+
     public function search(): array
     {
         return $this->search;

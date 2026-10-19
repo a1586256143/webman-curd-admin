@@ -199,6 +199,8 @@ trait CurdListTrait
         }
 
         $count = $query->count();
+        // 点式列：根不是真实字段时视为关联关系（如 user.name），预加载避免 N+1
+        $this->eagerLoadDotRelations($query);
         $list = $query->orderByDesc('id')->forPage($page, $pageSize)->get();
 
         // 列表头部汇总（Grid::summary）：基于「已应用当前筛选」的查询求值，随列表一起返回
@@ -223,6 +225,8 @@ trait CurdListTrait
         $list = $this->applyDisplayHandlers($list);
         // href 动态链接处理器：$this 绑定当前行执行，结果附加为 href_{prop} 字段
         $list = $this->applyHrefHandlers($list);
+        // 弹窗 / 行内展开内容：逐行求值，结果附加 _modal_{prop} / _expand_{prop}
+        $list = $this->applyCellContentHandlers($list);
         // 行级样式/类名（Grid::setRowStyle/setRowClass）：$this 绑定行执行，结果附加 _rowStyle/_rowClass
         $list = $this->applyRowStyleClassHandlers($list);
         // action 每行求值处理器：show 闭包 → _actionShow[name]；params 闭包 → _actionParams[name]
@@ -253,7 +257,9 @@ trait CurdListTrait
                         if (str_starts_with($key, 'display_')
                             || str_starts_with($key, 'href_')
                             || str_starts_with($key, '_row')
-                            || str_starts_with($key, '_action')) {
+                            || str_starts_with($key, '_action')
+                            || str_starts_with($key, '_modal_')
+                            || str_starts_with($key, '_expand_')) {
                             $row[$key] = $value;
                         }
                     }
@@ -389,16 +395,70 @@ trait CurdListTrait
     }
 
     /**
+     * 点式列根字段不是真实字段 → 当作关联关系预加载（Eloquent with）
+     *
+     * 取值优先级（对应 grid->column('aaa.xxx')）：
+     *   1. `aaa` 是真实字段（json/text 存 JSON）→ 按 JSON 键取 xxx（字段优先）
+     *   2. `aaa` 不是字段，但模型上有同名关联方法 → with('aaa') 后取关联对象上的 xxx
+     * 两者都没有 → 值为 null（不报错）
+     */
+    protected function eagerLoadDotRelations($query): void
+    {
+        if (!is_object($query) || !method_exists($query, 'with')) {
+            return;
+        }
+        $dotProps = $this->dotColumnProps();
+        if (empty($dotProps)) {
+            return;
+        }
+
+        $columns = $this->tableColumns();
+        $model = $this->resolvedModel();
+        if ($model === '' || !class_exists($model)) {
+            return;
+        }
+
+        $with = [];
+        foreach ($dotProps as $prop) {
+            $root = explode('.', $prop)[0];
+            if ($root === '' || in_array($root, $columns, true)) {
+                continue; // 真实字段：走 JSON 解码，不预加载
+            }
+            if (method_exists($model, $root)) {
+                $with[$root] = true;
+            }
+        }
+        if ($with) {
+            $query->with(array_keys($with));
+        }
+    }
+
+    /**
      * 从行数组按点式路径取值（config.api_url）；任一段缺失返回 null
      */
     protected function rowPathValue(array $row, string $path)
     {
         $cursor = $row;
         foreach (explode('.', $path) as $segment) {
-            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
-                return null;
+            if (is_array($cursor)) {
+                if (!array_key_exists($segment, $cursor)) {
+                    return null;
+                }
+                $cursor = $cursor[$segment];
+                continue;
             }
-            $cursor = $cursor[$segment];
+            if (is_object($cursor)) {
+                // 关联对象（Eloquent Model）：支持 getAttribute 与直接属性
+                if (method_exists($cursor, 'getAttribute')) {
+                    $cursor = $cursor->getAttribute($segment);
+                } elseif (isset($cursor->{$segment})) {
+                    $cursor = $cursor->{$segment};
+                } else {
+                    return null;
+                }
+                continue;
+            }
+            return null;
         }
         return $cursor;
     }
@@ -425,10 +485,25 @@ trait CurdListTrait
             }
         }
         foreach ($segments as $segment) {
-            if (!is_array($value) || !array_key_exists($segment, $value)) {
-                return null;
+            if (is_array($value)) {
+                if (!array_key_exists($segment, $value)) {
+                    return null;
+                }
+                $value = $value[$segment];
+                continue;
             }
-            $value = $value[$segment];
+            if (is_object($value)) {
+                // 关联对象（Eloquent Model）：如 $row->user->name
+                if (method_exists($value, 'getAttribute')) {
+                    $value = $value->getAttribute($segment);
+                } elseif (isset($value->{$segment})) {
+                    $value = $value->{$segment};
+                } else {
+                    return null;
+                }
+                continue;
+            }
+            return null;
         }
         return $value;
     }
@@ -501,6 +576,97 @@ trait CurdListTrait
         }
 
         return $list;
+    }
+
+    /**
+     * 弹窗 / 行内展开内容：逐行执行 Column::modal()/expand() 的处理器，
+     * 结果附加为 _modal_{prop} / _expand_{prop}（组件数组，前端 ComponentRenderer 渲染）
+     *
+     * 支持四种内容写法：闭包 / 类名（render|schema|__invoke）/ HTML 模板 / Component 实例
+     */
+    protected function applyCellContentHandlers($list)
+    {
+        $grid = $this->resolveGrid();
+        if (!$grid) {
+            return $list;
+        }
+        $modals = $grid->modalHandlers();
+        $expands = $grid->expandHandlers();
+        if (empty($modals) && empty($expands)) {
+            return $list;
+        }
+
+        foreach ($list as $i => $row) {
+            if (!is_object($row) || !method_exists($row, 'setAttribute')) {
+                continue;
+            }
+            foreach ($modals as $prop => $handler) {
+                $row->setAttribute('_modal_' . $prop, $this->resolveCellContent($handler, $row, $prop));
+            }
+            foreach ($expands as $prop => $handler) {
+                $row->setAttribute('_expand_' . $prop, $this->resolveCellContent($handler, $row, $prop));
+            }
+            $list[$i] = $row;
+        }
+
+        return $list;
+    }
+
+    /**
+     * 求值单元格内容处理器 → 组件数组（失败返回 null，不影响列表）
+     *
+     * @param mixed $handler 闭包 / 类名 / HTML 模板 / Component 实例
+     * @param mixed $row     当前行（Eloquent Model）
+     */
+    protected function resolveCellContent($handler, $row, string $prop): ?array
+    {
+        $component = \plugin\curd\app\dsl\component\Component::class;
+
+        try {
+            if ($handler instanceof $component) {
+                return $handler->toArray();
+            }
+
+            // 类名：实例化后依次找 render / schema / __invoke
+            if (is_string($handler) && class_exists($handler)) {
+                $instance = \support\Container::get($handler);
+                foreach (['render', 'schema', 'make', 'content'] as $method) {
+                    if (method_exists($instance, $method)) {
+                        return $component::resolve($instance->{$method}($row));
+                    }
+                }
+                if (is_callable($instance)) {
+                    return $component::resolve($instance($row));
+                }
+                return null;
+            }
+
+            $value = $this->rowValue($row, $prop);
+
+            if ($handler instanceof \Closure) {
+                $bound = $this->bindRowHandler($handler, $row);
+                return $component::resolve($bound($value, $row));
+            }
+            if (is_callable($handler)) {
+                return $component::resolve($handler($value, $row));
+            }
+
+            // 字符串（非类名）当 HTML 模板：{prop} 取行字段、{value} 取本列值
+            if (is_string($handler)) {
+                $html = preg_replace_callback('/\{\s*([a-zA-Z0-9_.]+)\s*\}/', function ($m) use ($value, $row) {
+                    if ($m[1] === 'value') {
+                        return is_scalar($value) ? (string)$value : '';
+                    }
+                    $v = $this->rowValue($row, $m[1]);
+                    return is_scalar($v) ? (string)$v : '';
+                }, $handler);
+                return ['type' => 'html', 'html' => $html];
+            }
+
+            return $component::resolve($handler);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**

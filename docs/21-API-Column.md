@@ -24,6 +24,8 @@
 | `html(bool)` | 显示值按 HTML 渲染（闭包需显式开启） |
 | `prefix(string)` / `suffix(string)` | 显示值前后缀 |
 | `copy()` | 可复制列（复制按钮，复制显示值） |
+| `modal(string $title, $content)` | 点击弹窗，弹窗内容服务端逐行生成（Table / Card / Html / 闭包 / 类名 / 模板） |
+| `expand($content, string $title = '')` | 点击行内展开/收起（内容写法同 `modal`） |
 | `datetime()` / `date()` | 时间格式化 |
 | `image(int $w, int $h)` / `staticHost(?string)` | 图片列 / 静态资源域名 |
 | `open('_blank')` | 点击在新窗口打开该列值 |
@@ -162,7 +164,62 @@ $grid->column('platform', __('Platform'))->select([
 
 ---
 
-## 9. 兜底配置
+## 9. 弹窗与行内展开
+
+给单元格挂一个交互：点开**弹窗**（`modal`）或就地**展开**（`expand`）。
+内容在**服务端逐行生成**，随列表接口一起返回（`_modal_{prop}` / `_expand_{prop}`），
+前端直接渲染，不用写 Vue。
+
+```php
+use plugin\curd\app\dsl\component\Card;
+use plugin\curd\app\dsl\component\Table;
+
+// 行内展开：点一下展开，再点收起
+$grid->column('money', __('Money'))->expand(function ($value, $row) {
+    return new Table(['xxx' => '标题'], [
+        ['xxx' => '111'],
+        ['xxx' => '1222'],
+    ]);
+});
+
+// 弹窗：标题 + 内容
+$grid->column('order_no', __('Order no'))->modal('订单详情', function ($value, $row) {
+    return new Card(['订单号' => $value, '金额' => $row->amount], '基本信息');
+});
+```
+
+### 9.1 内容的四种写法
+
+| 写法 | 示例 | 说明 |
+|---|---|---|
+| 组件实例 | `new Table(...)` / `new Card(...)` / `new Html(...)` | 推荐，最直观 |
+| 闭包 | `fn($value, $row) => new Card([...])` | `$this` 绑定当前行，可 `$this->id` 取字段 |
+| 类名 | `OrderDetailModal::class` | 实例化后依次找 `render($row)` / `schema($row)` / `__invoke($row)` |
+| HTML 模板 | `'<b>{order_no}</b> 金额 {amount}'` | `{prop}` 取行字段，`{value}` 取本列值 |
+
+### 9.2 内置组件
+
+```php
+new Table(['id' => 'ID', 'name' => '名称'], $rows, ['stripe' => true, 'maxHeight' => 320]);
+new Card(['订单号' => 'A001', '状态' => '已支付'], '订单详情', ['column' => 2]);
+new Html('<div class="tip">任意 <b>HTML</b></div>');
+```
+
+- `Table` 的列也可以细配：`[['prop' => 'id', 'label' => 'ID', 'width' => 80, 'align' => 'center']]`，
+  `options` 直接透传 el-table（`border` / `stripe` / `maxHeight` / `size` / `emptyText`）；
+- `Card` 的 items 支持 `['标签' => '值']`，或 `[['label' => '..', 'value' => '..', 'html' => true]]`；
+- `Html` 按 v-html 渲染，只放自己拼的可信内容。
+
+> 弹窗默认宽 720px；展开面板在单元格内，列窄时内容横向滚动 —— 宽表格建议用 `modal`。
+
+### 9.3 与 display() / copy() 的优先级
+
+`modal` > `expand` > `copy` > `display` > 其它类型。
+即同一列既 `->display()` 又 `->modal()` 时：单元格显示 display 的值，点击弹窗。
+
+---
+
+## 10. 兜底配置
 
 ```php
 $grid->column('extra', __('Extra'))->config([
@@ -175,7 +232,7 @@ $grid->column('extra', __('Extra'))->config([
 
 ---
 
-## 10. 完整示例
+## 11. 完整示例
 
 ```php
 protected function grid(): Grid

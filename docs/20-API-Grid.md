@@ -73,6 +73,17 @@ $grid->column('created_at', __('Created at'))->datetime()->width(180);
 
 返回 `Column`，可继续链式设置。**完整列方法见 [API · Column](21-API-Column.md)。**
 
+**点式列 `aaa.xxx`**：`aaa` 是真实字段（JSON 列）时按 JSON 键取值；不是字段时当作**关联关系**
+（如 `user.name` → `belongsTo('User')`），列表查询会自动 `with('aaa')` 预加载：
+
+```php
+$grid->column('config.api_url', __('Api url'));   // JSON 字段取键（字段优先）
+$grid->column('user.name', __('User'));           // 关联关系取字段（不是字段才走关联）
+```
+
+**弹窗 / 行内展开**：`->modal('标题', $content)` / `->expand($content)`，内容支持
+`Table` / `Card` / `Html` 组件、闭包、类名、HTML 模板 —— 见 [Column §9](21-API-Column.md#9-弹窗与行内展开)。
+
 ---
 
 ## 3. 搜索 `filter()`

@@ -84,11 +84,19 @@ class MakeCurdCommand extends Command
   php webman make:curd -t my_test --title=测试管理 --register
   php webman make:curd -t hf_goods -C app/controller/api -m HfGoods -f
 
+<comment>指定数据库连接（多库/连接名不是默认值时）：</comment>
+  -d, --connection   连接名 = config/database.php 里 connections 的键，默认取插件配置 business_connection
+  php webman make:curd -t request_sms -d mysql_business
+
 <comment>顺带生成操作按钮（可组合）：</comment>
   --action=audit:审核                  行级按钮 → 控制器 actionAudit()
   --bat-action=batch-on:批量上架        批量按钮 → 控制器 actionBatchOn()（$request->post('ids')）
   --import-action=import:导入          Excel 导入 → 控制器 actionImport()（$this->excelRows('file')）
   php webman make:curd -t hf_goods --action=audit:审核 --bat-action=batch-on:批量上架 --import-action
+
+<comment>路由注册：</comment>
+  --register  优先写项目根目录 admin-route.php（后台路由独立文件，插件自动加载）；
+              没有该文件时写 config/route.php。写前备份 .bak，写后 php -l 自检。
 HELP);
     }
 
@@ -204,11 +212,16 @@ HELP);
 
         // ---------- 7. 路由注册 ----------
         $registerLine = "    '" . $routePath . "' => \\" . $controllerFqcn . "::class,";
+        // 优先写项目根目录 admin-route.php（后台路由独立文件，插件自动加载）；
+        // 宿主没有这个文件时退回 config/route.php（老项目行为不变）
+        $adminRouteFile = base_path() . '/admin-route.php';
+        $registerFile   = is_file($adminRouteFile) ? $adminRouteFile : base_path() . '/config/route.php';
         if ($input->getOption('register')) {
-            $result = $this->registerRoute(base_path() . '/config/route.php', $registerLine);
+            $result = $this->registerRoute($registerFile, $registerLine);
             if ($result === true) {
                 $output->writeln('');
-                $output->writeln("  <info>✓ 已写入路由注册</info> config/route.php <comment>（原文件已备份为 config/route.php.bak）</comment>");
+                $output->writeln('  <info>✓ 已写入路由注册</info> ' . $this->relative($registerFile)
+                    . ' <comment>（原文件已备份为 .bak，写入后已 php -l 自检）</comment>');
             } else {
                 $output->writeln('');
                 $output->writeln('  <error>× 自动写入失败：' . $result . '</error>');
@@ -218,10 +231,24 @@ HELP);
             $this->printRouteHint($output, $registerLine, $routePath);
         }
 
+        // 字段标题已统一 __()：列出尚未登记的中文 key（不影响中文显示，做多语言时才需要）
+        $missing = $this->missingTranslations($columns);
+        if ($missing) {
+            $output->writeln('');
+            $output->writeln('  <comment>字段标题已走 __()：中文原文即 key，未命中时原样返回（不改也照常显示中文）。</comment>');
+            $output->writeln('  <comment>要支持多语言，在 resource/translations/{locale}/fields.php 里补：</comment>');
+            foreach (array_slice($missing, 0, 6) as $label) {
+                $output->writeln('    ' . $this->phpString($label) . ' => ' . $this->phpString($label) . ',');
+            }
+            if (count($missing) > 6) {
+                $output->writeln('    <comment>… 共 ' . count($missing) . ' 项（zh_CN 里已有的不重复列出）</comment>');
+            }
+        }
+
         $output->writeln('');
         $output->writeln('  <comment>下一步：</comment>');
         $output->writeln("    1) 后台「菜单管理」新建菜单，路由填 <info>{$routePath}</info>（或写进 menus 表）");
-        $output->writeln('    2) 打开页面确认列表/搜索/表单；字段标题中文可在 resource/translations/zh_CN/fields.php 里补 key');
+        $output->writeln('    2) 打开页面确认列表/搜索/表单');
         $output->writeln('    3) 行内编辑 / 复制列等增强写法见生成的控制器注释');
         $output->writeln('');
 
@@ -383,7 +410,7 @@ HELP);
             ? "        // 表有 deleted_at 列：模型已 use SoftDeletes，删除走软删除\n"
             : '';
 
-        $titleLiteral = $this->phpString($title);
+        $titleExpr = '__(' . $this->phpString($title) . ')';
 
         // ===== 自定义操作（--action / --bat-action / --import-action） =====
         $actionBlock = $this->actionBlock($actions, $import);
@@ -407,16 +434,18 @@ use plugin\curd\app\dsl\Grid;
  *
  * 表：{$table}    路由：{$routePath}
  *
- * ⚠️ 本控制器【不要】进 curd_configs 配置表，只在宿主 config/route.php 注册路径 ——
- *    这样改下面的 grid() 立即生效，不会被配置生成器保存的落库配置覆盖：
+ * ⚠️ 本控制器【不要】进 curd_configs 配置表，只在宿主路由文件注册路径 ——
+ *    推荐放项目根目录 admin-route.php（插件自动加载，与 config/route.php 分开）；
+ *    没有该文件时放 config/route.php 也一样。这样改下面的 grid() 立即生效，
+ *    不会被配置生成器保存的落库配置覆盖：
  *
  *   use plugin\\curd\\app\\RouteControllerRegistry;
  *   RouteControllerRegistry::registerMany([
  *       '{$routePath}' => \\{$namespace}\\{$className}::class,
  *   ]);
  *
- * 字段标题统一用 __()（等价 trans(..., [], 'fields')）——中文在宿主
- * resource/translations/zh_CN/fields.php 里按 key 增改，未命中时原样返回英文短语。
+ * 字段标题统一用 __()（等价 trans(..., [], 'fields')）——中文原文/英文短语即 key，
+ * 在宿主 resource/translations/{locale}/fields.php 里增改，未命中时原样返回。
  *
  * 常用增强写法：
  *   ->copy()                                     可复制列（复制按钮，复制的是 display() 之后的值）
@@ -429,11 +458,14 @@ class {$className} extends BaseCurdController
     /**
      * 页面标题
      *
-     * Grid 不传 title，自动读本属性（new Grid(new {$modelAlias}())）。
-     * 想走翻译可改成方法形式：
-     *     protected function title(): string { return __('{$this->humanize($table)}'); }
+     * 统一走 __()（等价 trans(..., [], 'fields')）：中文在宿主
+     * resource/translations/{locale}/fields.php 里按 key 增改，未命中时原样返回。
+     * Grid 不传 title，自动读本方法。
      */
-    protected string \$title = {$titleLiteral};
+    protected function title(): string
+    {
+        return {$titleExpr};
+    }
 
     protected function grid(): Grid
     {
@@ -841,14 +873,52 @@ PHP;
     }
 
     /**
-     * 字段标题表达式：有表注释用字面量，否则包 __() 走翻译
+     * 字段标题表达式：**统一**包 __()（有表注释用注释，没有则用字段名推导的短语）
+     *
+     * 为什么中文注释也要包 __()：
+     *   - 宿主 resource/translations/{locale}/fields.php 以「中文原文」为 key，
+     *     未命中时 trans() 原样返回 key，所以 __( '手机号' ) 与直接写 '手机号' 等价；
+     *   - 但包上 __() 之后，补 en/fields.php（'手机号' => 'Mobile'）切语言即生效，
+     *     不包则永远是硬编码中文，多语言无从下手。
      */
     protected function labelExpr(array $col): string
     {
-        if ($col['comment'] !== '') {
-            return $this->phpString($col['comment']);
-        }
         return '__(' . $this->phpString($col['label']) . ')';
+    }
+
+    /**
+     * 尚未在宿主 zh_CN/fields.php 里登记的中文标题（去重、保持出现顺序）
+     *
+     * 只用于生成后提示，不影响代码生成；英文短语（humanize 推导）本身可读，不提示。
+     *
+     * @return string[]
+     */
+    protected function missingTranslations(array $columns): array
+    {
+        $file = base_path() . '/resource/translations/zh_CN/fields.php';
+        $existing = [];
+        if (is_file($file)) {
+            try {
+                $loaded = include $file;
+                $existing = is_array($loaded) ? $loaded : [];
+            } catch (\Throwable $e) {
+                $existing = [];
+            }
+        }
+
+        $missing = [];
+        foreach ($columns as $col) {
+            $label = trim((string)($col['label'] ?? ''));
+            if ($label === '' || isset($existing[$label])) {
+                continue;
+            }
+            // 只提示含中文的标题；纯英文 key 不写翻译也能直接显示
+            if (!preg_match('/[\x{4e00}-\x{9fff}]/u', $label)) {
+                continue;
+            }
+            $missing[$label] = true;
+        }
+        return array_keys($missing);
     }
 
     /**
@@ -915,36 +985,47 @@ PHP;
     }
 
     /**
-     * 把注册行追加进宿主 config/route.php 的 RouteControllerRegistry::registerMany([...])
+     * 把注册行追加进宿主路由文件（项目根目录 admin-route.php 优先，其次 config/route.php）
+     *
+     * - 文件里已有 RouteControllerRegistry::registerMany([...]) → 往数组末尾插一行；
+     * - 没有该区块（比如刚建的空 admin-route.php）→ 追加一段完整注册（用 FQCN，不依赖 use）。
      *
      * @return true|string true = 成功；string = 失败原因
      */
     protected function registerRoute(string $routeFile, string $registerLine)
     {
+        $rel = $this->relative($routeFile);
         if (!is_file($routeFile)) {
-            return '找不到 config/route.php';
+            return "找不到 {$rel}";
         }
         $code = file_get_contents($routeFile);
         if ($code === false) {
-            return '读取 config/route.php 失败';
+            return "读取 {$rel} 失败";
         }
         if (str_contains($code, $registerLine)) {
             return true; // 已注册，幂等
         }
-        if (!preg_match('/(RouteControllerRegistry::registerMany\(\s*\[)(.*?)(\]\s*\);)/s', $code, $m)) {
-            return 'route.php 里没有 RouteControllerRegistry::registerMany([...]) 区块';
-        }
 
-        $body = rtrim(rtrim($m[2]));
-        $body = rtrim($body, ',');
-        $replacement = $m[1] . $body . ",\n" . $registerLine . "\n" . $m[3];
+        if (preg_match('/(RouteControllerRegistry::registerMany\(\s*\[)(.*?)(\]\s*\);)/s', $code, $m)) {
+            $body = rtrim(rtrim($m[2]));
+            $body = rtrim($body, ',');
+            $replacement = $m[1] . $body . ",\n" . $registerLine . "\n" . $m[3];
+            $newCode = str_replace($m[0], $replacement, $code);
+        } else {
+            // 没有现成区块：追加一段（FQCN 写法，避免 use 出现在文件中部）
+            $newCode = rtrim($code) . "\n\n"
+                . "// 由 `php webman make:curd --register` 追加\n"
+                . "\\plugin\\curd\\app\\RouteControllerRegistry::registerMany([\n"
+                . $registerLine . "\n"
+                . "]);\n";
+        }
 
         if (!@copy($routeFile, $routeFile . '.bak')) {
-            return '备份 config/route.php.bak 失败（目录不可写？）';
+            return "备份 {$rel}.bak 失败（目录不可写？）";
         }
-        if (file_put_contents($routeFile, str_replace($m[0], $replacement, $code)) === false) {
+        if (file_put_contents($routeFile, $newCode) === false) {
             @copy($routeFile . '.bak', $routeFile);
-            return '写入 config/route.php 失败，已回滚';
+            return "写入 {$rel} 失败，已回滚";
         }
 
         // 语法自检：写坏了立刻回滚，避免把宿主搞崩
@@ -973,14 +1054,18 @@ PHP;
 
     protected function printRouteHint(OutputInterface $output, string $registerLine, string $routePath): void
     {
+        $hasAdminRoute = is_file(base_path() . '/admin-route.php');
         $output->writeln('');
-        $output->writeln('  <comment>路由注册（宿主 config/route.php，务必手动加一行；不要进 curd_configs 配置表）：</comment>');
+        $output->writeln('  <comment>路由注册（不要进 curd_configs 配置表）：</comment>');
+        $output->writeln('    ' . ($hasAdminRoute
+            ? '写进 <info>admin-route.php</info>（项目根目录，后台路由独立文件，插件自动加载）'
+            : '写进 <info>config/route.php</info>；想和项目自身路由分开，可新建项目根目录的 admin-route.php（插件自动加载）'));
         $output->writeln('');
         $output->writeln('    use plugin\curd\app\RouteControllerRegistry;');
         $output->writeln('    RouteControllerRegistry::registerMany([');
         $output->writeln('    ' . $registerLine);
         $output->writeln('    ]);');
         $output->writeln('');
-        $output->writeln("  <comment>下次想自动写入可加</comment> --register <comment>（会先备份 config/route.php.bak）。路由路径：</comment>{$routePath}");
+        $output->writeln("  <comment>下次想自动写入可加</comment> --register <comment>（优先写项目根目录 admin-route.php，没有则写 config/route.php；先备份 .bak 再 php -l 自检）。路由路径：</comment>{$routePath}");
     }
 }

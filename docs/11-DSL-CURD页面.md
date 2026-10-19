@@ -10,7 +10,7 @@
 
 1. **Model**（业务 `app/model/`）：extends 平台 BaseModel、设 `$table`，必要时加常量字典；
 2. **Controller**（业务 `app/controller/api/` 或 `admin/api/`）：extends `plugin\curd\app\controller\base\BaseCurdController`，声明 `$title`，实现 `grid()`；
-3. **路由**（业务 `config/route.php`）：`RouteControllerRegistry::registerMany(['/xxx' => XxxController::class])`；
+3. **路由**（项目根目录 `admin-route.php` 或业务 `config/route.php`）：`RouteControllerRegistry::registerMany(['/xxx' => XxxController::class])`；
 4. **菜单**：后台「菜单管理」新增（`path` 填上一步的路径）；宿主若带 `make:permission` 命令（如 huafei）也可用命令建；
 5. **功能声明**：全部在 `grid()` 里流式拼装（列 / 搜索 / 表单 / 操作 / 汇总 / 导出开关）。
 
@@ -63,11 +63,41 @@ class MROrdersController extends BaseCurdController
 | `->href(...)` / `->href(callable)` | 单元格链接 |
 | `->switch()` | 行内开关 |
 | `column('config.api_url', '接口地址')` | **点式列**：根字段是 JSON 文本时自动解码取子键；`->map()/->datetime()` 等列方法全部可用（见 §5.2） |
+| `column('user.name', '用户')` | **点式列走关联**：`user` 不是真实字段时当作关联关系（`belongsTo/hasOne`），自动 `with('user')` 预加载；**字段优先，字段没有才走关联** |
+| `->modal('标题', $content)` | **点击弹窗**：内容服务端逐行生成，支持 `Table/Card/Html` 组件、闭包、类名、HTML 模板（见 §3.1） |
+| `->expand($content, '标题')` | **点击行内展开/收起**：写法同 `modal`，不弹窗 |
 | `->remote($table, $valueKey='id', $labelKey='name')` | 关联表翻译（跨库由统一接口代替时自行 display） |
 | `->limit(int)`（截断）、`->hidden()`（默认隐藏可配置显示）、`->sortable()` | 其它 |
 | `->copy()` | **可复制列**：单元格带复制按钮，一键复制该列文本（复制的是 `display()` 之后的最终展示值；与 tag/switch/image 等共存时 copy 优先） |
 | `->select([1=>'安卓',2=>'iOS'])` | **行内下拉编辑**（`= editable('select', …)` 的便捷写法）：参数为 `[值 => 文案]` 关联数组，或 `[['value'=>1,'label'=>'安卓'],…]` 二维列表，两种写法等价；选中即提交保存，字段自动加入可写字段白名单 |
 | `->editable($type='input', $options)` | 单元格编辑（`select` 的底层方法） |
+
+### 3.1 点击弹窗 / 行内展开（`modal()` / `expand()`）
+
+列值旁挂一个交互，内容由**服务端逐行生成**（随列表接口返回，前端零代码）：
+
+```php
+use plugin\curd\app\dsl\component\Card;
+use plugin\curd\app\dsl\component\Table;
+
+// 行内展开：点一下展开，再点收起
+$grid->column('money', '明细')->expand(function ($value, $row) {
+    return new Table(['xxx' => '标题'], [['xxx' => '111'], ['xxx' => '1222']]);
+});
+
+// 弹窗：标题 + 内容
+$grid->column('order_no', '订单号')->modal('订单详情', function ($value, $row) {
+    return new Card(['订单号' => $value, '金额' => $row->amount], '基本信息');
+});
+
+// 类名写法：实例化后调 render($row)
+$grid->column('id', 'ID')->modal('详情', OrderDetailModal::class);
+```
+
+内置组件：`new Table(列, 行, 选项)`、`new Card(['标签' => '值'], '标题')`、`new Html('<b>..</b>')`。
+内容也可以直接给 HTML 模板字符串（`'<b>{order_no}</b>'`，`{prop}` 取行字段、`{value}` 取本列值）。
+
+优先级：`modal` > `expand` > `copy` > `display` > 其它类型。详见 [Column §9](21-API-Column.md#9-弹窗与行内展开)。
 
 ## 4. 搜索 `grid()->filter(callable)`
 
