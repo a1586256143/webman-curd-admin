@@ -85,8 +85,8 @@ $grid->column('user.name', __('User'));           // 关联关系取字段（不
 > 行数据只有真实字段 + `user.name` 这类字面 key（避免整个关联对象被序列化下发）。
 > 若确实要输出关联内容，用 `->display()` 自行拼装。
 
-**弹窗 / 行内展开**：`->modal('标题', $content)` / `->expand($content)`，内容支持
-`Table` / `Card` / `Html` 组件、闭包、类名、HTML 模板 —— 见 [Column §9](21-API-Column.md#9-弹窗与行内展开)。
+**弹窗 / 整行展开**：`->modal('标题', $content)` / `->expand($content)`（点行任意位置、内容通栏），内容支持
+`Table` / `Card` / `Html` 组件、闭包、类名、HTML 模板 —— 见 [Column §9](21-API-Column.md#9-弹窗与整行展开)。
 
 ---
 
