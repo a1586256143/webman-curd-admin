@@ -384,14 +384,38 @@ class Column extends BaseDsl
      * 闭包在【服务端列表接口】执行：fn($value, $row) => 显示文本
      * 结果以 display_{prop} 字段附加到每行数据，前端优先显示；原始值保留供编辑回显
      *
-     *   $grid->column('status', '状态')->display(function ($value, $row) {
-     *       return $value == 1 ? '开启' : '关闭';
-     *   });
+     * 两种用法：
+     *   1) 闭包（动态计算）
+     *      $grid->column('status', '状态')->display(fn($value) => $value == 1 ? '开启' : '关闭');
+     *   2) 字符串（HTML 模板，自动按 HTML 渲染）
+     *      $grid->column('name', '名称')->display('<a href="/user/{id}" target="_blank">{name}</a>');
+     *      · {prop} 用当前行的字段值替换，{value} 用该列原始值替换
+     *      · 字符串形式会自动开启 ->html()，前端用 v-html 渲染
+     *
+     * 闭包返回的 HTML 需显式 ->html() 才会按 HTML 渲染（默认按文本转义，避免误渲染）：
+     *   $grid->column('status', '状态')->display(fn($v) => "<b>{$v}</b>")->html();
      */
-    public function display(callable $handler): self
+    public function display(string|callable $handler): self
     {
         $this->displayHandler = $handler;
         $this->config['display'] = true;
+        // 字符串即开发者手写的 HTML 模板，直接按 HTML 渲染
+        if (is_string($handler)) {
+            $this->config['html'] = true;
+        }
+        return $this;
+    }
+
+    /**
+     * 把该列显示值按 HTML 渲染（v-html）
+     * 与 display()/prefix()/suffix() 组合使用；默认关闭（文本转义，防误渲染）
+     *
+     *   ->display(fn($v) => '<el-tag>'.$v.'</el-tag>')->html()
+     *   ->html(false)   // 显式关闭
+     */
+    public function html(bool $html = true): self
+    {
+        $this->config['html'] = $html;
         return $this;
     }
 
@@ -431,6 +455,27 @@ class Column extends BaseDsl
         $suf = $this->suffix;
         if ($base === null && $pre === null && $suf === null) {
             return null;
+        }
+        // 字符串模板 → 闭包：{prop} 取当前行字段，{value} 取该列原始值
+        if (is_string($base)) {
+            $template = $base;
+            // 注意：不能声明为 static —— 下方 $base->call($this, ...) 需要绑定行上下文
+            $base = function ($value, $row) use ($template) {
+                return preg_replace_callback('/\{\s*([a-zA-Z0-9_]+)\s*\}/', static function ($m) use ($value, $row) {
+                    $key = $m[1];
+                    if ($key === 'value') {
+                        return is_scalar($value) ? (string)$value : '';
+                    }
+                    if (is_object($row)) {
+                        $v = method_exists($row, 'getAttribute')
+                            ? $row->getAttribute($key)
+                            : ($row->{$key} ?? null);
+                    } else {
+                        $v = $row[$key] ?? null;
+                    }
+                    return is_scalar($v) ? (string)$v : '';
+                }, $template);
+            };
         }
         return function ($value, $row) use ($base, $pre, $suf) {
             // 关键：用 ->call($this, ...) 把用户闭包（及其内嵌闭包）的 $this 也绑定到
