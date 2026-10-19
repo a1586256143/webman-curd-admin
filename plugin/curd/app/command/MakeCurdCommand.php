@@ -135,8 +135,11 @@ HELP);
         if (!str_starts_with($routePath, '/')) {
             $routePath = '/' . $routePath;
         }
-        $title = trim((string)$input->getOption('title'))
-            ?: ($this->readTableComment($connection, $table) ?: $this->humanize($table));
+        // 页面标题：--title 优先；否则用表名推导的英文短语（与字段标题同一套 key 约定，
+        // 表注释只作为翻译建议，不当 key）
+        $titleOption   = trim((string)$input->getOption('title'));
+        $title         = $titleOption !== '' ? $titleOption : $this->humanize($table);
+        $titleComment  = $titleOption === '' ? $this->readTableComment($connection, $table) : '';
 
         $controllerDir = trim((string)$input->getOption('controller-path')) ?: 'app/controller/admin/api';
         $modelDir      = trim((string)$input->getOption('model-path')) ?: 'app/model';
@@ -231,14 +234,20 @@ HELP);
             $this->printRouteHint($output, $registerLine, $routePath);
         }
 
-        // 字段标题已统一 __()：列出尚未登记的中文 key（不影响中文显示，做多语言时才需要）
+        // 字段标题统一 __()，key 是英文短语：列出还没登记中文翻译的（不补也能用，只是显示英文）
         $missing = $this->missingTranslations($columns);
+        // 页面标题也是 __() 的 key，表注释同样只作为翻译建议
+        if ($titleComment !== ''
+            && preg_match('/[\x{4e00}-\x{9fff}]/u', $titleComment)
+            && !isset($this->registeredTranslations()[$title])) {
+            $missing = [$title => $titleComment] + $missing;
+        }
         if ($missing) {
             $output->writeln('');
-            $output->writeln('  <comment>字段标题已走 __()：中文原文即 key，未命中时原样返回（不改也照常显示中文）。</comment>');
-            $output->writeln('  <comment>要支持多语言，在 resource/translations/{locale}/fields.php 里补：</comment>');
-            foreach (array_slice($missing, 0, 6) as $label) {
-                $output->writeln('    ' . $this->phpString($label) . ' => ' . $this->phpString($label) . ',');
+            $output->writeln('  <comment>字段标题统一走 __()，key 用字段名推导的英文短语（未命中时原样显示，不影响使用）。</comment>');
+            $output->writeln('  <comment>要让界面显示中文，把下面几行加到 resource/translations/zh_CN/fields.php：</comment>');
+            foreach (array_slice($missing, 0, 6, true) as $key => $zh) {
+                $output->writeln('    ' . $this->phpString($key) . ' => ' . $this->phpString($zh) . ',');
             }
             if (count($missing) > 6) {
                 $output->writeln('    <comment>… 共 ' . count($missing) . ' 项（zh_CN 里已有的不重复列出）</comment>');
@@ -321,6 +330,9 @@ HELP);
             'enumOptions'   => $enumOptions,
             'isBoolean'     => $base === 'tinyint' && $args === '1',
             'label'         => $comment !== '' ? $comment : $this->humanize($field),
+            // 标题 key：始终用「字段名推导的英文短语」（request_order → Request order），
+            // 中文注释只作为翻译建议（写进 fields.php 的 'Request order' => '请求订单号'）
+            'label_en'      => $this->humanize($field),
         ];
     }
 
@@ -444,8 +456,10 @@ use plugin\curd\app\dsl\Grid;
  *       '{$routePath}' => \\{$namespace}\\{$className}::class,
  *   ]);
  *
- * 字段标题统一用 __()（等价 trans(..., [], 'fields')）——中文原文/英文短语即 key，
- * 在宿主 resource/translations/{locale}/fields.php 里增改，未命中时原样返回。
+ * 字段标题统一用 __()（等价 trans(..., [], 'fields')）——key 是字段名推导的英文短语
+ * （request_order → __('Request order')），中文显示在宿主
+ * resource/translations/zh_CN/fields.php 里配：'Request order' => '请求订单号'。
+ * 未命中时原样返回英文，不影响使用。
  *
  * 常用增强写法：
  *   ->copy()                                     可复制列（复制按钮，复制的是 display() 之后的值）
@@ -873,52 +887,72 @@ PHP;
     }
 
     /**
-     * 字段标题表达式：**统一**包 __()（有表注释用注释，没有则用字段名推导的短语）
+     * 字段标题表达式：统一包 __()，key 用「字段名推导的英文短语」
      *
-     * 为什么中文注释也要包 __()：
-     *   - 宿主 resource/translations/{locale}/fields.php 以「中文原文」为 key，
-     *     未命中时 trans() 原样返回 key，所以 __( '手机号' ) 与直接写 '手机号' 等价；
-     *   - 但包上 __() 之后，补 en/fields.php（'手机号' => 'Mobile'）切语言即生效，
-     *     不包则永远是硬编码中文，多语言无从下手。
+     * request_order → __('Request order')，而不是数据库里的中文注释。
+     * 这样 key 与表无关、可复用，且和内置 fields.php 的 'Created at' => '创建时间' 约定一致：
+     *   - 未命中翻译时 trans() 原样返回 key → 界面显示英文，但随时可补翻译；
+     *   - 中文显示由宿主 resource/translations/zh_CN/fields.php 提供：
+     *       'Request order' => '请求订单号',
      */
     protected function labelExpr(array $col): string
     {
-        return '__(' . $this->phpString($col['label']) . ')';
+        return '__(' . $this->phpString($this->labelKey($col)) . ')';
     }
 
     /**
-     * 尚未在宿主 zh_CN/fields.php 里登记的中文标题（去重、保持出现顺序）
+     * 取字段的翻译 key（优先英文短语，老数据结构回退到 label）
+     */
+    protected function labelKey(array $col): string
+    {
+        $en = trim((string)($col['label_en'] ?? ''));
+        return $en !== '' ? $en : trim((string)($col['label'] ?? ''));
+    }
+
+    /**
+     * 宿主 zh_CN/fields.php 里已登记的 key（不存在返回空数组）
      *
-     * 只用于生成后提示，不影响代码生成；英文短语（humanize 推导）本身可读，不提示。
+     * @return array<string, string>
+     */
+    protected function registeredTranslations(): array
+    {
+        $file = base_path() . '/resource/translations/zh_CN/fields.php';
+        if (!is_file($file)) {
+            return [];
+        }
+        try {
+            $loaded = include $file;
+            return is_array($loaded) ? $loaded : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * 尚未在宿主 zh_CN/fields.php 里登记的字段标题：[英文 key => 中文注释]
      *
-     * @return string[]
+     * 只用于生成后提示，不影响代码生成；没有中文注释的字段不提示（英文本身可读）。
+     *
+     * @return array<string, string>
      */
     protected function missingTranslations(array $columns): array
     {
-        $file = base_path() . '/resource/translations/zh_CN/fields.php';
-        $existing = [];
-        if (is_file($file)) {
-            try {
-                $loaded = include $file;
-                $existing = is_array($loaded) ? $loaded : [];
-            } catch (\Throwable $e) {
-                $existing = [];
-            }
-        }
+        $existing = $this->registeredTranslations();
 
         $missing = [];
         foreach ($columns as $col) {
-            $label = trim((string)($col['label'] ?? ''));
-            if ($label === '' || isset($existing[$label])) {
+            $key = $this->labelKey($col);
+            if ($key === '' || isset($existing[$key])) {
                 continue;
             }
-            // 只提示含中文的标题；纯英文 key 不写翻译也能直接显示
-            if (!preg_match('/[\x{4e00}-\x{9fff}]/u', $label)) {
+            // 只有注释含中文时才值得提示（英文 key 不写翻译也能直接显示）
+            $comment = trim((string)($col['comment'] ?? ''));
+            if ($comment === '' || !preg_match('/[\x{4e00}-\x{9fff}]/u', $comment)) {
                 continue;
             }
-            $missing[$label] = true;
+            $missing[$key] = $comment;
         }
-        return array_keys($missing);
+        return $missing;
     }
 
     /**
