@@ -29,7 +29,9 @@ trait CurdActionsTrait
         }
 
         // 优先执行 Action 类内的 handle()，业务无需再在控制器定义 actionXxx()
-        if ($action && method_exists($action, 'handle')) {
+        // 注意：链式 action（new Action）也「有」handle 方法，但那是会抛异常的基类默认实现，
+        // 必须判断 handle() 是否被子类覆盖，否则链式 ->handler('x') 永远走不到 actionX()。
+        if ($action && $this->actionHasOwnHandle($action)) {
             // 自动注入当前行模型实例：handle 里可直接用 $this->model()（等价 $model::find($id)）
             $action->setModel($this->resolveActionModel($request, $action));
             // 自动解析 excel 字段（$form->excel()）：multipart 上传的二进制 → 解析好的数据行
@@ -61,6 +63,23 @@ trait CurdActionsTrait
             $this->excelActionData = $this->resolveActionExcelData($request, $formFields);
         }
         return $this->$method($request);
+    }
+
+    /**
+     * 该 Action 是否自己实现了 handle()（而不是继承 Action 基类的「未实现」抛异常版本）
+     *
+     * 链式写法 $grid->action('audit', '审核')->handler('audit') 用的是基类 Action，
+     * 其 handle() 只会抛 RuntimeException —— 这类必须回退到控制器的 actionAudit()。
+     */
+    protected function actionHasOwnHandle($action): bool
+    {
+        static $cache = [];
+        $class = get_class($action);
+        if (!isset($cache[$class])) {
+            $cache[$class] = (new \ReflectionMethod($action, 'handle'))->getDeclaringClass()->getName()
+                !== \plugin\curd\app\dsl\Action::class;
+        }
+        return $cache[$class];
     }
 
     /**

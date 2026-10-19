@@ -167,6 +167,40 @@ class Grid extends BaseDsl
     }
 
     /**
+     * 批量操作按钮（勾选行后出现在批量工具栏，随请求携带 ids）
+     *
+     *   $grid->batAction('batch-on', '批量上架')->confirm('确定上架选中记录吗？');
+     *   // 控制器：public function actionBatchOn(Request $request) { $ids = $request->post('ids', []); ... }
+     *
+     * 等价于 $grid->action(...)->batch(true)，只是语义更直白。
+     */
+    public function batAction(string $name, string $label): Action
+    {
+        return $this->action($name, $label)->batch(true);
+    }
+
+    /**
+     * Excel 导入按钮（列表工具栏，弹窗选文件 → 提交 → 后端逐行处理）
+     *
+     *   $grid->importAction();                    // 默认 import / 导入
+     *   $grid->importAction('import-goods', '导入商品');
+     *   // 控制器：public function actionImport(Request $request) { $rows = $this->excelRows('file'); ... }
+     *
+     * 预置：global 工具栏 + 弹窗表单里的 excel 文件字段（prop 固定 file）。
+     * 列名约定：Excel 首行为表头，列名与字段标签一致（见 excelRows 返回的键）。
+     */
+    public function importAction(string $name = 'import', string $label = '导入'): Action
+    {
+        return $this->action($name, $label)
+            ->icon('Upload')
+            ->type('warning')
+            ->global(true)
+            ->form(function (Form $form) {
+                $form->excel('file', 'Excel 文件');
+            });
+    }
+
+    /**
      * 设置搜索
      */
     public function filter(callable $callback): self

@@ -61,6 +61,9 @@ class MakeCurdCommand extends Command
             ->addOption('controller-path', 'C', InputOption::VALUE_REQUIRED, '控制器目录，默认 app/controller/admin/api')
             ->addOption('model-path', 'M', InputOption::VALUE_REQUIRED, '模型目录，默认 app/model')
             ->addOption('connection', 'd', InputOption::VALUE_REQUIRED, '数据库连接名，默认取插件配置 business_connection')
+            ->addOption('action', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, '生成行级操作，格式 name[:按钮标题]，可重复（如 --action=audit:审核）')
+            ->addOption('bat-action', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, '生成批量操作（勾选行后可用），格式 name[:按钮标题]，可重复')
+            ->addOption('import-action', null, InputOption::VALUE_OPTIONAL, '生成 Excel 导入操作，格式 name[:按钮标题]，不写值默认 import:导入')
             ->addOption('register', null, InputOption::VALUE_NONE, '自动把路由注册写进宿主 config/route.php（写入前备份为 config/route.php.bak）')
             ->addOption('no-model', null, InputOption::VALUE_NONE, '只生成控制器，不生成模型文件')
             ->addOption('force', 'f', InputOption::VALUE_NONE, '同名文件已存在时覆盖（默认跳过并提示）');
@@ -80,6 +83,12 @@ class MakeCurdCommand extends Command
   php webman make:curd --table=my_test
   php webman make:curd -t my_test --title=测试管理 --register
   php webman make:curd -t hf_goods -C app/controller/api -m HfGoods -f
+
+<comment>顺带生成操作按钮（可组合）：</comment>
+  --action=audit:审核                  行级按钮 → 控制器 actionAudit()
+  --bat-action=batch-on:批量上架        批量按钮 → 控制器 actionBatchOn()（$request->post('ids')）
+  --import-action=import:导入          Excel 导入 → 控制器 actionImport()（$this->excelRows('file')）
+  php webman make:curd -t hf_goods --action=audit:审核 --bat-action=batch-on:批量上架 --import-action
 HELP);
     }
 
@@ -134,6 +143,18 @@ HELP);
         $created    = [];
         $skipped    = [];
 
+        // ---------- 3.1 操作按钮（--action / --bat-action / --import-action） ----------
+        $actions = array_merge(
+            $this->parseActions((array)$input->getOption('action'), false),
+            $this->parseActions((array)$input->getOption('bat-action'), true)
+        );
+        $import = null;
+        if ($input->hasParameterOption('--import-action')) {
+            $raw = trim((string)$input->getOption('import-action'));
+            $import = $this->parseActions([$raw === '' ? 'import:导入' : $raw], false)[0];
+            $import['name'] = $import['name'] ?: 'import';
+        }
+
         // ---------- 4. 模型文件 ----------
         if ($withModel) {
             $modelFile = base_path() . '/' . trim($modelDir, '/') . '/' . $modelName . '.php';
@@ -158,7 +179,9 @@ HELP);
                 $table,
                 $title,
                 $routePath,
-                $columns
+                $columns,
+                $actions,
+                $import
             ));
             $created[] = $this->relative($controllerFile);
         }
@@ -305,12 +328,23 @@ HELP);
         string $table,
         string $title,
         string $routePath,
-        array $columns
+        array $columns,
+        array $actions = [],
+        ?array $import = null
     ): string {
         // 模型与控制器同命名空间时省掉 use 行
-        $modelUse = (strpos($modelFqcn, '\\') === false || substr($modelFqcn, 0, strrpos($modelFqcn, '\\')) === $namespace)
-            ? ''
-            : 'use ' . $modelFqcn . ";\n";
+        // 同名冲突（-c 传了与模型相同的类名）时给模型起别名，否则 use 与 class 撞名会致命错误
+        $modelAlias = $modelShortName === $className ? $modelShortName . 'Model' : $modelShortName;
+        $sameNamespace = strpos($modelFqcn, '\\') === false
+            || substr($modelFqcn, 0, strrpos($modelFqcn, '\\')) === $namespace;
+        if ($sameNamespace) {
+            $modelUse = '';
+            $modelAlias = $modelShortName; // 同命名空间无需 import，直接用短名
+        } else {
+            $modelUse = 'use ' . $modelFqcn
+                . ($modelAlias !== $modelShortName ? ' as ' . $modelAlias : '')
+                . ";\n";
+        }
 
         // ===== 列表列 =====
         $gridLines = [];
@@ -351,6 +385,13 @@ HELP);
 
         $titleLiteral = $this->phpString($title);
 
+        // ===== 自定义操作（--action / --bat-action / --import-action） =====
+        $actionBlock = $this->actionBlock($actions, $import);
+        $methodBlock = $this->actionMethods($actions, $import);
+        $requestUse  = ($actionBlock === '' && $methodBlock === '')
+            ? ''
+            : "use support\\Request;\n";
+
         return <<<PHP
 <?php
 
@@ -360,7 +401,7 @@ namespace {$namespace};
 use plugin\curd\app\dsl\Filter;
 use plugin\curd\app\dsl\Form;
 use plugin\curd\app\dsl\Grid;
-
+{$requestUse}
 /**
  * 后台「{$title}」管理（由 `php webman make:curd --table={$table}` 生成，可自由修改）
  *
@@ -388,7 +429,7 @@ class {$className} extends BaseCurdController
     /**
      * 页面标题
      *
-     * Grid 不传 title，自动读本属性（new Grid(new {$modelShortName}())）。
+     * Grid 不传 title，自动读本属性（new Grid(new {$modelAlias}())）。
      * 想走翻译可改成方法形式：
      *     protected function title(): string { return __('{$this->humanize($table)}'); }
      */
@@ -397,7 +438,7 @@ class {$className} extends BaseCurdController
     protected function grid(): Grid
     {
         // 模型类由框架自动从 Grid 提取回填 \$modelClass，无需再声明
-        \$grid = new Grid(new {$modelShortName}());
+        \$grid = new Grid(new {$modelAlias}());
         \$grid->getModel()->orderByDesc('id');
 
         // ===== 列表列 =====
@@ -407,12 +448,175 @@ class {$className} extends BaseCurdController
 {$softDeleteHint}        \$grid->form(function (Form \$form) {
 {$formBlock}
         });
-
+{$actionBlock}
         return \$grid;
     }
-}
+{$methodBlock}}
 
 PHP;
+    }
+
+    // ============================================================
+    // 自定义操作（action / batAction / importAction）
+    // ============================================================
+
+    /**
+     * 解析 --action / --bat-action 的 `name[:按钮标题]` 写法
+     *
+     * @return array<int, array{name:string,label:string,batch:bool,method:string}>
+     */
+    protected function parseActions(array $raw, bool $batch): array
+    {
+        $out = [];
+        foreach ($raw as $item) {
+            $item = trim((string)$item);
+            if ($item === '') {
+                continue;
+            }
+            $parts = explode(':', $item, 2);
+            $name  = trim($parts[0]);
+            if ($name === '') {
+                continue;
+            }
+            $label = trim($parts[1] ?? '') ?: $name;
+            $out[] = [
+                'name'   => $name,
+                'label'  => $label,
+                'batch'  => $batch,
+                'method' => 'action' . str_replace(' ', '', ucwords(str_replace(['-', '_'], ' ', $name))),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * grid() 里的操作按钮代码块；没有任何操作时返回空串
+     */
+    protected function actionBlock(array $actions, ?array $import): string
+    {
+        if ($actions === [] && $import === null) {
+            return '';
+        }
+
+        $lines = ['', '        // ===== 自定义操作 ====='];
+        foreach ($actions as $a) {
+            $call    = $a['batch'] ? '$grid->batAction' : '$grid->action';
+            $icon    = $a['batch'] ? 'Select' : 'Edit';
+            $confirm = $a['batch']
+                ? '确定对选中记录执行「' . $a['label'] . '」吗？'
+                : '确定执行「' . $a['label'] . '」吗？';
+
+            $lines[] = '        ' . $call . '(' . $this->phpString($a['name']) . ', ' . $this->phpString($a['label']) . ')';
+            $lines[] = "            ->icon('{$icon}')";
+            $lines[] = '            ->confirm(' . $this->phpString($confirm) . ')';
+            $lines[] = '            ->handler(' . $this->phpString($a['name']) . ');';
+            $lines[] = '';
+        }
+        if ($import !== null) {
+            $lines[] = '        $grid->importAction(' . $this->phpString($import['name']) . ', ' . $this->phpString($import['label']) . ');';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * 控制器里的 action{Name}() 方法代码块（无操作时返回空串）
+     */
+    protected function actionMethods(array $actions, ?array $import): string
+    {
+        if ($actions === [] && $import === null) {
+            return '';
+        }
+
+        $out = '';
+        foreach ($actions as $a) {
+            $label = $a['label'];
+            $name  = $a['name'];
+
+            if ($a['batch']) {
+                $out .= <<<PHP
+
+    /**
+     * 批量操作「{$label}」（POST /api/curd/model/{model}/action/{$name}）
+     * 请求体：ids（勾选行主键数组）
+     */
+    public function {$a['method']}(Request \$request)
+    {
+        \$ids = array_values(array_filter(array_map('intval', (array)\$request->post('ids', []))));
+        if (!\$ids) {
+            return json(['code' => 400, 'msg' => '请先勾选记录']);
+        }
+
+        // TODO: 批量逻辑，例如：
+        // \$affected = \$this->resolveGrid()->getModelInstance()->newQuery()
+        //     ->whereIn('id', \$ids)->update(['status' => 1]);
+
+        return json(['code' => 200, 'msg' => '已处理 ' . count(\$ids) . ' 条']);
+    }
+
+PHP;
+                continue;
+            }
+
+            $out .= <<<PHP
+
+    /**
+     * 行级操作「{$label}」（POST /api/curd/model/{model}/action/{$name}）
+     * 请求体：id（当前行主键）
+     */
+    public function {$a['method']}(Request \$request)
+    {
+        \$id  = (int)\$request->post('id');
+        \$row = \$this->resolveGrid()->getModelInstance()->newQuery()->find(\$id);
+        if (!\$row) {
+            return json(['code' => 404, 'msg' => '记录不存在']);
+        }
+
+        // TODO: 业务逻辑，例如：\$row->status = 1; \$row->save();
+
+        return json(['code' => 200, 'msg' => '操作成功']);
+    }
+
+PHP;
+        }
+
+        if ($import !== null) {
+            $method = $import['method'];
+            $out .= <<<PHP
+
+    /**
+     * Excel 导入「{$import['label']}」（POST /api/curd/model/{model}/action/{$import['name']}）
+     * 文件字段固定为 file（\$grid->importAction() 预置），首行为表头
+     */
+    public function {$method}(Request \$request)
+    {
+        \$rows = \$this->excelRows('file');
+        if (!\$rows) {
+            return json(['code' => 400, 'msg' => '没有解析到数据，请检查文件首行是否为表头']);
+        }
+
+        \$model = \$this->resolveGrid()->getModelInstance();
+        \$ok = 0;
+        \$fail = 0;
+        foreach (\$rows as \$row) {
+            try {
+                // TODO: 列名 → 字段映射（\$row 的键是 Excel 首行的文字）
+                // \$model->newQuery()->create([
+                //     'name' => \$row['名称'] ?? '',
+                // ]);
+                \$ok++;
+            } catch (\Throwable \$e) {
+                \$fail++;
+            }
+        }
+
+        return json(['code' => 200, 'msg' => "导入完成：成功 {\$ok} 条，失败 {\$fail} 条"]);
+    }
+
+PHP;
+        }
+
+        return $out;
     }
 
     /**

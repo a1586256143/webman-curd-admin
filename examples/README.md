@@ -24,9 +24,9 @@ RouteControllerRegistry::register('/my-test', \app\controller\admin\api\MyTestCo
 
 ## 写法要点（新业务控制器照抄）
 
-- 控制器：继承 `BaseCurdController`（业务项目可再继承自己封装的基类，如
-  `BaseAdminController`）；`$modelClass` 指向模型、`$title` 为页面标题；
-  `columns()/search()/formFields()/rules()` 定义列表/搜索/表单/校验；
+- 控制器：继承 `plugin\curd\app\controller\base\BaseCurdController`（业务项目可再继承自己封装的
+  基类）；`$title` 为页面标题；`grid()` 里用 `Grid/Form/Filter/Column/Action` 流式声明
+  列 / 搜索 / 表单 / 操作；模型直接 `new` 进 `Grid`，框架自动回填 `$modelClass`；
   业务钩子：`createdBefore/createdAfter/updateBefore/updateAfter/deleteBefore/deleteAfter/...`
 - 模型：`$table` 声明表名即可；连接默认走插件基类（默认库），
   业务表在业务库时继承宿主 `app\model\BaseModel` 或显式 `protected $connection = 'mysql_business';`
