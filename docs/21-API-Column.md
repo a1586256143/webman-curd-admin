@@ -114,6 +114,19 @@ $grid->column('price', __('Price'))->prefix('￥')->suffix(' 元');
 > ⚠️ 自动检测开启后，返回值不再自动转义：拼接外部数据（如代理 IP、用户昵称）请自行 `htmlspecialchars()`。
 > 该能力需要新前端产物（`display_html_{prop}` 标记），升级插件后**必须重建/同步前端**。
 
+> ⚠️ **`v-html` 不编译 Vue 组件**：`return '<el-tag type="info">池</el-tag>'` 只会得到一个无样式的未知标签
+> （Element Plus 的样式挂在 `.el-tag` **类名**上，不是标签名上）。徽标请用内联样式，最稳且不依赖分包 CSS：
+>
+> ```php
+> // 灰（info）徽标；success/warning/danger 换 bg/color/border 三色即可
+> return '<span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;'
+>      . 'border-radius:4px;font-size:12px;line-height:1;border:1px solid #e9e9eb;'
+>      . 'background:#f4f4f5;color:#909399">池</span>';
+> ```
+>
+> 也可写 `<span class="el-tag el-tag--info">池</span>`（依赖该页已加载 el-tag 的样式分包）；
+> 想用真组件渲染则走 `->map()` + `->label()`（文案由字典决定，不能再拼额外数据）。
+
 **可复制列**：
 
 ```php
