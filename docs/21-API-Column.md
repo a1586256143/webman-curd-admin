@@ -42,7 +42,11 @@
 ```php
 $grid->column('id', __('ID'))->width(70)->align('center');
 $grid->column('name', __('Name'))->minWidth(160)->sortable();
-$grid->column('remark', __('Remark'))->limit(20);       // 超 20 字省略
+$grid->column('remark', __('Remark'))->limit(20);       // 超 20 字省略，点击弹出全文
+```
+
+> `limit(N)` 对**单元格最终显示文本**生效：与 `->display()` 叠加时，截断的是 display 闭包的返回值
+> （超出省略 + 点击弹全文）；HTML 渲染值（`->html()` / 自动检测命中）不做文本截断，避免截坏标签。
 $grid->column('updated_at', __('Updated at'))->hidden(); // 默认不显示
 $grid->column('actions_placeholder', '')->fixed('right');
 ```
