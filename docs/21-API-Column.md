@@ -45,6 +45,10 @@ $grid->column('name', __('Name'))->minWidth(160)->sortable();
 $grid->column('remark', __('Remark'))->limit(20);       // 超 20 字省略，点击弹出全文
 ```
 
+> **列宽自适应**：`width` / `minWidth` 未指定时，主表格列按**当前页内容**自动估算列宽
+> （表头 + 单元格显示文本，含 display / map 结果；HTML 值先去标签），超长列 clamp 到 460px 换行。
+> 显式指定 `width` / `minWidth` 则完全以定义为准。规则与 `expand` / `modal` 里 `Table` 组件一致（`fit: false` 可关）。
+
 > `limit(N)` 对**单元格最终显示文本**生效：与 `->display()` 叠加时，截断的是 display 闭包的返回值
 > （超出省略 + 点击弹全文）；HTML 渲染值（`->html()` / 自动检测命中）不做文本截断，避免截坏标签。
 $grid->column('updated_at', __('Updated at'))->hidden(); // 默认不显示
