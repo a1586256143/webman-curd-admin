@@ -31,6 +31,10 @@ return [
      */
     'command' => [
         \plugin\curd\app\command\MakeCurdCommand::class,
+        // 追加操作按钮（行级 / 批量）：php webman make:curd-action -t 表名 --name=audit:审核 [--batch]
+        \plugin\curd\app\command\MakeCurdActionCommand::class,
+        // 追加 Excel 导入：php webman make:curd-import -t 表名 [--name=import:导入]
+        \plugin\curd\app\command\MakeCurdImportCommand::class,
         // 接口加密密钥：php webman curd:crypto-key [--force] [--bits=4096] [--show] [--print-public]
         \plugin\curd\app\command\CryptoKeyCommand::class,
     ],

@@ -369,8 +369,9 @@ $grid->importAction('import', '导入订单');        // 也可自定义
 （`batch-on` → `actionBatchOn`）。**只在 Action 子类自己实现了 `handle()` 时才走子类**，
 链式 `action()` 一律回退到控制器方法（否则会抛「Action xxx 未实现 handle」）。
 
-用 `make:curd --action / --bat-action / --import-action` 可以连按钮配置和这三个方法骨架一起生成，
-见 [快速开始 §6](02-快速开始.md#6-命令行生成-makecurd)。
+用 `make:curd-action`（行级 / 批量，加 `--batch` 即批量）和 `make:curd-import`（Excel 导入）可以连按钮配置和
+这几个方法骨架一起注入到已生成的控制器里（幂等、写前备份、失败回滚），
+见 [命令行工具 §2/§3](17-命令行工具.md) 与 [快速开始 §6](02-快速开始.md#6-命令行生成-makecurd)。
 
 Action 类（放 `app/controller/admin/api/actions/`）用 `init()` 声明外观、`handle()` 写业务：
 
