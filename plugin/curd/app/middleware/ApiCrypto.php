@@ -33,8 +33,11 @@ use Webman\Http\Request;
  *       共同构成插件的加解密能力，由主 config/middleware.php 的 '@' 全局中间件组注册
  *       （跨 app 与 plugin 生效）。
  *
- * 开关：plugin/curd/config/crypto.php enabled（config('plugin.curd.crypto.enabled')，
- *       .env API_ENCRYPT=false 关闭，需与前端一致）
+ * 开关（默认【开启】，dev / prod 一致；显式关闭才不加密）：
+ *   宿主 config/curd-admin.php 的 'api_encrypt'（最高优先级）
+ *   → 否则 .env 的 API_ENCRYPT（不配 = true）
+ *   见 plugin/curd/config/crypto.php；关闭后本中间件完全透传。
+ *   前端发行产物是 auto 模式：握手拿到 enabled=false 会自动退回明文，无需重新打包。
  */
 class ApiCrypto implements MiddlewareInterface
 {

@@ -22,8 +22,8 @@ use plugin\curd\app\auth\AuthProviderAware;
  *     （admin/admin123，仅当表为空时插入；密码用运行时 password_hash 生成）；
  *     my_test 表存在时补 1 条示例数据 + 后台「测试管理」菜单（幂等，老项目升级可补齐）
  *  D. 密钥：生成 RSA-2048 密钥对到 config/keys/（api_rsa_private.pem / api_rsa_public.pem），
- *     供 API_ENCRYPT=true 的信封加密部署使用（公钥由 /api/config/crypto 运行时下发给前端，
- *     不需要替换进前端源码后重新构建）
+ *     接口加密默认开启，公钥由 /api/config/crypto 运行时下发给前端
+ *     （不需要替换进前端源码后重新构建）
  *
  * DB 连接（单库架构，认证与业务同一库）：
  * 认证库 config('plugin.curd.curd.admin_connection')（默认 mysql）；
@@ -601,7 +601,9 @@ class Install
         }
         if (!function_exists('openssl_pkey_new')) {
             static::report(false, '', 'openssl 扩展不可用，无法生成 RSA 密钥（如不需加密可忽略）');
-            return true; // 不阻断安装：无密钥时 API_ENCRYPT 应保持 false
+            // 不阻断安装：无密钥时握手接口回 public_key=""，前端 auto 模式自动退回明文，
+            // 接口照常可用（只是不再加密）。要彻底关闭可写 api_encrypt=false。
+            return true;
         }
 
         try {

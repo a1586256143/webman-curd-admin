@@ -12,10 +12,20 @@
  *       私钥 plugin/curd/config/keys/api_rsa_private.pem 与本文件同属插件；
  *       全局注册点在主 config/middleware.php 的 '@' 组（跨 app 与 plugin 生效）。
  *
- * 开关：.env 中 API_ENCRYPT=false 可整体关闭（前后端需保持一致）
+ * 开关（默认【开启】，dev / prod 一致；显式关闭才不加密）：
+ *   1. 宿主 config/curd-admin.php 的 'api_encrypt'（最高优先级，写 false 即整体关闭）
+ *   2. 否则读 .env 的 API_ENCRYPT（不配 = true；写 false 关闭）
+ *   关闭后中间件完全透传：明文请求照常，密文请求不再解密（前端 auto 模式会同步退回明文）。
  */
+
+// 宿主配置优先；未配置（null）时回退 .env
+$curdHostEncrypt = config('curd-admin.api_encrypt');
+$curdEncryptEnabled = $curdHostEncrypt === null
+    ? env('API_ENCRYPT', true)
+    : $curdHostEncrypt;
+
 return [
-    'enabled' => env('API_ENCRYPT', true),
+    'enabled' => (bool)$curdEncryptEnabled,
 
     // RSA 私钥文件（PKCS#8 PEM）
     'private_key_path' => __DIR__ . '/keys/api_rsa_private.pem',
@@ -24,7 +34,7 @@ return [
     'public_key_path' => __DIR__ . '/keys/api_rsa_public.pem',
 
     // 是否允许 GET /api/config/crypto 把公钥下发给前端（握手）
-    //  - true（默认）：前端构建时不需要内置公钥，同一份产物可部署到任意新项目
+    //  - true（默认）：前端产物不绑定宿主密钥，部署到任意新项目都能自洽
     //  - false：接口只回 enabled 状态、不回公钥，前端只能用它构建时内嵌的公钥
     // 公钥本身是公开信息（等价于 HTTPS 的证书），下发不降低安全性。
     'handshake' => env('API_CRYPTO_HANDSHAKE', true),

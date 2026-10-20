@@ -12,12 +12,13 @@
 # 环境变量：
 #   CURD_PUBLIC_DIR         回灌目标，默认 {插件仓库}/plugin/curd/public
 #                           （为单个宿主构建时指向该宿主的 plugin/curd/public）
-#   VITE_API_ENCRYPT        'false'（默认，明文）| 'true'（强制加密）| 'auto'（由后端决定）
-#                           - 'true'：公钥自动从「回灌目标宿主」的 config/keys/api_rsa_public.pem
+#   VITE_API_ENCRYPT        'auto'（默认，由后端决定）| 'true'（强制加密）| 'false'（明文）
+#                           - auto：产物不内嵌任何宿主公钥，启动时 GET /api/config/crypto
+#                             拿当前宿主的公钥 → 同一份产物可部署到任意新项目（**发行默认**）
+#                           - true：公钥自动从「回灌目标宿主」的 config/keys/api_rsa_public.pem
 #                             读取并内嵌（读不到直接报错退出）；运行时仍会向后端握手，
 #                             握手失败才回退这把内嵌公钥
-#                           - 'auto'：产物不内嵌任何宿主公钥，启动时 GET /api/config/crypto
-#                             拿当前宿主的公钥 → 同一份产物可部署到任意新项目（推荐）
+#                           - false：明文直连（除非你确定不需要加密，否则别用）
 #                           - 也可用 VITE_API_RSA_PUBLIC_KEY 显式传 PEM 单行文本（\n 分隔）
 #   CURD_PAGE_BASE          前端挂载前缀，默认 /app/curd/
 #
@@ -26,8 +27,11 @@
 #   CURD_PUBLIC_DIR=~/Public/www/company/webman-huafei-platform/plugin/curd/public \
 #     ./scripts/build-frontend.sh ~/Public/www/company/webman-curd-admin-frontend
 #
-# 例（推荐：不绑定宿主的加密产物，部署到哪都自洽）：
-#   VITE_API_ENCRYPT=auto ./scripts/build-frontend.sh <前端源码目录>
+# 例（默认：不绑定宿主的加密产物，部署到哪都自洽）：
+#   ./scripts/build-frontend.sh <前端源码目录>
+#
+# 例（确实不需要加密时才显式关掉）：
+#   VITE_API_ENCRYPT=false ./scripts/build-frontend.sh <前端源码目录>
 #
 # 注意：本机若被注入 NODE_OPTIONS fs shim（部分沙箱/IDE 环境），npm 会报
 # "Brokered host mkdir ..."，此时用 `env -u NODE_OPTIONS npm ...` 绕开。
@@ -35,9 +39,9 @@
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# 产物回灌目标。默认=插件仓库自带的 public/（对外发布的「明文」默认产物）；
-# 要给某个宿主单独构建（如为 huafei 开加密），用 CURD_PUBLIC_DIR 指向该宿主的
-# plugin/curd/public —— 这样插件仓库的默认产物保持明文、不被污染。
+# 产物回灌目标。默认=插件仓库自带的 public/（对外发布的发行产物，auto 加密模式）；
+# 要给某个宿主单独构建（如为 huafei 内嵌该宿主的公钥），用 CURD_PUBLIC_DIR 指向该宿主的
+# plugin/curd/public。
 PUBLIC_DIR="${CURD_PUBLIC_DIR:-$PLUGIN_DIR/plugin/curd/public}"
 FRONTEND_DIR="${1:-${CURD_FRONTEND_DIR:-}}"
 
@@ -54,31 +58,41 @@ fi
 PAGE_BASE="${CURD_PAGE_BASE:-/app/curd/}"
 
 # ---------- 加密开关与公钥（开启加密就绝不能拿错公钥，否则全线 400） ----------
-API_ENCRYPT="${VITE_API_ENCRYPT:-false}"
+# 默认 auto：产物不内嵌公钥，运行时向后端握手（换项目/重装都不需要重新打包）
+API_ENCRYPT="${VITE_API_ENCRYPT:-auto}"
 RSA_PUB_INJECT="${VITE_API_RSA_PUBLIC_KEY:-}"
 
-if [ "$API_ENCRYPT" = "auto" ]; then
+# 归一化：off 类取值统一成 off；auto 单独一档；其余（true/on/1/其它）按「内嵌公钥」处理
+case "$API_ENCRYPT" in
+  false|off|0|no) ENCRYPT_MODE="off" ;;
+  auto)           ENCRYPT_MODE="auto" ;;
+  *)              ENCRYPT_MODE="embed" ;;
+esac
+
+if [ "$ENCRYPT_MODE" = "auto" ]; then
   # auto：公钥由后端 GET /api/config/crypto 运行时下发，产物里不内嵌任何宿主公钥
   RSA_PUB_INJECT=""
-  echo "==> 加密模式 auto：产物不内嵌公钥，运行时向后端握手（可部署到任意新项目）"
-elif [ "$API_ENCRYPT" != "false" ]; then
+  echo "==> 加密模式 auto（默认）：产物不内嵌公钥，运行时向后端握手（可部署到任意新项目）"
+elif [ "$ENCRYPT_MODE" = "embed" ]; then
   if [ -z "$RSA_PUB_INJECT" ]; then
     # 未显式给公钥：从「本次回灌目标宿主」的 config/keys 自动取
     HOST_KEY="$(dirname "$PUBLIC_DIR")/config/keys/api_rsa_public.pem"
     if [ -f "$HOST_KEY" ]; then
       # 按行读入 PEM 原样注入（前端 apiCrypto.js 同时兼容真实换行与字面 \n 两种写法）
       RSA_PUB_INJECT="$(awk 'NF{printf "%s\\n", $0}' "$HOST_KEY")"
-      echo "==> 加密已开启，公钥取自: $HOST_KEY"
+      echo "==> 加密模式 true（内嵌公钥），公钥取自: $HOST_KEY"
     else
       echo "错误: VITE_API_ENCRYPT=$API_ENCRYPT 但找不到宿主公钥：$HOST_KEY"
       echo "      每个宿主的密钥对独立，插件源码内嵌的公钥谁都对不上。"
       echo "      请确认 CURD_PUBLIC_DIR 指向目标宿主的 plugin/curd/public，"
-      echo "      或用 VITE_API_RSA_PUBLIC_KEY 显式传入 PEM 单行文本。"
+      echo "      或用 VITE_API_RSA_PUBLIC_KEY 显式传入 PEM 单行文本，"
+      echo "      或直接用默认的 auto 模式（不需要公钥）。"
       exit 1
     fi
   fi
 else
   RSA_PUB_INJECT=""
+  echo "==> 加密模式 off（显式关闭）：产物明文直连，需要后端也不加密"
 fi
 
 echo "==> 构建前端: $FRONTEND_DIR (base=$PAGE_BASE, 加密=$API_ENCRYPT)"
@@ -94,7 +108,7 @@ echo "==> 构建前端: $FRONTEND_DIR (base=$PAGE_BASE, 加密=$API_ENCRYPT)"
 # 产物自检：开启加密时，入口 bundle 必须真的带上加密分支（auto 模式还要求带握手接口）
 ENTRY="$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' "$FRONTEND_DIR/dist/index.html" | head -1)"
 
-if [ "$API_ENCRYPT" = "auto" ]; then
+if [ "$ENCRYPT_MODE" = "auto" ]; then
   if grep -q 'X-Encrypt-Data' "$FRONTEND_DIR/dist/$ENTRY" \
      && grep -q '/api/config/crypto' "$FRONTEND_DIR/dist/$ENTRY"; then
     echo "    自检通过: 加密分支 + 公钥握手接口都在产物中（不内嵌宿主公钥）"
@@ -102,7 +116,7 @@ if [ "$API_ENCRYPT" = "auto" ]; then
     echo "错误: 产物里没有加密分支或公钥握手接口（entry=$ENTRY）—— 拒绝回灌！"
     exit 1
   fi
-elif [ "$API_ENCRYPT" != "false" ]; then
+elif [ "$ENCRYPT_MODE" = "embed" ]; then
   # 公钥指纹：注入值可能是多行 PEM 或 \n 单行，先归一化再取 base64 体前 40 字符
   KEY_MARK="$(printf '%s' "$RSA_PUB_INJECT" | sed 's/\\n//g' | tr -d '[:space:]' \
               | sed 's/^-----BEGINPUBLICKEY-----//; s/-----ENDPUBLICKEY-----$//')"

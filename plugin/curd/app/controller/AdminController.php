@@ -114,7 +114,8 @@ class AdminController
      * 所以必须明文可读（中间件对无信封请求本就透传）。
      *
      * 返回：
-     *   enabled     后端是否开启了接口加密（.env API_ENCRYPT）
+     *   enabled     后端是否开启了接口加密（默认开；config/curd-admin.php 的 api_encrypt
+     *               或 .env 的 API_ENCRYPT 显式 false 才关）
      *   handshake   是否允许下发公钥（config/plugin.curd/crypto.php handshake）
      *   algorithm   算法标识（前端日志/排查用）
      *   public_key  当前宿主公钥 PEM（handshake=false 时为空串）

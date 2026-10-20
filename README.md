@@ -141,7 +141,11 @@ webman-curd-admin/
 # 宿主侧改动回灌到包
 ./scripts/release.sh
 
-# 重建内置前端（VITE_API_ENCRYPT=true 时开接口加密，公钥自动从目标宿主读取并校验）
+# 重建内置前端（默认 auto：不内嵌公钥，运行时向后端 GET /api/config/crypto 握手，
+# 同一份产物可装到任意项目；接口加密后端默认开启，要关见 docs/14）
+bash scripts/build-frontend.sh <前端源码目录>
+
+# 需要产物自带某个宿主的公钥时才用 true（会校验公钥真的进了产物）
 VITE_API_ENCRYPT=true CURD_PUBLIC_DIR=<宿主>/plugin/curd/public \
   bash scripts/build-frontend.sh <前端源码目录>
 
