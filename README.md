@@ -125,7 +125,6 @@ webman-curd-admin/
 ├── scripts/
 │   ├── composer.sh                  # composer wrapper（对触发 audit 的子命令自动 --no-audit）
 │   ├── release.sh                   # 宿主 plugin/curd → 本包 plugin/curd（回灌）
-│   ├── build-frontend.sh            # 构建内置前端并回灌 plugin/curd/public/
 │   ├── release-zip.sh               # 打 zip 发布包（dist/webman-curd-admin-vX.Y.Z.zip）
 │   ├── sync-plugin.sh               # 升级同步：备份宿主 plugin/curd 后从 vendor 重拷
 │   └── check-plugin-overrides.sh    # 升级前 diff：检测宿主 plugin/curd 本地改动
@@ -141,26 +140,18 @@ webman-curd-admin/
 # 宿主侧改动回灌到包
 ./scripts/release.sh
 
-# 重建内置前端（默认 auto：不内嵌公钥，运行时向后端 GET /api/config/crypto 握手，
-# 同一份产物可装到任意项目；接口加密后端默认开启，要关见 docs/14）
-bash scripts/build-frontend.sh <前端源码目录>
-
-# 需要产物自带某个宿主的公钥时才用 true（会校验公钥真的进了产物）
-VITE_API_ENCRYPT=true CURD_PUBLIC_DIR=<宿主>/plugin/curd/public \
-  bash scripts/build-frontend.sh <前端源码目录>
-
 # 接口加密密钥：composer require/update 结束时会自动跑 keygen.php（默认行为，幂等）
 # 下面这些命令用于换钥 / 排查 / 跳过
 php webman curd:crypto-key --show      # 看状态与公钥指纹
 php webman curd:crypto-key             # 生成（已存在则跳过）
-php webman curd:crypto-key --force     # 换一对新密钥（之后 restart；前端无需重打包）
+php webman curd:crypto-key --force     # 换一对新密钥（之后 restart；前端自动握手，无需动前端）
 # 没装 webman console 时用独立脚本：php plugin/curd/keygen.php [--show|--force|--bits=4096]
 # 安装时不想生成：CURD_SKIP_KEYGEN=1 composer require amcolin/webman-curd-admin
 
-# 打 zip 发布包（含 docs/ 文档站与 INSTALL.md）
+# 打 zip 发布包（含 docs/ 文档站与 INSTALL.md；内置后台产物随包，无需构建）
 ./scripts/release-zip.sh 1.1.0        # → dist/webman-curd-admin-v1.1.0.zip
 
-# 发版：打 tag 触发 CI（composer validate → php -l → 前端 dist 完整性 → 关键文件校验 → Release）
+# 发版：打 tag 触发 CI（composer validate → php -l → 内置产物完整性 → 关键文件校验 → Release）
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
@@ -171,5 +162,5 @@ git tag v1.1.0 && git push origin v1.1.0
 
 本包由 `webman-huafei-platform/plugin/curd` 发布而来，演进分三阶段（**M1** 自包含下沉 →
 **M2** 开箱即用 → **M3** 管理面内置 + 空项目端到端验证，另有 **M5** 宿主旧副本下线）。
-宿主开发期的两条命令仍是 `scripts/release.sh`（回灌）与 `scripts/build-frontend.sh`（重建前端）。
+宿主开发期命令：`scripts/release.sh`（把宿主侧改动回灌到包）。
 详细记录见 [升级 · 部署 · 发布](docs/15-升级与生产部署.md) §6。

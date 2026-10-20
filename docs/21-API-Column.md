@@ -128,7 +128,7 @@ $grid->column('price', __('Price'))->prefix('￥')->suffix(' 元');
 全局关闭：宿主 `config/curd-admin.php` 加 `'display_auto_html' => false`（之后闭包返回 HTML 必须显式 `->html()`）。
 
 > ⚠️ 自动检测开启后，返回值不再自动转义：拼接外部数据（如代理 IP、用户昵称）请自行 `htmlspecialchars()`。
-> 该能力需要新前端产物（`display_html_{prop}` 标记），升级插件后**必须重建/同步前端**。
+> 该能力需要较新的插件版本（`display_html_{prop}` 标记），升级插件即可。
 
 > ⚠️ **`v-html` 不编译 Vue 组件**：`return '<el-tag type="info">池</el-tag>'` 只会得到一个无样式的未知标签
 > （Element Plus 的样式挂在 `.el-tag` **类名**上，不是标签名上）。徽标请用内联样式，最稳且不依赖分包 CSS：

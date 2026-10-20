@@ -26,7 +26,7 @@
 |---|---|
 | 改 PHP 类 / 常量 / 配置后不生效 | webman 常驻内存：reload 不重读类文件，改 PHP 要 `restart`（改 `.env` / config 可用 `SIGUSR1` 平滑 reload） |
 | 端口不是 8787 | webman 2.x 端口在 `config/process.php` 的 `listen`，改这里再重启 |
-| 后台页面 404 / 静态资源 404 | /app/curd/` 没被正确反代（Nginx 见 [升级 · 部署 · 发布](15-升级与生产部署.md)），或 `page_base` 与前端 `VITE_BASE_PATH` 不一致（两者必须相同，改完要重建前端） |
+| 后台页面 404 / 静态资源 404 | `/app/curd/` 没被正确反代（Nginx 见 [升级 · 部署 · 发布](15-升级与生产部署.md)），或 `page_base` 被改过（内置产物按默认 `/app/curd` 打包，改前缀会 404，保持默认即可） |
 | SPA 深链（`/app/curd/dashboard`）404 | 反代没把未知路径回退到 `index.php`（`PageController` 只负责把请求交给 `index.html`，前面得有 try_files 兜住） |
 | 换了端口打开登录页，账号没自动回填 | `localStorage` 按**源**隔离（`127.0.0.1:18082` ≠ `127.0.0.1:8787`），属正常现象 |
 
@@ -67,23 +67,23 @@
 | `.vue` 页面报「不支持导入模块 xxx」 | 运行时编译只放行 `vue` / `element-plus` / `@element-plus/icons-vue`；发请求改用 `inject('request')` |
 | `.vue` 页面 `<style lang="scss">` 报错 | 浏览器端无预处理器，只能用纯 CSS（`scoped` 也会降级为全局，class 加唯一前缀） |
 | 导出报「本次将导出 N 条，超过单次导出上限 M 条」 | `export_max_rows` 限制（默认 100000）。调大该键，或缩小筛选范围；前端把超限当**错误提示**而不是下载文件 |
-| `Filter::dateRange(...)->default(...)` 配了但搜索框是空的 | ①前端产物是旧的（默认值由前端写入搜索框，**必须重建部署前端**）；②`default` 写在 `$filter->between(...)` 之后又链了别的会改类型的调用，确认最终 `type` 是 `daterange`/`datetimerange`/`date`（其它类型原样透传，不报错）；③区间给了单个**具体日期**时两端同值（不是「该日期至今」），要「至今」用相对表达式（`'-7d'`）或显式 `[$start, 'today']`。核对接口返回：`GET /api/curd/config?route_path=/xxx` 里 `search[].default` 应是**已求值的具体日期** |
-| 点式字段（`config.api_url`）编辑不回显 / 列表为空 | ①展开范围 = grid 点式列 ∪ 表单点式字段 ∪ **详情里显式声明的点式字段** ∪ 动态配置点式 prop，确认字段在任一处的 prop 带 `.` 且**根字段名一致**（`config` vs `configs` 不互通）；②根字段存的不是合法 JSON（手写数据时注意引号）；③前端产物旧（字面键写入是前端行为，改后端也要重建前端）。点式对**任意字段类型**都成立（select/switch/datetime…），与类型无关 |
-| JSON 组件（`$form->json()`）保存后是 `[object Object]` 或行没回显 | ①前端产物旧（`serializeJsonRows` 序列化 + `parseJsonValueToRows` 回显都在前端）；②库里该列被存成了双层编码字符串（`"{\"a\":1}"`）——查是否自定义钩子又 `json_encode` 了一次；③编辑回显单行原文 = 库里值不是合法 JSON，被当纯文本保留 |
+| `Filter::dateRange(...)->default(...)` 配了但搜索框是空的 | ①插件版本旧（默认值由前端写入搜索框，升级插件即可）；②`default` 写在 `$filter->between(...)` 之后又链了别的会改类型的调用，确认最终 `type` 是 `daterange`/`datetimerange`/`date`（其它类型原样透传，不报错）；③区间给了单个**具体日期**时两端同值（不是「该日期至今」），要「至今」用相对表达式（`'-7d'`）或显式 `[$start, 'today']`。核对接口返回：`GET /api/curd/config?route_path=/xxx` 里 `search[].default` 应是**已求值的具体日期** |
+| 点式字段（`config.api_url`）编辑不回显 / 列表为空 | ①展开范围 = grid 点式列 ∪ 表单点式字段 ∪ **详情里显式声明的点式字段** ∪ 动态配置点式 prop，确认字段在任一处的 prop 带 `.` 且**根字段名一致**（`config` vs `configs` 不互通）；②根字段存的不是合法 JSON（手写数据时注意引号）；③插件版本旧（字面键写入是前端行为，升级插件即可）。点式对**任意字段类型**都成立（select/switch/datetime…），与类型无关 |
+| JSON 组件（`$form->json()`）保存后是 `[object Object]` 或行没回显 | ①插件版本旧（`serializeJsonRows` 序列化 + `parseJsonValueToRows` 回显都在前端产物里）；②库里该列被存成了双层编码字符串（`"{\"a\":1}"`）——查是否自定义钩子又 `json_encode` 了一次；③编辑回显单行原文 = 库里值不是合法 JSON，被当纯文本保留 |
 | 点式字段合并后其它子键丢了 | 合并基础值优先级 = 请求显式根字段 > 编辑读库现值 > 空数组；编辑时没带 `id` 对应的行数据（如自定义入口绕过 `update()`）会拿不到现值。确认走的是插件 `add()/update()` 主链路 |
-| 点式字段（`config.xxx`）**明明有值**仍提示「不能为空」、提交被卡住 | 两类原因：①前端产物旧（取值一致性靠前端「字面键 + 嵌套路径」双写，改后端也要重建部署前端）；②**给校验规则多挂了键（最常见是 async-validator 的 `transform`）** —— EP 只剥掉 `trigger`，async-validator 只在「剥掉 `message` 后**恰好只剩 `required`**」时才用 required 校验器，**多一个键就退回 `validators['string']`** → 数字/布尔值被判「不是字符串」→ 报错文案仍用规则的 `message` → 看着就是「不能为空」（这解释了为什么**字符串字段正常、数字/开关/下拉字段必错**）。最小复现：`{required:true,message:'M'}` → PASS；`{required:true,message:'M',transform:()=>30}` → FAIL；显式 `type:'number'` → PASS。**修法：规则只保留 `{required,message,trigger}`**，取值一致性交给前端 `setFieldValue()` 双写 + `initFormData()/handleEdit()` 末尾 `syncDotNested()` 镜像（lodash `get(formData,'config.x')` 命中字面键即取到真值） |
-| 查看详情里看不到表单里的字段（点式 `config.xxx` 也一样） | 详情默认 = **列表列 ∪ 表单字段**（按 `prop` 去重，列在前），所以表单里声明的字段本该出现。仍看不到时：①该字段是「仅新增」字段（`modeOnly === 'add'`，如创建时的密码）或标了 `hidden` —— 设计上不进详情；②控制器**显式调用过 `$grid->setDetail([...])`**，此时以显式声明为准、不再并入表单字段，把缺的字段补进 `setDetail()` 即可；③前端产物旧。详情是只读视图：`switch` 显示「开/关」文字、`select`/`radio` 显示选项文案、`image`/`date`/`datetime` 保留专用单元格 |
+| 点式字段（`config.xxx`）**明明有值**仍提示「不能为空」、提交被卡住 | 两类原因：①插件版本旧（取值一致性靠前端「字面键 + 嵌套路径」双写，升级插件即可）；②**给校验规则多挂了键（最常见是 async-validator 的 `transform`）** —— EP 只剥掉 `trigger`，async-validator 只在「剥掉 `message` 后**恰好只剩 `required`**」时才用 required 校验器，**多一个键就退回 `validators['string']`** → 数字/布尔值被判「不是字符串」→ 报错文案仍用规则的 `message` → 看着就是「不能为空」（这解释了为什么**字符串字段正常、数字/开关/下拉字段必错**）。最小复现：`{required:true,message:'M'}` → PASS；`{required:true,message:'M',transform:()=>30}` → FAIL；显式 `type:'number'` → PASS。**修法：规则只保留 `{required,message,trigger}`**，取值一致性交给前端 `setFieldValue()` 双写 + `initFormData()/handleEdit()` 末尾 `syncDotNested()` 镜像（lodash `get(formData,'config.x')` 命中字面键即取到真值） |
+| 查看详情里看不到表单里的字段（点式 `config.xxx` 也一样） | 详情默认 = **列表列 ∪ 表单字段**（按 `prop` 去重，列在前），所以表单里声明的字段本该出现。仍看不到时：①该字段是「仅新增」字段（`modeOnly === 'add'`，如创建时的密码）或标了 `hidden` —— 设计上不进详情；②控制器**显式调用过 `$grid->setDetail([...])`**，此时以显式声明为准、不再并入表单字段，把缺的字段补进 `setDetail()` 即可；③插件版本旧（升级插件即可）。详情是只读视图：`switch` 显示「开/关」文字、`select`/`radio` 显示选项文案、`image`/`date`/`datetime` 保留专用单元格 |
 | 图片字段选不了 gif/webp，或提示「只允许上传 jpg / jpeg / png」 | 预期行为：`image` 字段只收 jpg/jpeg/png（前端 `accept` + 上传前硬校验，服务端 `/api/upload/image` 按真实 MIME 复核）。需要其它格式请改用通用 `file` 字段（`/api/upload`） |
-| `$form->labelWidth()` / `contentWidth()` 设了没效果 | ①`contentWidth` 传纯数字（`400`）会输出 `max-width:400` 这种**无效 CSS** —— 新版已自动补 `px`，旧版请写 `'400px'`；②页面宿主没把这两个字段传下去（`dynamicCurd` 的 `configObj` 曾漏传 `labelWidth/labelPosition/contentWidth`，新版已修）；③前端产物旧（改后端也需重建前端）；④该页配置来自**落库动态页**（不执行 `Form` DSL，改控制器无效） |
+| `$form->labelWidth()` / `contentWidth()` 设了没效果 | ①`contentWidth` 传纯数字（`400`）会输出 `max-width:400` 这种**无效 CSS** —— 新版已自动补 `px`，旧版请写 `'400px'`；②页面宿主没把这两个字段传下去（`dynamicCurd` 的 `configObj` 曾漏传 `labelWidth/labelPosition/contentWidth`，新版已修）；③插件版本旧（升级插件即可）；④该页配置来自**落库动态页**（不执行 `Form` DSL，改控制器无效） |
 | 多选字段（如角色 `role_names` 数组）在列表里显示成 `["管理员","编辑"]` / 一串 ID | ①旧版前端 `formatCellValue` 把「对象/数组 → JSON」排在 `formatter` 之前，formatter 不执行 —— 新版已改为 **map（标量）→ formatter → 对象 JSON**，给列配 `formatter: (val) => val.join('、')` 即按 label 展示；②显示的是 ID 而非名称，说明后端返回的是 `role_ids`（数字数组），改取名称字段（如 `role_names`）或在前端用选项表把 ID 映射成 label |
 | 报 `Undefined array key "locale"`（Translation.php） | 插件请求按 `request()->plugin` 读 `config('plugin.curd.translation')`，宿主缺该配置会因空数组缺 `locale` 报错。插件已内置 `plugin/curd/config/translation.php`（两段 path：先插件内置 `resource/translations`、后宿主同名文件），升级插件后 `restart` 一次即可；宿主**无需**自己写翻译配置 |
 | `Call to undefined function xxx\__()` | 宿主的 `plugin/curd/app/functions.php` 是旧版（缺 `__()` 别名）。重新同步插件 `app/` 目录后 `restart`；`__()` 定义见 `plugin/curd/app/functions.php`（= `trans($id, [], 'fields')`） |
 | `__()` 返回的是英文原句 | ①该 key 未收录：在宿主 `resource/translations/zh_CN/fields.php` 补一行（宿主 key 优先于插件内置）；②key 收录了但仍英文：确认 locale 是 `zh_CN`（插件 `config/translation.php` 的 `locale`，默认取宿主 `translation.locale`）；③确认走的是插件请求路径（`request()->plugin === 'curd'`，CLI 下无请求上下文时 `__()` 兜底返回原句，属预期） |
-| 行内 `->select()` / `->copy()` 不生效 | ①前端产物旧：copy 单元格与 select 行内提交由前端渲染，**必须重建部署前端**（`scripts/build-frontend.sh`）；②`->select()` 的 options 传关联数组 `[值=>文案]` 或二维 `[['value'=>…,'label'=>…]]`，传错结构时无选项；③copy 列优先级高于 display/tag 等其它单元格渲染，确认不是被更高优先级形态盖住（copy 本身就应盖住它们） |
+| 行内 `->select()` / `->copy()` 不生效 | ①插件版本旧：copy 单元格与 select 行内提交由前端渲染，升级插件即可；②`->select()` 的 options 传关联数组 `[值=>文案]` 或二维 `[['value'=>…,'label'=>…]]`，传错结构时无选项；③copy 列优先级高于 display/tag 等其它单元格渲染，确认不是被更高优先级形态盖住（copy 本身就应盖住它们） |
 | `display()` 里的 `<el-tag>` 没有样式（只剩文字） | `v-html` 是**原样塞 innerHTML**，Vue 不会把 `<el-tag>` 编译成组件 → 它只是浏览器的未知标签，Element Plus 的样式挂在 `.el-tag` **类名**上。三种写法：①内联样式最稳（见下）；②`<span class="el-tag el-tag--info">池</span>`（需该页已加载 el-tag 的样式分包）；③让框架渲染真组件：`->map()` + `->label()`（文案由字典决定，不能拼接额外数据时用不了） |
 | `display()` 返回的 HTML 被当成源码显示 | ①**闭包返回 HTML 默认会自动检测**（`display_auto_html`，返回值含真实标签即按 HTML 渲染）——若仍显示源码，先确认前端产物是新的（需 `display_html_{prop}` 支持）；②显式 `->html(false)` 或宿主 `config/curd-admin.php` 的 `'display_auto_html' => false` 会关闭自动检测，此时必须 `->html()`；③字符串形式 `->display('<b>{name}</b>')` 始终自动 HTML；④`{prop}` 取当前行字段、`{value}` 取该列原始值，占位符写错会留空 |
-| `help()` 里的 `@click="hello()"` 点了没反应 | ①`hello` 必须**全局可访问**：在 `setCustomJs()` 里用顶层 `function hello(){}` / `var` / `window.hello = …`（`const`/`let` 在顶层也算全局，但代码变更后重新注入可能报重复声明）；②customJs 内容变了才会重新注入，确认保存后刷新页面；③前端产物旧（事件委托是新逻辑）；④修饰符写在**属性名**上（`@click.stop="fn()"`），不是值里 |
-| `curd is not defined` / `window.curd` 取不到 | ①前端产物旧（`window.curd` 由新前端注入）；②该页面没有配置 `customJs` 时不会构建 API，给页面加 `$grid->setCustomJs('…')` 即可；③旧名 `window.__curd` 仍兼容 |
+| `help()` 里的 `@click="hello()"` 点了没反应 | ①`hello` 必须**全局可访问**：在 `setCustomJs()` 里用顶层 `function hello(){}` / `var` / `window.hello = …`（`const`/`let` 在顶层也算全局，但代码变更后重新注入可能报重复声明）；②customJs 内容变了才会重新注入，确认保存后刷新页面；③插件版本旧（事件委托是新逻辑，升级插件即可）；④修饰符写在**属性名**上（`@click.stop="fn()"`），不是值里 |
+| `curd is not defined` / `window.curd` 取不到 | ①插件版本旧（`window.curd` 由新版产物注入，升级插件即可）；②该页面没有配置 `customJs` 时不会构建 API，给页面加 `$grid->setCustomJs('…')` 即可；③旧名 `window.__curd` 仍兼容 |
 
 ---
 
@@ -96,7 +96,7 @@
 | 登录成功但 `/api/auth/me` 报用户不存在 | `login()` 的 `id` 与 `resolveUser($id)` 取数来源不一致，核对两边用的是同一张表同一列 |
 | 自己实现 `auth_provider` 加状态判定，结果「能访问接口但 `/me` 状态不对」 | 覆盖时漏了三个入口之一（`login` / `identity` / `resolveUser`），**漏了不报错**。改用 `auth_state_guard` 收口到一处 |
 | `auth_state_guard` 配了却不生效 | ①类名写错 / 类不存在 → `stateGuard()` 返回 `null` 静默跳过；②没 `restart`（配置在启动期读取）；③配的是 `auth_provider` 而非 `auth_state_guard`。排查：`php -r "var_dump(class_exists('\\\\app\\\\auth\\\\MyGuard'));"` |
-| 登录一直提示「验证码错误」「请输入验证码」 | ①宿主要求验证码但自定义登录页没送 `captcha_key` / `captcha_code`（不想用就 `'captcha_enabled' => false` 后重启）；②前端产物是旧的（不含验证码字段）→ 重新构建部署；③`/api/auth/captcha` 报 500（缺 `webman/captcha` 或 `ext-gd`） |
+| 登录一直提示「验证码错误」「请输入验证码」 | ①宿主要求验证码但自定义登录页没送 `captcha_key` / `captcha_code`（不想用就 `'captcha_enabled' => false` 后重启）；②插件版本旧（产物不含验证码字段）→ 升级插件；③`/api/auth/captcha` 报 500（缺 `webman/captcha` 或 `ext-gd`） |
 | 验证码位置只有一行「点击获取」，没有图片 | `/api/auth/captcha` 没返回有效 key，看响应 `msg`：ext-gd 未装 / 字体缺失 / Redis 不可用；点那一行可重试 |
 | 验证码输入框整块不显示（后端却仍要验证码） | `captcha_enabled=false` 已生效，或 `/api/config/site` 请求失败（前端兜底不显示）。后端返回的错误里带 `data.captcha=true`，前端会**自动展开并拉图**，重试一次即可 |
 | 全员都登不进去，且验证码一直失败 | Redis 挂了（验证码明文存 Redis，一次性）。应急把 `'captcha_enabled' => false` 后重启放行 |
@@ -108,14 +108,12 @@
 
 | 现象 | 原因 / 解法 |
 |---|---|
-| 所有 `/api` 返回 400「请求解密失败」 | 前端手里的公钥与宿主私钥不匹配。新版会**自动自愈**：后端回 `X-Crypto-Key-Mismatch` → 前端重新握手拿公钥 → 重试一次。仍失败说明握手也拿不到公钥，看下一行 |
-| 换了项目 / 重装后前端解不开 | 发行产物是 `auto` 模式（不内嵌公钥，启动时 `GET /api/config/crypto` 拉当前宿主公钥），本来就不会有这问题。若你手上是老的 `true` 模式产物（自带旧宿主公钥），重新用默认参数构建一次即可 |
-| 握手接口拿不到公钥 | 检查 `GET /api/config/crypto` 的返回：`enabled=false`（后端显式关了加密：`curd-admin.php` 的 `api_encrypt` 或 `.env` 的 `API_ENCRYPT`）、`handshake=false`（`.env` 设了 `API_CRYPTO_HANDSHAKE=false`）、`public_key=""`（`config/keys/` 下没密钥，跑 `php webman curd:crypto-key` 或 `php plugin/curd/keygen.php` 生成） |
-| 怎么生成 / 更换密钥 | `composer require/update` 结束时会自动生成（`src/Install.php` 调 `keygen.php`），装完即用。手动：`php webman curd:crypto-key`（webman console）或 `php plugin/curd/keygen.php`（独立脚本）；`--force` 换新一对，`--show` 只看指纹。换完 **restart**，前端不用重新打包（自动握手）。跳过生成：`CURD_SKIP_KEYGEN=1 composer ...` |
-| 请求加密了但响应是明文 | 信封加密是对称的：响应只能用**本次请求带来的 AES 密钥**加密。请求是明文（`VITE_API_ENCRYPT=off`、握手失败、豁免接口）时，响应必然明文。看响应头 `X-Crypto-Encrypted: 1` 判定，控制台 `curdCrypto.status()` 看 `mode/active/ready/hasKey`；详见 [接口加密](14-接口加密与异常兜底.md#110-响应也加密为什么有时候看不到密文) |
-| 「我明明没开加密，怎么要解密」 | 加密是**默认开启**的（dev / prod 一致）。要关就显式写 `config/curd-admin.php` 的 `'api_encrypt' => false` 或 `.env` 的 `API_ENCRYPT=false`，restart 即可；前端 `auto` 模式会同步退回明文，不用重新打包 |
-| 改了 `VITE_API_ENCRYPT` 没反应 | 该变量是**构建期内联**，不是运行期配置，改完必须重新 `npm run build` 并部署产物。日常不需要动它（默认 `auto` 已覆盖开关） |
-| 手动构建时换行写不对 | `VITE_API_RSA_PUBLIC_KEY` 里的换行要写成字面 `\n` |
+| 所有 `/api` 返回 400「请求解密失败」 | 前端手里的公钥与后端私钥不匹配。新版会**自动自愈**：后端回 `X-Crypto-Key-Mismatch` → 前端重新握手拿公钥 → 重试一次。仍失败就 `restart` 一次（换过密钥后必须重启，否则内存里还是旧私钥） |
+| 换了项目 / 重装后前端解不开 | 内置产物启动时向本机后端要公钥（`GET /api/config/crypto`），换宿主自动跟随，不会有这问题；真遇到先看下一行 |
+| 握手接口拿不到公钥 | 看 `GET /api/config/crypto` 的返回：`enabled=false` 说明后端关了加密（`curd-admin.php` 的 `api_encrypt` 或 `.env` 的 `API_ENCRYPT`）；`public_key=""` 说明 `config/keys/` 下没密钥，跑一次 `php webman curd:crypto-key` |
+| 怎么生成 / 更换密钥 | 安装时**自动生成**（`composer require/update` 结束时跑 `keygen.php`），装完即用。手动：`php webman curd:crypto-key`（或 `php plugin/curd/keygen.php`），`--force` 换新一对、`--show` 只看指纹。换完必须 **restart** |
+| 请求加密了但响应是明文 | 信封加密是对称的：响应只能用**本次请求带来的 AES 密钥**加密。请求本身是明文（豁免接口、握手失败）时，响应必然明文。看响应头 `X-Crypto-Encrypted: 1` 判定；详见 [接口加密](14-接口加密与异常兜底.md) |
+| 「我明明没开加密，怎么要解密」 | 加密是**默认开启**的（dev / prod 一致）。要关就显式写 `config/curd-admin.php` 的 `'api_encrypt' => false` 或 `.env` 的 `API_ENCRYPT=false`，`restart` 即可；前端会同步退回明文，不用动前端 |
 | 上传 / 导出也想加密 | 不需要，也不会加密：`multipart` 上传、非 JSON 响应（CSV 导出）、`OPTIONS` 预检、非 `/api` 路径、握手接口**始终明文** |
 
 ---
