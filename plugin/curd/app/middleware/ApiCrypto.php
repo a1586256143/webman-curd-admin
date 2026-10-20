@@ -84,6 +84,16 @@ class ApiCrypto implements MiddlewareInterface
             return $handler($request);
         }
 
+        // 幂等：同一请求只处理一次。
+        // 本中间件有两个注册入口 —— 插件自带的 plugin/curd/config/middleware.php（覆盖插件路由）
+        // 和宿主 config/middleware.php 的 '@' 组（覆盖宿主自己的 /api）。两边都注册时会同一条
+        // 请求进两次：第二次会拿「已经加密过的响应体」再包一层，前端解一次出来还是 ENC1 信封，
+        // 表现为「页面拿不到数据」。这里用请求标记短路，谁先跑谁负责，后跑的只放行。
+        if (!empty($request->apiCryptoHandled)) {
+            return $handler($request);
+        }
+        $request->apiCryptoHandled = true;
+
         $aesKey = null;
 
         // ---------- 1. 请求解密 ----------
