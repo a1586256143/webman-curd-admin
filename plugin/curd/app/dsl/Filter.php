@@ -293,38 +293,38 @@ class Filter extends BaseDsl
     }
 
     /**
-     * 默认「最近一周」：7 天前此刻 ~ 现在
+     * 默认「最近一周」：7 天前 00:00:00 ~ 明天 00:00:00
      *   $filter->between('created_at', '创建时间')->defaultWeek();
      */
     public function defaultWeek(): self
     {
         return $this->default([
-            date('Y-m-d H:i:s', strtotime('-7 days')),
-            date('Y-m-d H:i:s'),
+            date('Y-m-d 00:00:00', strtotime('-7 days')),
+            date('Y-m-d 00:00:00', strtotime('+1 day')),
         ]);
     }
 
     /**
-     * 默认「最近一月」：1 个月前此刻 ~ 现在
+     * 默认「最近一月」：1 个月前 00:00:00 ~ 明天 00:00:00
      *   $filter->between('created_at', '创建时间')->defaultMonth();
      */
     public function defaultMonth(): self
     {
         return $this->default([
-            date('Y-m-d H:i:s', strtotime('-1 month')),
-            date('Y-m-d H:i:s'),
+            date('Y-m-d 00:00:00', strtotime('-1 month')),
+            date('Y-m-d 00:00:00', strtotime('+1 day')),
         ]);
     }
 
     /**
-     * 默认「最近三月」：3 个月前此刻 ~ 现在
+     * 默认「最近三月」：3 个月前 00:00:00 ~ 明天 00:00:00
      *   $filter->between('created_at', '创建时间')->defaultThreeMonth();
      */
     public function defaultThreeMonth(): self
     {
         return $this->default([
-            date('Y-m-d H:i:s', strtotime('-3 months')),
-            date('Y-m-d H:i:s'),
+            date('Y-m-d 00:00:00', strtotime('-3 months')),
+            date('Y-m-d 00:00:00', strtotime('+1 day')),
         ]);
     }
 

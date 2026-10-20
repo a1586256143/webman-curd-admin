@@ -13,7 +13,7 @@
 | 方法 | 说明 |
 |---|---|
 | `columns(int)` | 表单栅格列数（默认 1） |
-| `labelWidth(int\|string)` | 标签宽度（px）；`140` / `'140'` / `'140px'` 均可 |
+| `labelWidth(int\|string)` | 标签宽度（px）；`140` / `'140'` / `'140px'` 均可；不设置（0）时前端回退 `100px` |
 | `labelPosition('right')` | 标签位置 `left/right/top` |
 | `contentWidth(string\|int)` | 内容区最大宽度，如 `'480px'`；纯数字 `400` 会自动补成 `400px`（无单位 CSS 无效） |
 | `width(string)` / `height(string)` | 弹窗宽 / 高 |

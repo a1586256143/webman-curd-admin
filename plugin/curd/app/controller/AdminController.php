@@ -258,7 +258,7 @@ class AdminController
         [$page, $size] = $this->pageParams($request);
         $total = $q->count();
         $rows = $this->toArrays(
-            $q->orderBy('id')
+            $q->orderByDesc('id')
                 ->forPage($page, $size)
                 ->select('id', 'username', 'name', 'avatar', 'status', 'created_at', 'updated_at')
                 ->get()
@@ -438,7 +438,7 @@ class AdminController
         [$page, $size] = $this->pageParams($request);
         $total = $q->count();
         $rows = $this->toArrays(
-            $q->orderBy('id')
+            $q->orderByDesc('id')
                 ->forPage($page, $size)
                 ->get()
         );
