@@ -149,6 +149,12 @@ bash scripts/build-frontend.sh <前端源码目录>
 VITE_API_ENCRYPT=true CURD_PUBLIC_DIR=<宿主>/plugin/curd/public \
   bash scripts/build-frontend.sh <前端源码目录>
 
+# 接口加密密钥（正常安装会自动生成，这里用于换钥/排查）
+php webman curd:crypto-key --show      # 看状态与公钥指纹
+php webman curd:crypto-key             # 生成（已存在则跳过）
+php webman curd:crypto-key --force     # 换一对新密钥（之后 restart；前端无需重打包）
+# 没装 webman console 时用独立脚本：php plugin/curd/keygen.php [--show|--force|--bits=4096]
+
 # 打 zip 发布包（含 docs/ 文档站与 INSTALL.md）
 ./scripts/release-zip.sh 1.1.0        # → dist/webman-curd-admin-v1.1.0.zip
 

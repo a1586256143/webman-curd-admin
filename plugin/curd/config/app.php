@@ -31,5 +31,7 @@ return [
      */
     'command' => [
         \plugin\curd\app\command\MakeCurdCommand::class,
+        // 接口加密密钥：php webman curd:crypto-key [--force] [--bits=4096] [--show] [--print-public]
+        \plugin\curd\app\command\CryptoKeyCommand::class,
     ],
 ];
