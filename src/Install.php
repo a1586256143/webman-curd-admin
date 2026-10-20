@@ -21,6 +21,13 @@ use RecursiveIteratorIterator;
  *     （加密密钥对，覆盖会静默破坏接口加解密，故不碰）。
  *   - 卸载（composer remove）时 → 删除宿主 plugin/curd 目录。
  *   - 拷贝排除 .git/node_modules 等构建目录；密钥目录 config/keys 安装时保留宿主版。
+ *
+ * 密钥生成（2026-10-20 新增）：
+ *   安装/更新结束会自动执行 `php plugin/curd/keygen.php`（ensureCryptoKeys()），
+ *   即「composer 装完密钥就已就绪」，无需再手动跑一条命令：
+ *     - 密钥已存在 → 跳过（幂等，不会覆盖正在用的私钥）；
+ *     - 宿主显式关闭加密（api_encrypt=false / API_ENCRYPT=false）→ 跳过；
+ *     - 失败不阻断安装（无密钥时握手接口回空公钥，前端 auto 模式退回明文）。
  */
 class Install
 {
@@ -57,8 +64,10 @@ class Install
             self::ensureDatabaseConfig($root);
             return;
         }
-        $hostHasKeys = is_file($dst . '/config/keys/api_rsa_pub.pem')
-            || is_file($dst . '/config/keys/api_rsa_priv.pem');
+        // ⚠️ 文件名必须与 CryptoKeys / keygen.php 一致（api_rsa_private.pem / api_rsa_public.pem），
+        //    否则覆盖安装会把宿主机密当普通文件删掉 → 已加密的客户端全部握手失败。
+        $hostHasKeys = is_file($dst . '/config/keys/api_rsa_private.pem')
+            || is_file($dst . '/config/keys/api_rsa_public.pem');
         if (is_dir($dst)) {
             // 覆盖同步：整目录删除后重拷（保留宿主密钥），确保清除包内已删的陈旧文件
             self::removeDir($dst, $hostHasKeys ? self::$keepOnOverwrite : []);
@@ -78,6 +87,161 @@ class Install
         self::ensureAdminRoute($root);
         self::ensureDatabaseConfig($root);
         self::ensureTranslations($root);
+        self::ensureCryptoKeys($root);
+    }
+
+    /**
+     * 确保宿主存在接口加密密钥对（默认行为：composer 安装/更新后自动跑一遍 keygen.php）
+     *
+     * 触发链路：宿主 composer.json 的 post-package-install/update → framework 的
+     * support\Plugin::install → 本类 install() → 这里。
+     *
+     * 规则：
+     *   - 私钥与公钥都在 → 跳过（幂等；要换密钥用 `php plugin/curd/keygen.php --force`）；
+     *   - 宿主显式关闭加密（config/curd-admin.php 的 api_encrypt=false 或 .env 的
+     *     API_ENCRYPT=false）→ 跳过并说明（不生成没人用的密钥）；
+     *   - 其余情况 → 以子进程执行 `php plugin/curd/keygen.php`（与手动执行完全同一条路径）；
+     *     子进程不可用（disable_functions / 无 shell）时退回进程内 CryptoKeys::generate()。
+     *   - 全程失败不阻断 composer 安装：密钥缺失只会让握手接口回空公钥，前端 auto 模式
+     *     自动退回明文，接口照常可用。
+     */
+    protected static function ensureCryptoKeys(string $root): void
+    {
+        $keygen  = $root . '/plugin/curd/keygen.php';
+        $keysDir = $root . '/plugin/curd/config/keys';
+        $private = $keysDir . '/api_rsa_private.pem';
+        $public  = $keysDir . '/api_rsa_public.pem';
+
+        if (getenv('CURD_SKIP_KEYGEN') !== false && getenv('CURD_SKIP_KEYGEN') !== '') {
+            echo "  [webman-curd-admin] 已跳过接口加密密钥生成（CURD_SKIP_KEYGEN 已设置）\n";
+            return;
+        }
+        if (is_file($private) && is_file($public)) {
+            echo "  [webman-curd-admin] 接口加密密钥已存在，跳过生成（换密钥：php plugin/curd/keygen.php --force）\n";
+            return;
+        }
+        if (self::hostDisabledEncrypt($root)) {
+            echo "  [webman-curd-admin] 宿主已显式关闭接口加密（api_encrypt=false / API_ENCRYPT=false），跳过密钥生成\n";
+            return;
+        }
+        if (!is_file($keygen)) {
+            return; // 拷贝未带上 keygen.php（异常情况），静默跳过
+        }
+        if (!function_exists('openssl_pkey_new')) {
+            echo "  [webman-curd-admin] ⚠️ 未启用 openssl 扩展，跳过接口加密密钥生成（如不需加密可忽略）\n";
+            return;
+        }
+
+        $code = 0;
+        $lines = self::runKeygen($keygen, $code);
+        foreach ($lines as $line) {
+            echo '      ' . $line . "\n";
+        }
+        if (is_file($private) && is_file($public)) {
+            echo "  [webman-curd-admin] 接口加密密钥已就绪（plugin/curd/config/keys/，私钥请单独备份、勿提交 git）\n";
+            echo "  [webman-curd-admin] 若 webman 正在运行，请 restart 让新私钥生效\n";
+            return;
+        }
+        // 子进程不可用或失败 → 进程内兜底（同一份 CryptoKeys::generate 实现）
+        $result = self::generateKeysInProcess($root);
+        if ($result['ok'] && is_file($private)) {
+            echo "  [webman-curd-admin] 接口加密密钥已就绪（进程内生成）：{$result['message']}\n";
+            echo "  [webman-curd-admin] 若 webman 正在运行，请 restart 让新私钥生效\n";
+            return;
+        }
+        echo "  [webman-curd-admin] ⚠️ 接口加密密钥生成失败" . ($result['message'] !== '' ? '：' . $result['message'] : '')
+            . "\n      可稍后手动执行：php plugin/curd/keygen.php（不影响安装继续）\n";
+    }
+
+    /**
+     * 以子进程执行 keygen.php，返回输出行；$code 为退出码（-1 表示两种方式都不可用）
+     */
+    protected static function runKeygen(string $keygen, int &$code): array
+    {
+        $php = PHP_BINARY !== '' ? PHP_BINARY : 'php';
+        $disabled = array_map('trim', explode(',', (string)ini_get('disable_functions')));
+
+        if (function_exists('proc_open') && !in_array('proc_open', $disabled, true)) {
+            $proc = @proc_open(
+                [$php, $keygen],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $pipes,
+                dirname($keygen, 2)
+            );
+            if (is_resource($proc)) {
+                $out = (string)stream_get_contents($pipes[1]);
+                $err = (string)stream_get_contents($pipes[2]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                $code = (int)proc_close($proc);
+                // ⚠️ 不能用 \R：非 /u 模式下 PCRE 会把 0x85 当换行，中文被从中间劈开
+                return preg_split('/\r\n|\r|\n/', trim($out . ($err !== '' ? "\n" . $err : ''))) ?: [];
+            }
+        }
+        if (function_exists('exec') && !in_array('exec', $disabled, true)) {
+            $out = [];
+            @exec(escapeshellarg($php) . ' ' . escapeshellarg($keygen) . ' 2>&1', $out, $code);
+            return $out;
+        }
+        $code = -1;
+        return [];
+    }
+
+    /**
+     * 进程内兜底生成（不依赖 shell；直接复用插件自带的 CryptoKeys）
+     * @return array{ok:bool,message:string}
+     */
+    protected static function generateKeysInProcess(string $root): array
+    {
+        $file = $root . '/plugin/curd/app/CryptoKeys.php';
+        if (!is_file($file)) {
+            return ['ok' => false, 'message' => 'plugin/curd/app/CryptoKeys.php 不存在'];
+        }
+        require_once $file;
+        $class = '\\plugin\\curd\\app\\CryptoKeys';
+        if (!class_exists($class)) {
+            return ['ok' => false, 'message' => 'CryptoKeys 类加载失败'];
+        }
+        try {
+            $r = $class::generate(2048, false);
+            return ['ok' => (bool)($r['ok'] ?? false), 'message' => (string)($r['message'] ?? '')];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * 宿主是否【显式】关闭了接口加密
+     *
+     * 只认显式 false（api_encrypt=false / API_ENCRYPT=false/0/off/no），
+     * 缺省、注释掉的示例、env('API_ENCRYPT', true) 一律视为开启 —— 与
+     * plugin/curd/config/crypto.php 的优先级（curd-admin.php 最高 → .env 次之 → 默认 true）一致。
+     */
+    protected static function hostDisabledEncrypt(string $root): bool
+    {
+        $cfg = $root . '/config/curd-admin.php';
+        if (is_file($cfg)) {
+            $content = (string)@file_get_contents($cfg);
+            // 先剥掉注释行，避免模板里 `// 'api_encrypt' => false,` 被误判
+            $content = (string)preg_replace('/^[ \t]*(\/\/|#|\*).*$/m', '', $content);
+            if (preg_match('/[\'"]api_encrypt[\'"]\s*=>\s*(false|0|[\'"]?(false|0|off|no)[\'"]?)/i', $content)) {
+                return true;
+            }
+        }
+        $env = $root . '/.env';
+        if (is_file($env)) {
+            foreach (preg_split('/\r\n|\r|\n/', (string)@file_get_contents($env)) ?: [] as $line) {
+                $line = trim($line);
+                if ($line === '' || $line[0] === '#') {
+                    continue;
+                }
+                if (preg_match('/^API_ENCRYPT\s*=\s*(.*)$/i', $line, $m)) {
+                    $v = strtolower(trim($m[1], " \t\"'"));
+                    return in_array($v, ['false', '0', 'off', 'no'], true);
+                }
+            }
+        }
+        return false;
     }
 
     /**

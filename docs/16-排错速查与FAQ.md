@@ -111,7 +111,8 @@
 | 所有 `/api` 返回 400「请求解密失败」 | 前端手里的公钥与宿主私钥不匹配。新版会**自动自愈**：后端回 `X-Crypto-Key-Mismatch` → 前端重新握手拿公钥 → 重试一次。仍失败说明握手也拿不到公钥，看下一行 |
 | 换了项目 / 重装后前端解不开 | 发行产物是 `auto` 模式（不内嵌公钥，启动时 `GET /api/config/crypto` 拉当前宿主公钥），本来就不会有这问题。若你手上是老的 `true` 模式产物（自带旧宿主公钥），重新用默认参数构建一次即可 |
 | 握手接口拿不到公钥 | 检查 `GET /api/config/crypto` 的返回：`enabled=false`（后端显式关了加密：`curd-admin.php` 的 `api_encrypt` 或 `.env` 的 `API_ENCRYPT`）、`handshake=false`（`.env` 设了 `API_CRYPTO_HANDSHAKE=false`）、`public_key=""`（`config/keys/` 下没密钥，跑 `php webman curd:crypto-key` 或 `php plugin/curd/keygen.php` 生成） |
-| 怎么生成 / 更换密钥 | 正常安装会自动生成。手动：`php webman curd:crypto-key`（webman console）或 `php plugin/curd/keygen.php`（独立脚本）；`--force` 换新一对，`--show` 只看指纹。换完 **restart**，前端不用重新打包（自动握手） |
+| 怎么生成 / 更换密钥 | `composer require/update` 结束时会自动生成（`src/Install.php` 调 `keygen.php`），装完即用。手动：`php webman curd:crypto-key`（webman console）或 `php plugin/curd/keygen.php`（独立脚本）；`--force` 换新一对，`--show` 只看指纹。换完 **restart**，前端不用重新打包（自动握手）。跳过生成：`CURD_SKIP_KEYGEN=1 composer ...` |
+| 请求加密了但响应是明文 | 信封加密是对称的：响应只能用**本次请求带来的 AES 密钥**加密。请求是明文（`VITE_API_ENCRYPT=off`、握手失败、豁免接口）时，响应必然明文。看响应头 `X-Crypto-Encrypted: 1` 判定，控制台 `curdCrypto.status()` 看 `mode/active/ready/hasKey`；详见 [接口加密](14-接口加密与异常兜底.md#110-响应也加密为什么有时候看不到密文) |
 | 「我明明没开加密，怎么要解密」 | 加密是**默认开启**的（dev / prod 一致）。要关就显式写 `config/curd-admin.php` 的 `'api_encrypt' => false` 或 `.env` 的 `API_ENCRYPT=false`，restart 即可；前端 `auto` 模式会同步退回明文，不用重新打包 |
 | 改了 `VITE_API_ENCRYPT` 没反应 | 该变量是**构建期内联**，不是运行期配置，改完必须重新 `npm run build` 并部署产物。日常不需要动它（默认 `auto` 已覆盖开关） |
 | 手动构建时换行写不对 | `VITE_API_RSA_PUBLIC_KEY` 里的换行要写成字面 `\n` |

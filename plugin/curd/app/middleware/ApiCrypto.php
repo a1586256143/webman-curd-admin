@@ -17,7 +17,10 @@ use Webman\Http\Request;
  *       控制器照常用 $request->input() / post() / get() 读取，无感知。
  *
  * 响应：用请求所携带的同一把 AES 密钥把 JSON 响应体整体回加密，
- *       输出 { "data": "ENC1:<iv>.<cipher>" }（无 RSA 段，前端持钥可解）。
+ *       输出 { "data": "ENC1:<iv>.<cipher>" }（无 RSA 段，前端持钥可解），
+ *       并回 X-Crypto-Encrypted: 1 便于排查。
+ *       ⚠️ 前提是「本次请求带了信封」——明文请求没有密钥可用，响应只能是明文
+ *       （密文必须对称加密，密钥由客户端随请求带来，服务端无法凭空造一把）。
  *
  * 豁免（自动判断，无需配置）：
  *  - OPTIONS 预检、非 /api 路径
@@ -57,6 +60,11 @@ class ApiCrypto implements MiddlewareInterface
      * 使「换宿主 / 重装生成新密钥对」后无需重新构建前端产物。
      */
     const MISMATCH_HEADER = 'X-Crypto-Key-Mismatch';
+
+    /**
+     * 响应已加密标记头（响应）：排查「响应到底加没加密」用，CORS 已 expose
+     */
+    const RESPONSE_ENCRYPTED_HEADER = 'X-Crypto-Encrypted';
 
     /**
      * 缓存的私钥 PEM 内容（进程内静态缓存，避免每请求读盘）
@@ -110,8 +118,15 @@ class ApiCrypto implements MiddlewareInterface
         $response = $handler($request);
 
         // ---------- 3. 响应回加密 ----------
+        // 前提：本次请求带了信封（拿到了 AES 密钥）。明文请求没有密钥可用，响应只能明文。
         if ($aesKey !== null) {
-            $contentType = (string)($response->getHeader('Content-Type') ?? '');
+            // Content-Type 在不同 workerman 版本可能是 string 或 array，统一归一化
+            $contentType = $response->getHeader('Content-Type');
+            if (is_array($contentType)) {
+                $contentType = implode(',', $contentType);
+            }
+            $contentType = (string)$contentType;
+
             if (stripos($contentType, 'application/json') !== false) {
                 $body = $response->rawBody();
                 $decoded = json_decode($body, true);
@@ -122,7 +137,12 @@ class ApiCrypto implements MiddlewareInterface
                         $aesKey
                     );
                     $newBody = json_encode(['data' => self::PREFIX . $encrypted], JSON_UNESCAPED_UNICODE);
-                    $response->withBody($newBody);
+                    // ⚠️ 必须接住返回值：Response::withBody() 在部分实现里是「返回副本」的
+                    // 不可变风格（PSR-7 语义），不接住就等于没改 —— 表现为「请求加密了、
+                    // 响应却还是明文」。接住返回值在两种实现下都正确（可变版返回 $this）。
+                    $response = $response->withBody($newBody);
+                    // 便于排查：看到这个头就说明响应确实加密了（CORS 已 expose）
+                    $response = $response->withHeader(self::RESPONSE_ENCRYPTED_HEADER, '1');
                     // 注意：不要手动设置 Content-Length！
                     // workerman Response::__toString 序列化时会无条件追加 Content-Length，
                     // 若 headers 里已存在（手动设过）会输出两条 CL → 浏览器判非法响应直接拒绝

@@ -15,12 +15,15 @@
  *   plugin/curd/config/keys/api_rsa_public.pem    0644  公钥（可公开，前端运行时握手读取）
  *
  * 说明：
- *  - 正常安装时 **不需要手动执行本脚本** —— install.php / Web 安装向导 / composer 升级
- *    都会自动生成密钥（Install::ensureKeys()）。
+ *  - 正常安装时 **不需要手动执行本脚本**：
+ *      · `composer require/update amcolin/webman-curd-admin` 结束时会自动跑本脚本
+ *        （src/Install.php 的 ensureCryptoKeys()，宿主 post-package-install 钩子触发）；
+ *      · `php plugin/curd/install.php` / Web 安装向导也会自动生成（Install::ensureKeys()）。
  *  - 本脚本用于：密钥丢失、换机迁移、想换一对新密钥、或想单独看看指纹。
  *  - 生成/更换密钥后，**已在运行的 webman 进程需要 restart**（私钥在进程内缓存）。
  *  - 私钥丢了不影响登录，只影响「已加密的请求」；换密钥后前端会自动重新握手，
  *    不需要重新打包前端（发行产物是 auto 模式）。
+ *  - composer 安装阶段想跳过生成：`CURD_SKIP_KEYGEN=1 composer require ...`。
  */
 
 if (PHP_SAPI !== 'cli') {

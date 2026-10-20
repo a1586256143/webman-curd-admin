@@ -88,6 +88,10 @@ class Install
         static::emit('info', 'CURD 插件安装开始' . ($isFirstInstall ? '（首次安装）' : ''));
         $ok = true;
 
+        // A-1. 密钥（不依赖数据库：放在最前面，DB 配错时密钥也已就绪，
+        //      composer 安装阶段由 src/Install.php 走 keygen.php 生成，这里兜底 Web 向导）
+        $ok = static::ensureKeys() && $ok;
+
         // A0. 自动建库：库不存在时（1049 Unknown database 是首跑最常见错误）
         //     连接 MySQL server 执行 CREATE DATABASE IF NOT EXISTS（幂等）
         if (!static::ensureDatabases()) {
@@ -133,8 +137,7 @@ class Install
         // C. 种子（表空才插入，幂等）
         $ok = static::seedAll() && $ok;
 
-        // D. 密钥
-        $ok = static::ensureKeys() && $ok;
+        // D. 密钥在 A-1 已完成（不依赖数据库，故前置；此处无需重复）
 
         if ($ok) {
             $account = static::$adminCreds['username'] ?? 'admin';
