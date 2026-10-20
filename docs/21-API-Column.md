@@ -47,8 +47,10 @@ $grid->column('remark', __('Remark'))->limit(20);       // 超 20 字省略，�
 
 > **列宽自适应**：`width` / `minWidth` 未指定时，主表格列按**首屏内容**自动估算列宽并**缓存**——
 > 翻页、改筛选、刷新都不再重估，列宽稳定不抖动。失效机制：
-> ① 列集变化（加/删列、改 label、改显式宽度）自动失效重建；
-> ② `curd.clearColWidthCache()` 手动清（不传参清当前页、传 `true` 清全部页），清完按当前数据立即重估。
+> ① **页面/浏览器标签关闭**即失效（`sessionStorage`），重开按新数据重估；
+> ② **SPA 内多 tab 关闭**（单个关闭 / 关闭其他 / 关闭所有）同步失效该页缓存；
+> ③ 列集变化（加/删列、改 label、改显式宽度）自动失效重建；
+> ④ `curd.clearColWidthCache()` 手动清（不传参清当前页、传 `true` 清全部页），清完按当前数据立即重估。
 > 估算依据是单元格**显示文本**（含 display / map 结果；HTML 值先去标签），超长列 clamp 到 460px 换行。
 > 显式指定 `width` / `minWidth` 则完全以定义为准。规则与 `expand` / `modal` 里 `Table` 组件一致（`fit: false` 可关）。
 
