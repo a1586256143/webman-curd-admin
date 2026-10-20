@@ -306,10 +306,12 @@ class Form extends BaseDsl
      * 字段标题(标签)宽度(px)，默认 100（前端回退值）
      * 长标签(如「接口地址」「配置项说明」「是否允许跨域」)建议加大，避免换行/截断。
      *   $form->labelWidth(140);
+     *   $form->labelWidth('140');   // 数字串同样支持
      */
-    public function labelWidth(int $px): self
+    public function labelWidth($px): self
     {
-        $this->layout['labelWidth'] = max(0, $px);
+        // 容错：'140' / '140px' 都转成整数
+        $this->layout['labelWidth'] = max(0, (int)preg_replace('/[^\d-]/', '', (string)$px));
         return $this;
     }
 
@@ -332,10 +334,16 @@ class Form extends BaseDsl
      * 避免宽弹窗下输入框被拉伸过长。
      * 元素区域实际宽度 ≈ contentWidth - labelWidth。
      *   $form->contentWidth('420px');
+     *   $form->contentWidth(420);     // 纯数字自动补 px（无单位在 CSS 里无效）
      */
-    public function contentWidth(string $width): self
+    public function contentWidth($width): self
     {
-        $this->layout['contentWidth'] = $width;
+        $w = trim((string)$width);
+        // 纯数字 → 补 px（避免输出 max-width:400 这种无效 CSS）
+        if ($w !== '' && preg_match('/^\d+(\.\d+)?$/', $w)) {
+            $w .= 'px';
+        }
+        $this->layout['contentWidth'] = $w;
         return $this;
     }
 

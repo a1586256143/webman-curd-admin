@@ -158,14 +158,18 @@ class Filter extends BaseDsl
     }
 
     /**
-     * 范围搜索（daterange）
+     * 范围搜索（默认「日期 + 时间」= datetimerange）
+     *
+     * 只要日期不要时间：->date()；显式要时间：->datetime()（与默认等价）
+     *   $filter->between('created_at', '创建时间');
+     *   $filter->between('created_at', '创建时间')->defaultToday();
      */
     public function between(string $prop, string $label, array $options = []): self
     {
         $this->filters[] = array_merge([
             'prop' => $prop,
             'label' => $label,
-            'type' => 'daterange',
+            'type' => 'datetimerange',
         ], $options);
         return $this;
     }
@@ -201,11 +205,11 @@ class Filter extends BaseDsl
     }
 
     /**
-     * 日期范围搜索（别名，同 between）
+     * 日期范围搜索（别名：语义上是「日期」范围，默认按 daterange 展示）
      */
     public function dateRange(string $prop, string $label, array $options = []): self
     {
-        return $this->between($prop, $label, $options);
+        return $this->between($prop, $label, $options)->date();
     }
 
     /**
@@ -274,6 +278,54 @@ class Filter extends BaseDsl
             $this->filters[$idx]['default'] = $value;
         }
         return $this;
+    }
+
+    /**
+     * 默认「今天」：今天 00:00:00 ~ 明天 00:00:00
+     *   $filter->between('created_at', '创建时间')->defaultToday();
+     */
+    public function defaultToday(): self
+    {
+        return $this->default([
+            date('Y-m-d 00:00:00'),
+            date('Y-m-d 00:00:00', strtotime('+1 day')),
+        ]);
+    }
+
+    /**
+     * 默认「最近一周」：7 天前此刻 ~ 现在
+     *   $filter->between('created_at', '创建时间')->defaultWeek();
+     */
+    public function defaultWeek(): self
+    {
+        return $this->default([
+            date('Y-m-d H:i:s', strtotime('-7 days')),
+            date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * 默认「最近一月」：1 个月前此刻 ~ 现在
+     *   $filter->between('created_at', '创建时间')->defaultMonth();
+     */
+    public function defaultMonth(): self
+    {
+        return $this->default([
+            date('Y-m-d H:i:s', strtotime('-1 month')),
+            date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * 默认「最近三月」：3 个月前此刻 ~ 现在
+     *   $filter->between('created_at', '创建时间')->defaultThreeMonth();
+     */
+    public function defaultThreeMonth(): self
+    {
+        return $this->default([
+            date('Y-m-d H:i:s', strtotime('-3 months')),
+            date('Y-m-d H:i:s'),
+        ]);
     }
 
     /**

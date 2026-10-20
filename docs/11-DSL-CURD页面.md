@@ -107,7 +107,7 @@ $grid->filter(function (Filter $filter) {
     $filter->equal('mobile', '手机号');                    // 精确
     $filter->select('status', '状态')->options(self::STATUS); // 下拉
     $filter->dateRange('created_at', '创建时间');          // 日期区间
-    $filter->between('money', '充值金额');                 // 数值区间
+    $filter->between('created_at', '创建时间');            // 日期时间区间（默认 datetimerange）
     $filter->where(function ($q, $v) { … }, '自定义', 'prop'); // 任意条件（prop 传空为只读标签项）
 });
 ```

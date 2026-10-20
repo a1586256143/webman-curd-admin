@@ -16,11 +16,15 @@
 | `where(callable $cb, $label, $prop = '')` | 自定义查询条件（闭包内 `$this->input` 取输入） |
 | `select($prop, $label)` | 下拉筛选（配合 `->options()`） |
 | `options(array $map, array $config = [])` | 设置选项 |
-| `between($prop, $label)` | 数值区间 |
-| `dateRange($prop, $label)` | 日期区间 |
+| `between($prop, $label)` | 日期**时间**区间（`datetimerange`，默认带时分秒；`->date()` 可退回纯日期） |
+| `dateRange($prop, $label)` | 日期区间（`daterange`，等价 `between(...)->date()`） |
 | `singleDate($prop, $label)` | 单个日期 |
 | `remote($prop, $label, $table, $valueKey, $labelKey)` | 关联表下拉 |
 | `default($value)` | 默认值（构建时求值，传具体值或相对表达式） |
+| `defaultToday()` | 默认「今天」：今天 00:00:00 ~ 明天 00:00:00 |
+| `defaultWeek()` | 默认「最近一周」：7 天前此刻 ~ 现在 |
+| `defaultMonth()` | 默认「最近一月」：1 个月前此刻 ~ 现在 |
+| `defaultThreeMonth()` | 默认「最近三月」：3 个月前此刻 ~ 现在 |
 | `add(array $item)` | 兜底：直接塞一个搜索项配置 |
 
 ### 1.2 基础用法
@@ -34,11 +38,14 @@ $grid->filter(function (Filter $filter) {
 });
 ```
 
-### 1.3 数值区间 / 单日
+### 1.3 时间区间 / 单日
 
 ```php
 $grid->filter(function (Filter $filter) {
-    $filter->between('price', __('Price'));
+    // 默认「日期 + 时间」（datetimerange）；只要日期用 ->date()
+    $filter->between('created_at', __('Created at'));
+    $filter->between('created_at', __('Created at'))->date();   // 纯日期区间
+
     $filter->singleDate('publish_date', __('Publish date'));
 });
 ```
@@ -52,10 +59,17 @@ $grid->filter(function (Filter $filter) {
 
     // 相对日期：最近 7 天（构建时求值成具体日期区间）
     $filter->dateRange('created_at', __('Created at'))->default('-7d');
+
+    // 常用快捷区间（构建时按当前时间求值）
+    $filter->between('created_at', __('Created at'))->defaultToday();       // 今天 00:00:00 ~ 明天 00:00:00
+    $filter->between('created_at', __('Created at'))->defaultWeek();        // 近 7 天 ~ 现在
+    $filter->between('created_at', __('Created at'))->defaultMonth();       // 近 1 月 ~ 现在
+    $filter->between('created_at', __('Created at'))->defaultThreeMonth();  // 近 3 月 ~ 现在
 });
 ```
 
-> `default` 必须写在 `dateRange/between` 之后，且最终类型保持 `daterange`，否则默认值不生效。
+> `default` 必须写在 `between` / `dateRange` **之后**（它作用于「最近一个搜索项」）；
+> 区间类默认值最终会被解析成 `[起点, 终点]`，`datetimerange` 带时分秒、`daterange` 只到日。
 
 ### 1.5 自定义条件
 

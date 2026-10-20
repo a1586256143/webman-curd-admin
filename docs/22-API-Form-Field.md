@@ -13,9 +13,9 @@
 | 方法 | 说明 |
 |---|---|
 | `columns(int)` | 表单栅格列数（默认 1） |
-| `labelWidth(int)` | 标签宽度（px） |
+| `labelWidth(int\|string)` | 标签宽度（px）；`140` / `'140'` / `'140px'` 均可 |
 | `labelPosition('right')` | 标签位置 `left/right/top` |
-| `contentWidth(string)` | 内容区最大宽度，如 `'480px'` |
+| `contentWidth(string\|int)` | 内容区最大宽度，如 `'480px'`；纯数字 `400` 会自动补成 `400px`（无单位 CSS 无效） |
 | `width(string)` / `height(string)` | 弹窗宽 / 高 |
 | `confirm(string $msg, string $mode)` | 提交二次确认（`create` / `edit`） |
 | `when(string $parent, $value, callable)` | 条件显示字段组 |

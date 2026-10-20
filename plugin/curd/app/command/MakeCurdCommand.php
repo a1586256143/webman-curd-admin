@@ -741,7 +741,10 @@ PHP;
             $expr .= '->map(' . $this->mapLiteral($col['enumOptions']) . ')'
                 . '->label(' . $this->tagLiteral($col['enumOptions']) . ')->width(100)';
         } elseif (in_array($col['base'], ['datetime', 'timestamp'], true)) {
-            $expr .= '->datetime()->width(180)';
+            // created_at / updated_at 不强制 ->datetime()：按原值展示（需要格式化时自己加 display）
+            if (!in_array($col['field'], ['created_at', 'updated_at'], true)) {
+                $expr .= '->datetime()->width(180)';
+            }
         } elseif ($col['base'] === 'date') {
             $expr .= '->date()->width(120)';
         } elseif ($col['isBoolean']) {
