@@ -212,7 +212,10 @@ $grid->summary(function ($query) {
 });
 ```
 
-返回 HTML，直接渲染在表格头部。
+返回 HTML，直接渲染在表格头部（`summaryHtml` v-html；数组则渲染为 `summary` 键值条）。
+
+> **不显示时排查**：汇总随**列表接口**返回（`data.summaryHtml`），由前端页面宿主的 `api.list` 透传。
+> 自定义 `api.list` 包装返回值时必须把 `summaryHtml`（和 `summary`）带上，只返回 `{data, total}` 会把汇总丢掉。
 
 ---
 
