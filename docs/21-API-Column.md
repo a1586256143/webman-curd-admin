@@ -45,8 +45,11 @@ $grid->column('name', __('Name'))->minWidth(160)->sortable();
 $grid->column('remark', __('Remark'))->limit(20);       // 超 20 字省略，点击弹出全文
 ```
 
-> **列宽自适应**：`width` / `minWidth` 未指定时，主表格列按**当前页内容**自动估算列宽
-> （表头 + 单元格显示文本，含 display / map 结果；HTML 值先去标签），超长列 clamp 到 460px 换行。
+> **列宽自适应**：`width` / `minWidth` 未指定时，主表格列按**首屏内容**自动估算列宽并**缓存**——
+> 翻页、改筛选、刷新都不再重估，列宽稳定不抖动。失效机制：
+> ① 列集变化（加/删列、改 label、改显式宽度）自动失效重建；
+> ② `curd.clearColWidthCache()` 手动清（不传参清当前页、传 `true` 清全部页），清完按当前数据立即重估。
+> 估算依据是单元格**显示文本**（含 display / map 结果；HTML 值先去标签），超长列 clamp 到 460px 换行。
 > 显式指定 `width` / `minWidth` 则完全以定义为准。规则与 `expand` / `modal` 里 `Table` 组件一致（`fit: false` 可关）。
 
 > `limit(N)` 对**单元格最终显示文本**生效：与 `->display()` 叠加时，截断的是 display 闭包的返回值

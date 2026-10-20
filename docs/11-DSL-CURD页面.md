@@ -614,7 +614,7 @@ $form->text('config.api_token', __('Api token'))
 | 状态（只读） | `curd.config`、`curd.loading`、`curd.tableData`、`curd.pagination`、`curd.searchForm`、`curd.selectedRows`、`curd.dialogVisible`、`curd.dialogMode`、`curd.formData` |
 | 表单 | `getFormData()`（深拷贝）、`setFormData(patch)`、`resetForm()`、`validateForm()`、`submitForm()`、`getFormRef()` |
 | 弹窗 | `openAdd()`、`openEdit(row)`、`openView(row)`、`closeDialog()`、`closeView()` |
-| 列表 | `refresh()` / `reload()`、`search(patch?)`、`resetSearch()`、`getSelection()`、`clearSelection()`、`toggleRowSelection(row, selected)` |
+| 列表 | `refresh()` / `reload()`、`search(patch?)`、`resetSearch()`、`getSelection()`、`clearSelection()`、`toggleRowSelection(row, selected)`、`clearColWidthCache(all?)`（清列宽自适应缓存，默认当前页、`true` 清全部） |
 | 提示 | `curd.message.success/error/warning/info(msg)`、`curd.confirm(msg, title?)`、`curd.alert(...)`、`curd.prompt(...)` |
 | 请求 | `curd.get(url, params)`、`curd.post(url, data)`、`curd.put(url, data)`、`curd.del(url, params)`、`curd.request`（原实例） |
 | 工具 | `curd.openUrl(url)`、`curd.copyText(text)`、`curd.$nextTick(fn)` |
