@@ -24,6 +24,10 @@ use Webman\Http\Request;
  *  - 请求体不是 ENC1 信封（明文请求照常透传，向后兼容）
  *  - 响应非 application/json（如 CSV 导出文件流、上传等）
  *  - 未携带加密请求（无 AES 密钥）时响应保持明文
+ *  - GET /api/config/crypto（握手接口：前端还没有公钥，天然无信封 → 明文下发公钥）
+ *
+ * 密钥轮换友好：解密失败时回 X-Crypto-Key-Mismatch 头，前端据此重新握手并重试一次，
+ * 所以「换宿主 / 重装生成新密钥对」不需要重新构建前端产物。
  *
  * 归属：本类 + plugin/curd/config/crypto.php + plugin/curd/config/keys/ 密钥文件
  *       共同构成插件的加解密能力，由主 config/middleware.php 的 '@' 全局中间件组注册
@@ -43,6 +47,13 @@ class ApiCrypto implements MiddlewareInterface
      * GET 请求信封的 header 名（浏览器 XHR 会丢弃 GET body，密文走 header）
      */
     const GET_HEADER = 'x-encrypt-data';
+
+    /**
+     * 解密失败标记头（响应）：告知前端「你手里的公钥不对」
+     * 前端收到后调用 resetCryptoKey() 重新握手（GET /api/config/crypto）并重试一次，
+     * 使「换宿主 / 重装生成新密钥对」后无需重新构建前端产物。
+     */
+    const MISMATCH_HEADER = 'X-Crypto-Key-Mismatch';
 
     /**
      * 缓存的私钥 PEM 内容（进程内静态缓存，避免每请求读盘）
@@ -82,7 +93,10 @@ class ApiCrypto implements MiddlewareInterface
                 // workerman Request 的 $data 是 protected，用反射注回
                 self::injectRequestData($request, ['get' => $merged, 'post' => $merged]);
             } catch (\Throwable $e) {
-                return json(['code' => 400, 'msg' => '请求解密失败，请刷新页面重试']);
+                // 解密失败 = 前端手里的公钥与本机私钥不配对（换宿主 / 重装生成新 key /
+                // 产物内嵌的是旧公钥）。打上标记头，前端据此重新握手拿公钥并自动重试一次。
+                $resp = json(['code' => 400, 'msg' => '请求解密失败，请刷新页面重试']);
+                return $resp->withHeader(self::MISMATCH_HEADER, '1');
             }
         }
 

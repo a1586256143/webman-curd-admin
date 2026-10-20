@@ -154,6 +154,14 @@ curd_route('GET', '/api/config/site', [
     'siteConfig',
 ], $curdCorsOnly);
 
+// 接口加密握手（免鉴权、免加密：前端拿当前宿主的 RSA 公钥）
+//  - 有了它，前端构建时不必内联公钥，同一份产物可部署到任意新项目（key 重新生成也自洽）
+//  - 公钥是公开信息，下发不降低安全性；私钥仍只在 config/keys/api_rsa_private.pem
+curd_route('GET', '/api/config/crypto', [
+    \plugin\curd\app\controller\AdminController::class,
+    'cryptoConfig',
+], $curdCorsOnly);
+
 // ============================================================
 // 其余 CURD 插件接口统一挂鉴权和权限中间件
 // ============================================================

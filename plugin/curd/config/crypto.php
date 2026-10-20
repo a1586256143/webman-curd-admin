@@ -17,6 +17,15 @@
 return [
     'enabled' => env('API_ENCRYPT', true),
 
-    // RSA 私钥文件（PKCS#8 PEM，对应前端内嵌的公钥）
+    // RSA 私钥文件（PKCS#8 PEM）
     'private_key_path' => __DIR__ . '/keys/api_rsa_private.pem',
+
+    // RSA 公钥文件（安装时生成；缺失时由私钥现场推导，不影响使用）
+    'public_key_path' => __DIR__ . '/keys/api_rsa_public.pem',
+
+    // 是否允许 GET /api/config/crypto 把公钥下发给前端（握手）
+    //  - true（默认）：前端构建时不需要内置公钥，同一份产物可部署到任意新项目
+    //  - false：接口只回 enabled 状态、不回公钥，前端只能用它构建时内嵌的公钥
+    // 公钥本身是公开信息（等价于 HTTPS 的证书），下发不降低安全性。
+    'handshake' => env('API_CRYPTO_HANDSHAKE', true),
 ];

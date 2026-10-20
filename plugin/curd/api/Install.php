@@ -22,7 +22,8 @@ use plugin\curd\app\auth\AuthProviderAware;
  *     （admin/admin123，仅当表为空时插入；密码用运行时 password_hash 生成）；
  *     my_test 表存在时补 1 条示例数据 + 后台「测试管理」菜单（幂等，老项目升级可补齐）
  *  D. 密钥：生成 RSA-2048 密钥对到 config/keys/（api_rsa_private.pem / api_rsa_public.pem），
- *     供 API_ENCRYPT=true 的信封加密部署使用（公钥需替换进前端后重新构建）
+ *     供 API_ENCRYPT=true 的信封加密部署使用（公钥由 /api/config/crypto 运行时下发给前端，
+ *     不需要替换进前端源码后重新构建）
  *
  * DB 连接（单库架构，认证与业务同一库）：
  * 认证库 config('plugin.curd.curd.admin_connection')（默认 mysql）；
@@ -622,7 +623,7 @@ class Install
             file_put_contents($public, $details['key'], LOCK_EX);
             chmod($public, 0644);
             static::report(true, "RSA-2048 密钥对已生成：\n    {$private}\n    {$public}");
-            static::report(true, '如需开启 API_ENCRYPT=true：把 api_rsa_public.pem 内容替换进前端 src/utils/apiCrypto.js 的 RSA_PUBLIC_KEY 后重新构建');
+            static::report(true, '前端无需内置公钥：启动时 GET /api/config/crypto 自动拉取本机公钥（同一份前端产物可部署到任意新项目）');
             return true;
         } catch (\Throwable $e) {
             static::report(false, '', 'RSA 密钥生成失败: ' . $e->getMessage());

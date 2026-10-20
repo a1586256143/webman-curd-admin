@@ -2,6 +2,7 @@
 namespace plugin\curd\app\controller;
 
 use plugin\curd\app\auth\Captcha;
+use plugin\curd\app\CryptoKeys;
 use plugin\curd\app\CurdDb;
 use plugin\curd\app\Generator;
 use plugin\curd\app\rbac\Rbac;
@@ -103,6 +104,39 @@ class AdminController
                 // 前端据此隐藏「配置生成器」菜单并拦截该路由，后端接口另有 403 兜底
                 'generator_enabled' => Generator::enabled(),
             ]),
+        ]);
+    }
+
+    /**
+     * 接口加密握手（前端启动时拉当前宿主的 RSA 公钥）
+     *
+     * 免鉴权、免加密：这是「鸡生蛋」接口——前端还没有公钥，无法构造加密信封，
+     * 所以必须明文可读（中间件对无信封请求本就透传）。
+     *
+     * 返回：
+     *   enabled     后端是否开启了接口加密（.env API_ENCRYPT）
+     *   handshake   是否允许下发公钥（config/plugin.curd/crypto.php handshake）
+     *   algorithm   算法标识（前端日志/排查用）
+     *   public_key  当前宿主公钥 PEM（handshake=false 时为空串）
+     *   fingerprint 公钥指纹（sha256 前 16 位），排查「产物里内嵌的是旧公钥」用
+     *
+     * 安全性：公钥本就是公开信息（等价于 HTTPS 证书），下发不降低安全性；
+     * 真正的秘密是私钥，只留在 config/keys/api_rsa_private.pem。
+     */
+    public function cryptoConfig(Request $request)
+    {
+        $handshake = CryptoKeys::handshakeEnabled();
+
+        return json([
+            'code' => 200,
+            'msg' => 'success',
+            'data' => [
+                'enabled'     => CryptoKeys::enabled(),
+                'handshake'   => $handshake,
+                'algorithm'   => 'RSA-2048/AES-256-CBC',
+                'public_key'  => $handshake ? CryptoKeys::publicKeyPem() : '',
+                'fingerprint' => $handshake ? CryptoKeys::fingerprint() : '',
+            ],
         ]);
     }
 

@@ -35,6 +35,10 @@ class CorsMiddleware implements MiddlewareInterface
             'Access-Control-Allow-Headers'     => 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Encrypt-Data',
             'Access-Control-Allow-Credentials' => 'true',
             'Access-Control-Max-Age'           => '86400',
+            // 跨域时 JS 默认只能读「简单响应头」，下面这些必须显式 expose 才能被前端读到：
+            //  - X-Crypto-Key-Mismatch：公钥不匹配 → 前端重新握手并自动重试
+            //  - Content-Disposition：导出下载取文件名
+            'Access-Control-Expose-Headers'    => 'X-Crypto-Key-Mismatch, Content-Disposition',
         ]);
     }
 }

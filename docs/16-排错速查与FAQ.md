@@ -108,11 +108,13 @@
 
 | 现象 | 原因 / 解法 |
 |---|---|
-| 所有 `/api` 返回 400「请求解密失败」 | 前端产物用的公钥与宿主私钥不匹配。**公钥每宿主一份**（`config/keys/api_rsa_public.pem`），别把 A 宿主的产物拷到 B 宿主；用 `build-frontend.sh` 重开（它会校验产物里真的带上了目标宿主的公钥） |
-| 「我明明没开加密，怎么要解密」 | 开关是**显式**的：只有 `VITE_API_ENCRYPT=true` 才开。若产物里搜得到 `X-Encrypt-Data`，说明这批 dist 是加密版构建的 |
+| 所有 `/api` 返回 400「请求解密失败」 | 前端手里的公钥与宿主私钥不匹配。新版会**自动自愈**：后端回 `X-Crypto-Key-Mismatch` → 前端重新握手拿公钥 → 重试一次。仍失败说明握手也拿不到公钥，看下一行 |
+| 换了项目 / 重装后前端解不开 | 用 `VITE_API_ENCRYPT=auto` 重新构建（产物不内嵌公钥，启动时 `GET /api/config/crypto` 拉当前宿主的公钥）。老产物（`true` 模式）自带的是旧宿主公钥，只能重新构建 |
+| 握手接口拿不到公钥 | 检查 `GET /api/config/crypto` 的返回：`enabled=false`（后端关了加密）、`handshake=false`（`.env` 设了 `API_CRYPTO_HANDSHAKE=false`）、`public_key=""`（`config/keys/` 下没密钥，跑一次 `php plugin/curd/install.php`） |
+| 「我明明没开加密，怎么要解密」 | 开关是**显式**的：`VITE_API_ENCRYPT` 只有 `true` / `auto` 才开。产物里搜得到 `X-Encrypt-Data` 说明这批 dist 是加密版构建的；`auto` 模式下后端 `API_ENCRYPT=false` 会自动退回明文 |
 | 改了 `VITE_API_ENCRYPT` 没反应 | 该变量是**构建期内联**，不是运行期配置，改完必须重新 `npm run build` 并部署产物 |
 | 手动构建时换行写不对 | `VITE_API_RSA_PUBLIC_KEY` 里的换行要写成字面 `\n` |
-| 上传 / 导出也想加密 | 不需要，也不会加密：`multipart` 上传、非 JSON 响应（CSV 导出）、`OPTIONS` 预检、非 `/api` 路径**始终明文** |
+| 上传 / 导出也想加密 | 不需要，也不会加密：`multipart` 上传、非 JSON 响应（CSV 导出）、`OPTIONS` 预检、非 `/api` 路径、握手接口**始终明文** |
 
 ---
 
