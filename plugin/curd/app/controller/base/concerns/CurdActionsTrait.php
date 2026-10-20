@@ -702,6 +702,10 @@ trait CurdActionsTrait
     /**
      * 导出（CSV 带 BOM）
      * 输出与列表展示一致：列标题用 grid label；列值依次走 display 闭包 > map 字典 > date/datetime 格式化 > 原始值
+     *
+     * 搜索条件与列表 index() 同口径，唯一差异是范围条件的传参形态：
+     * 列表经信封加密传真数组（created_at=[起,止] → whereBetween），
+     * 导出是 GET 文件流，前端把数组拆成 k / k_end 两个 query，这里配对还原后同样 whereBetween。
      */
     public function export(Request $request)
     {
@@ -720,6 +724,15 @@ trait CurdActionsTrait
                 continue;
             }
             if (!isset($columnMap[$key])) {
+                continue;
+            }
+            // 范围配对参数：前端导出把数组条件拆成 k / k_end 两个 query（URLSearchParams 无法表达 PHP 数组）。
+            // 列表接口拿到的是真数组（信封加密原样传数组）走 whereBetween；导出拆成两截后
+            // 若不在这里配对，k 会落到下方 like 分支——datetime 列 LIKE '%2026-10-20 00:00:00%'
+            // 几乎匹配不到任何行，表现为「页面上有数据、导出只有表头」。
+            $endVal = $params[$key . '_end'] ?? null;
+            if (!is_array($value) && $endVal !== null && $endVal !== '') {
+                $query->whereBetween($key, [$value, $endVal]);
                 continue;
             }
             // 单日期搜索（与列表 index 一致：直接等值，date 列；datetime 列只会命中 00:00:00 那条）
