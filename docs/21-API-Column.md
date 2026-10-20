@@ -25,7 +25,7 @@
 | `prefix(string)` / `suffix(string)` | 显示值前后缀 |
 | `copy()` | 可复制列（复制按钮，复制显示值） |
 | `modal(string $title, $content)` | 点击弹窗，弹窗内容服务端逐行生成（Table / Card / Html / 闭包 / 类名 / 模板） |
-| `expand($content, string $title = '')` | **整行展开**：行首出现箭头列，点行任意位置展开/收起，内容通栏显示在行下方（写法同 `modal`） |
+| `expand($content, string $title = '')` | **整行展开**：点行任意位置展开/收起，内容通栏显示在行下方（写法同 `modal`） |
 | `datetime()` / `date()` | 时间格式化 |
 | `image(int $w, int $h)` / `staticHost(?string)` | 图片列 / 静态资源域名 |
 | `open('_blank')` | 点击在新窗口打开该列值 |
@@ -215,7 +215,7 @@ $grid->column('platform', __('Platform'))->select([
 use plugin\curd\app\dsl\component\Card;
 use plugin\curd\app\dsl\component\Table;
 
-// 整行展开：行首出现箭头列；点行【任意位置】展开/收起，
+// 整行展开：点行【任意位置】展开/收起，
 // 内容通栏显示在该行下方（不再挤在单元格里）
 $grid->column('money', __('Money'))->expand(function ($value, $row) {
     return new Table(['xxx' => '标题'], [
@@ -358,7 +358,7 @@ new Html('<div class="tip">任意 <b>HTML</b></div>');
 
 ### 9.3 整行展开的交互细节
 
-- 声明了 `->expand()` 的 grid，行首自动多一个**箭头列**（el-table `type="expand"`），声明列本身照常显示单元格值；
+- 声明了 `->expand()` 的 grid 即启用整行展开（内部用 el-table `type="expand"` 列承载通栏内容，该列缩为 1px 隐藏，**不显示箭头**），声明列本身照常显示单元格值；
 - **点行任意位置**都会展开/收起（点按钮、链接、输入框、下拉等交互元素除外，不会误触）；
 - 内容通栏显示在该行下方，不再挤在单元格里横向滚动；
 - 多列都声明 `->expand()` 时，取**第一列**的内容作为该行的展开内容。

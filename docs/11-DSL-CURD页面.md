@@ -65,7 +65,7 @@ class MROrdersController extends BaseCurdController
 | `column('config.api_url', '接口地址')` | **点式列**：根字段是 JSON 文本时自动解码取子键；`->map()/->datetime()` 等列方法全部可用（见 §5.2） |
 | `column('user.name', '用户')` | **点式列走关联**：`user` 不是真实字段时当作关联关系（`belongsTo/hasOne`），自动 `with('user')` 预加载；**字段优先，字段没有才走关联** |
 | `->modal('标题', $content)` | **点击弹窗**：内容服务端逐行生成，支持 `Table/Card/Html` 组件、闭包、类名、HTML 模板（见 §3.1） |
-| `->expand($content, '标题')` | **整行展开**：行首出现箭头列，点行任意位置展开/收起，内容通栏显示；写法同 `modal` |
+| `->expand($content, '标题')` | **整行展开**：点行任意位置展开/收起，内容通栏显示（无行首箭头）；写法同 `modal` |
 | `->remote($table, $valueKey='id', $labelKey='name')` | 关联表翻译（跨库由统一接口代替时自行 display） |
 | `->limit(int)`（截断）、`->hidden()`（默认隐藏可配置显示）、`->sortable()` | 其它 |
 | `->copy()` | **可复制列**：单元格带复制按钮，一键复制该列文本（复制的是 `display()` 之后的最终展示值；与 tag/switch/image 等共存时 copy 优先） |
