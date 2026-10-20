@@ -51,7 +51,10 @@ $grid->column('remark', __('Remark'))->limit(20);       // 超 20 字省略，�
 > ② **SPA 内多 tab 关闭**（单个关闭 / 关闭其他 / 关闭所有）同步失效该页缓存；
 > ③ 列集变化（加/删列、改 label、改显式宽度）自动失效重建；
 > ④ `curd.clearColWidthCache()` 手动清（不传参清当前页、传 `true` 清全部页），清完按当前数据立即重估。
-> 估算依据是单元格**显示文本**（含 display / map 结果；HTML 值先去标签），超长列 clamp 到 460px 换行。
+> 估算依据是**单元格最终渲染的文本**——`display()` / `prefix()` / `suffix()` 的结果、`map()` 文案、`formatter`、
+> `date/datetime` 格式化、**`limit()` 截断后的文本（前 N 字 + 省略号）**；HTML 值先去标签。
+> 另外为单元格装饰留宽：`copy` 复制图标 +22px、`tag` 标签内边距 +20px、`limit` 箭头图标 +18px。
+> 超长列 clamp 到 460px 换行。
 > 显式指定 `width` / `minWidth` 则完全以定义为准。规则与 `expand` / `modal` 里 `Table` 组件一致（`fit: false` 可关）。
 
 > `limit(N)` 对**单元格最终显示文本**生效：与 `->display()` 叠加时，截断的是 display 闭包的返回值
