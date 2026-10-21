@@ -14,9 +14,8 @@ agent_created: true
 
 # webman-curd-admin 日常开发技能
 
-> 📦 本文件是**随 composer 包分发**的副本（`plugin/curd/skills/`），`php webman curd:publish-skill`
-> 用它发布到宿主项目根。仓库根 `.workbuddy-ai/skills/webman-curd-admin-dev/SKILL.md` 是插件仓库
-> 自身用的副本，**两处内容必须一致**（改一处要同步另一处）。
+> 📦 本文件随 composer 包分发，`php webman curd:publish-skill` 会把它发布到项目根。
+> 插件源码仓库里另有同名副本，两处内容保持一致即可。
 
 把插件日常开发的高频命令、命名规则、DSL 速记、同步流程、必踩坑打包成一个即用清单。
 **完整 API 参考永远以 `docs/*.md` 为准**（本技能只放干活够用的部分 + 那些会让人卡半天的坑）。
@@ -25,26 +24,26 @@ agent_created: true
 
 ## 0. 两个目录的认知（先分清，否则命令全跑错）
 
-| 角色 | 路径（本机示例） | 干什么 |
+| 角色 | 指什么 | 说明 |
 |---|---|---|
-| **插件仓库（源码 / 真理源）** | `/Users/colin/Public/www/company/webman-curd-admin` | 写代码、写文档、放本技能；`plugin/curd/` 是插件体 |
-| **真实宿主（运行中的 webman 应用）** | `/Users/colin/Public/www/company/webman-huafei-platform`（端口 18082） | `composer require` 了本插件，`plugin/curd/` 被 git 跟踪；命令**必须在这里的根目录跑** |
+| **你的 webman 项目（宿主）** | 你实际开发 / 部署的项目根目录 | 装了本插件后 `plugin/curd/` 在它下面；**所有命令都在这里跑** |
+| **插件源码仓库（仅开发插件时需要）** | `amcolin/webman-curd-admin` 仓库本身 | 改插件代码时用；改完要同步到你的项目 |
 
-> **铁律**：`php webman <cmd>` 只能在**宿主根目录**执行（需要宿主装了 `webman/console`）。
-> 插件仓库里没有 webman console，跑不了命令。改完插件仓库代码后，用 rsync 把 `plugin/curd/` 推到宿主再 restart。
+> **铁律**：`php webman <cmd>` 只能在**你的项目根目录**执行（需要项目装了 `webman/console`）。
+> 插件源码仓库里没有 webman console，跑不了命令。
 >
-> **宿主项目里用**：跑一次 `php webman curd:publish-skill`，技能会发布到宿主根 `.workbuddy-ai/skills/`
+> **在你的项目里用**：跑一次 `php webman curd:publish-skill`，技能会发布到项目根 `.workbuddy-ai/skills/`
 > 并维护根 `AGENTS.md`（详见 docs/18 §7）。升级插件后加 `--force` 重跑同步。
 
 ---
 
 ## 1. 环境前置
 
-- **PHP**：本机用 ServBay 的 `/Applications/ServBay/package/bin/php`（8.2）。zsh 里若 `php` 不是它，先
-  `export PATH="/Applications/ServBay/package/bin:$PATH"`。
-- **命令入口**：宿主根目录 `php webman <cmd>`。列出全部命令：`php webman`（应看到下面四条）。
-- 四条插件命令由插件 `config/app.php` 的 `'command'` **显式注册**（免疫软链），装好插件即生效，
-  **不要在宿主 `app/command/` 里再放同名副本**（会顶掉插件版）。
+- **PHP ≥ 8.1**：`php -v` 确认。若 `php` 不在 PATH，按你的环境（ServBay / Homebrew / 宝塔 / Docker 等）配好即可。
+- **命令入口**：在你的**项目根目录**执行 `php webman <cmd>`。列出全部命令：`php webman`
+  （应看到 `make:curd` / `make:curd-action` / `make:curd-import` / `curd:crypto-key` / `curd:publish-skill`）。
+- 这些命令由插件 `config/app.php` 的 `'command'` **显式注册**（免疫软链），装好插件即生效，
+  **不要在项目 `app/command/` 里再放同名副本**（会顶掉插件版）。
 
 ---
 
@@ -116,7 +115,7 @@ php webman curd:crypto-key --force      # 换一对新的（旧密文无法解�
 
 ### 3.5 改完 PHP 后的热重启
 宿主根目录 `php webman restart`（见 §2 进程命令说明）。**不要前台 `restart` 卡住不返回**——
-若遇到，用 `php webman start -d` 起来（日志见 `/tmp/huafei_start.log` 或宿主 `runtime/logs/`）。
+若遇到，用 `php webman start -d` 起来（日志见项目 `runtime/logs/`）。
 
 ---
 
@@ -171,28 +170,22 @@ public function grid()
 
 ---
 
-## 6. 同步到真实宿主（改完插件仓库后必须做）
+## 6. 开发插件时：把改动同步到项目（仅插件开发者需要）
 
-插件仓库改了 `plugin/curd/` 或 `docs/` 后，推到宿主并重启：
+如果你是在**改插件源码**（而不是只用插件），改完 `plugin/curd/` 或 `docs/` 后同步到项目并重启：
 ```bash
-# 1) 同步插件体（务必排除 config/keys，那是宿主本地密钥目录，删了就崩）
-rsync -a --exclude 'config/keys' \
-  /Users/colin/Public/www/company/webman-curd-admin/plugin/curd/ \
-  /Users/colin/Public/www/company/webman-huafei-platform/plugin/curd/
+# 1) 同步插件体（务必排除 config/keys，那是项目本地密钥目录，删了就崩）
+rsync -a --exclude 'config/keys' <插件仓库>/plugin/curd/ <你的项目根>/plugin/curd/
 
-# 2) 同步文档（排除 tools/ 与生成的 index.html，宿主只存 md 源）
-rsync -a --exclude 'tools' --exclude 'index.html' \
-  /Users/colin/Public/www/company/webman-curd-admin/docs/ \
-  /Users/colin/Public/www/company/webman-huafei-platform/docs/
+# 2) 同步文档（可选；排除 tools/ 与生成的 index.html）
+rsync -a --exclude 'tools' --exclude 'index.html' <插件仓库>/docs/ <你的项目根>/docs/
 
-# 3) 宿主重启（改了 PHP 类必做）
-cd /Users/colin/Public/www/company/webman-huafei-platform && php webman restart
+# 3) 项目重启（改了 PHP 类必做）
+cd <你的项目根> && php webman restart
 
-# 4) 两个仓库分别提交（宿主的 plugin/curd/ 是 git 跟踪的，不提交下次 checkout 会打回旧版）
-cd /Users/colin/Public/www/company/webman-curd-admin && git add -A && git commit -m "..." && git push
-cd /Users/colin/Public/www/company/webman-huafei-platform && git add -A && git commit -m "..." && git push
+# 4) 两个仓库分别提交（项目的 plugin/curd/ 若被 git 跟踪，不提交下次 checkout 会打回旧版）
 ```
-> 宿主路径以当前环境为准；若换宿主，把上面三处路径改掉即可，流程不变。
+> 把 `<插件仓库>` / `<你的项目根>` 换成实际路径。**只使用插件、不开发插件的话，本节可跳过。**
 
 ---
 
@@ -206,7 +199,7 @@ cd /Users/colin/Public/www/company/webman-huafei-platform && git add -A && git c
    `ApiCrypto`：`config/middleware.php` 里加 `'@' => [\plugin\curd\app\middleware\ApiCrypto::class]`；
    插件自带 `'plugin.curd'` 键只覆盖 `plugin\curd` 命名空间的路由。
 6. **换密钥后必须 restart**，否则内存里还是旧私钥（400 / `X-Crypto-Key-Mismatch`）。
-7. **`php webman restart` 前台可能卡住不返回** → 改用 `php webman start -d`，看 `runtime/logs/` 或 `/tmp/huafei_start.log`。
+7. **`php webman restart` 前台可能卡住不返回** → 改用 `php webman start -d`，看 `runtime/logs/`。
 8. **宿主 `plugin/curd/` 是 git 跟踪的**：同步完务必在宿主仓库提交，否则 `git checkout` / IDE「放弃更改」会把插件整目录打回旧版。
 9. **明文请求没有密钥 → 响应必然明文**（对称加密硬约束，不是 bug）；加密与否运行时问后端（`GET /api/config/crypto` 免鉴权免加密）。
 10. **前端发行产物是 `auto` 模式**：加密与否运行时握手决定，换密钥不用重新打包前端。

@@ -13,7 +13,7 @@
 | 角色 | 路径 | 说明 |
 |---|---|---|
 | **插件仓库（源码 / 真理源）** | 本仓库根 | 写代码、写文档；`plugin/curd/` 是插件体 |
-| **真实宿主（运行中的 webman 应用）** | 如 `/Users/colin/Public/www/company/webman-huafei-platform`（端口 18082） | 命令**必须在这里的根目录**跑；`plugin/curd/` 被 git 跟踪 |
+| **你的 webman 项目（宿主）** | 你实际开发 / 部署的项目根目录 | 命令**必须在这里的根目录**跑；`plugin/curd/` 由安装器拷贝进来 |
 
 **铁律**：`php webman <cmd>` 只能在宿主根目录执行（插件仓库没有 webman console）。改完插件代码后
 用 rsync 把 `plugin/curd/` 推到宿主再 `restart`。
