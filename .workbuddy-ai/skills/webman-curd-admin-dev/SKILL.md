@@ -4,7 +4,7 @@ description: >
   webman-curd-admin 插件的「日常开发」技能。当需要为这个插件做日常开发任务时使用：按表结构生成
   CURD 后台页面骨架（make:curd）、给已生成的控制器追加行级/批量操作按钮（make:curd-action）、
   追加 Excel 导入（make:curd-import）、生成/轮换接口加密密钥（curd:crypto-key）、理解 Grid DSL、
-  把改动同步到真实宿主并热重启。
+  把改动同步到项目并热重启。
   本技能是给 AI 助手用的「操作手册 + 防坑清单」，完整 API 参考在 docs/ 里（本技能只放高频用法与必踩坑）。
   Trigger phrases: "生成 CURD", "make:curd", "新增操作按钮", "加个导入", "加个 action", "加密密钥",
   "crypto key", "接口加密", "同步到宿主", "部署插件", "webman-curd-admin 开发", "curd 页面",
@@ -47,7 +47,7 @@ agent_created: true
 
 ---
 
-## 2. 命令速查（4 条 + 进程命令）
+## 2. 命令速查（5 条 + 进程命令）
 
 | 命令 | 作用 | 关键选项 |
 |---|---|---|
@@ -55,6 +55,7 @@ agent_created: true
 | `make:curd-action` | 给**已生成**控制器追加行级/批量操作按钮 + `action{Name}()` 骨架（幂等） | `-t 表名` 或 `-c 控制器`、`--name=名:标题`（**必填，无短写**）、`--batch`、`-f` |
 | `make:curd-import` | 给**已生成**控制器追加 Excel 导入按钮 + `actionImport()` 骨架（幂等） | `-t 表名` 或 `-c 控制器`、`--name`（默认 `import:导入`）、`-f` |
 | `curd:crypto-key` | 查看/生成/轮换 RSA 密钥对 | `--show`、`--force`、`--bits=4096`、`--print-public` |
+| `curd:publish-skill` | 把 AI 开发技能发布到你的项目根（`.workbuddy-ai/skills/` + `AGENTS.md`） | `--force`、`--no-agents`、`--dry-run` |
 
 > **`--name` 没有短写**（避免 `-n` 与内置冲突），必须写全 `--name=...`。
 
