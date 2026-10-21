@@ -14,6 +14,10 @@ agent_created: true
 
 # webman-curd-admin 日常开发技能
 
+> 🗂 本文件是**插件仓库自身**用的副本（仓库根 `.workbuddy-ai/skills/`），把插件仓库打开为工作区时
+> 自动加载。随 composer 分发的副本在 `plugin/curd/skills/webman-curd-admin-dev/SKILL.md`，
+> **两处内容必须一致**（改一处要同步另一处）。
+
 把插件日常开发的高频命令、命名规则、DSL 速记、同步流程、必踩坑打包成一个即用清单。
 **完整 API 参考永远以 `docs/*.md` 为准**（本技能只放干活够用的部分 + 那些会让人卡半天的坑）。
 
@@ -28,6 +32,9 @@ agent_created: true
 
 > **铁律**：`php webman <cmd>` 只能在**宿主根目录**执行（需要宿主装了 `webman/console`）。
 > 插件仓库里没有 webman console，跑不了命令。改完插件仓库代码后，用 rsync 把 `plugin/curd/` 推到宿主再 restart。
+>
+> **宿主项目里用**：跑一次 `php webman curd:publish-skill`，技能会发布到宿主根 `.workbuddy-ai/skills/`
+> 并维护根 `AGENTS.md`（详见 docs/18 §7）。升级插件后加 `--force` 重跑同步。
 
 ---
 

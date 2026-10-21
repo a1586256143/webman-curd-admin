@@ -56,5 +56,7 @@ cd <宿主> && php webman restart
 ## 完整手册
 
 - **WorkBuddy AI 项目级技能**：`.workbuddy-ai/skills/webman-curd-admin-dev/SKILL.md`（最全：命令速查 / 命名推导 / Grid DSL 速记 / SOP / 坑）
+- **随包分发副本**：`plugin/curd/skills/webman-curd-admin-dev/SKILL.md`（与上面一致，供 composer 安装后发布）
+- **发布到宿主项目**：宿主根目录跑 `php webman curd:publish-skill`，把技能复制到 `{项目根}/.workbuddy-ai/skills/` 并维护根 `AGENTS.md`
 - **文档站**：`docs/`，编号即栏目；命令细节看 `docs/17-命令行工具.md`，DSL 看 `docs/11-DSL-CURD页面.md`，API 看 `docs/20~23`。
 - 构建文档站：`node docs/tools/build_docs.cjs`（需 `NODE_PATH` 指向已装 `marked` 的 node_modules）。

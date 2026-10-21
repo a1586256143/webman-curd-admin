@@ -37,5 +37,7 @@ return [
         \plugin\curd\app\command\MakeCurdImportCommand::class,
         // 接口加密密钥：php webman curd:crypto-key [--force] [--bits=4096] [--show] [--print-public]
         \plugin\curd\app\command\CryptoKeyCommand::class,
+        // 发布 AI 开发技能到宿主项目根：php webman curd:publish-skill [--force] [--no-agents] [--dry-run]
+        \plugin\curd\app\command\PublishSkillCommand::class,
     ],
 ];
